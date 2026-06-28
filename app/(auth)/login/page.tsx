@@ -1,14 +1,8 @@
-import { redirect } from "next/navigation";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth/server";
 import { LoginForm } from "./login-form";
 
 export const metadata = { title: "Sign in — Atlas" };
 
-export default async function LoginPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (session) redirect("/today");
-
+export default function LoginPage() {
   return (
     <main className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-sm">

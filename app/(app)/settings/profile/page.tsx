@@ -1,17 +1,21 @@
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth/server";
+"use client";
 
-export default async function ProfilePage() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return null;
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+
+export default function ProfilePage() {
+  const bootstrap = useQuery(api.organizations.currentBootstrap);
+  if (!bootstrap) {
+    return <div className="text-sm text-muted-foreground">Loading…</div>;
+  }
+  const { user } = bootstrap;
   return (
     <div className="space-y-8">
       <section className="space-y-3">
         <p className="eyebrow">Account</p>
         <div className="border border-border divide-y divide-border">
-          <Row label="Name" value={session.user.name} />
-          <Row label="Email" value={session.user.email} />
-          <Row label="Email verified" value={session.user.emailVerified ? "Yes" : "No"} />
+          <Row label="Name" value={user.name ?? "—"} />
+          <Row label="Email" value={user.email ?? "—"} />
         </div>
       </section>
     </div>

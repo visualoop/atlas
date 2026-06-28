@@ -1,0 +1,58 @@
+# Atlas — local self-hosted Convex backend (dev only)
+#
+# Mirrors infra/atlas/01-convex-backend.yaml so dev and prod use the
+# exact same image and env vars. The k3s manifests for production are
+# in infra/atlas/.
+#
+# Bring up:    docker compose up -d
+# Stop:        docker compose down
+# Tail logs:   docker compose logs -f convex-backend
+# Reset data:  docker compose down -v && rm -rf .convex/local/data
+#
+# After first start, generate the admin key (once):
+#   docker compose exec convex-backend ./generate_admin_key.sh
+# and store it in .env.local as CONVEX_SELF_HOSTED_ADMIN_KEY.
+#
+# Then push functions:
+#   CONVEX_SELF_HOSTED_URL=https://3220.blyss.co.ke \
+#   CONVEX_SELF_HOSTED_ADMIN_KEY=<key> \
+#   npx convex deploy
+
+services:
+  convex-backend:
+    image: ghcr.io/get-convex/convex-backend:latest
+    container_name: atlas-convex-backend
+    restart: unless-stopped
+    ports:
+      - "3220:3210" # API + WebSocket (browser connects via https://3220.blyss.co.ke)
+      - "3221:3211" # HTTP actions site (webhooks land at https://3221.blyss.co.ke)
+    environment:
+      INSTANCE_NAME: atlas-dev
+      INSTANCE_SECRET: ${CONVEX_INSTANCE_SECRET}
+      # Public origins — what the backend tells clients to use.
+      CONVEX_CLOUD_ORIGIN: https://3220.blyss.co.ke
+      CONVEX_SITE_ORIGIN: https://3221.blyss.co.ke
+      DISABLE_BEACON: "true"
+      RUST_LOG: info
+      # Lower document retention to 2 days locally to bound disk growth.
+      DOCUMENT_RETENTION_DELAY: "172800"
+    volumes:
+      - ./.convex/local/data:/convex/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3210/version"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+
+  convex-dashboard:
+    image: ghcr.io/get-convex/convex-dashboard:latest
+    container_name: atlas-convex-dashboard
+    restart: unless-stopped
+    depends_on:
+      convex-backend:
+        condition: service_healthy
+    ports:
+      - "6791:6791"
+    environment:
+      NEXT_PUBLIC_DEPLOYMENT_URL: https://3220.blyss.co.ke

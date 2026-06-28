@@ -1,55 +1,51 @@
 "use client";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { authClient } from "@/lib/auth/client";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
+type Mode = "password" | "signup" | "magic" | "magic-verify";
+
 export function LoginForm() {
   const router = useRouter();
+  const { signIn } = useAuthActions();
   const [pending, startTransition] = useTransition();
-  const [mode, setMode] = useState<"password" | "magic" | "signup">("password");
+  const [mode, setMode] = useState<Mode>("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [otp, setOtp] = useState("");
 
-  function onSubmit(e: React.FormEvent) {
+  function go(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
       try {
         if (mode === "signup") {
-          const result = await authClient.signUp.email({ email, password, name });
-          if (result.error) {
-            toast.error(result.error.message ?? "Sign up failed");
-            return;
-          }
-          toast.success("Account created");
+          await signIn("password", { email, password, name, flow: "signUp" });
           router.push("/today");
           router.refresh();
           return;
         }
         if (mode === "password") {
-          const result = await authClient.signIn.email({ email, password });
-          if (result.error) {
-            toast.error(result.error.message ?? "Sign in failed");
-            return;
-          }
+          await signIn("password", { email, password, flow: "signIn" });
           router.push("/today");
           router.refresh();
           return;
         }
         if (mode === "magic") {
-          const result = await authClient.signIn.magicLink({
-            email,
-            callbackURL: "/today",
-          });
-          if (result.error) {
-            toast.error(result.error.message ?? "Could not send magic link");
-            return;
-          }
-          toast.success("Magic link sent (check server logs in dev — Resend not yet configured)");
+          await signIn("magic-link-otp", { email });
+          toast.success("Check your email for the code (or the dev server logs for now).");
+          setMode("magic-verify");
+          return;
+        }
+        if (mode === "magic-verify") {
+          await signIn("magic-link-otp", { email, code: otp });
+          router.push("/today");
+          router.refresh();
           return;
         }
       } catch (err) {
@@ -60,35 +56,30 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6">
+    <form onSubmit={go} className="space-y-6">
       {mode === "signup" && (
         <div className="space-y-2">
           <Label htmlFor="name" className="eyebrow">Name</Label>
+          <Input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
+        </div>
+      )}
+
+      {mode !== "magic-verify" && (
+        <div className="space-y-2">
+          <Label htmlFor="email" className="eyebrow">Email</Label>
           <Input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             required
-            autoComplete="name"
+            autoComplete="email"
+            autoFocus
           />
         </div>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="email" className="eyebrow">Email</Label>
-        <Input
-          id="email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          autoComplete="email"
-          autoFocus
-        />
-      </div>
-
-      {mode !== "magic" && (
+      {(mode === "password" || mode === "signup") && (
         <div className="space-y-2">
           <Label htmlFor="password" className="eyebrow">Password</Label>
           <Input
@@ -100,22 +91,52 @@ export function LoginForm() {
             minLength={12}
             autoComplete={mode === "signup" ? "new-password" : "current-password"}
           />
-          <p className="text-xs text-muted-foreground mt-1">
-            {mode === "signup" ? "Minimum 12 characters." : ""}
+          {mode === "signup" && (
+            <p className="text-xs text-muted-foreground mt-1">Minimum 12 characters.</p>
+          )}
+        </div>
+      )}
+
+      {mode === "magic-verify" && (
+        <div className="space-y-2">
+          <Label htmlFor="otp" className="eyebrow">6-digit code</Label>
+          <Input
+            id="otp"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]{6}"
+            maxLength={6}
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+            required
+            autoComplete="one-time-code"
+            autoFocus
+            className="font-mono tracking-[0.4em] text-2xl"
+          />
+          <p className="text-xs text-muted-foreground">
+            Sent to {email}. In dev, check the Convex server logs.
           </p>
         </div>
       )}
 
       <Button type="submit" disabled={pending} className="w-full">
-        {pending ? "…" : mode === "signup" ? "Create account" : mode === "magic" ? "Send magic link" : "Sign in"}
+        {pending
+          ? "…"
+          : mode === "signup"
+          ? "Create account"
+          : mode === "magic"
+          ? "Send code"
+          : mode === "magic-verify"
+          ? "Verify"
+          : "Sign in"}
       </Button>
 
       <div className="flex flex-col gap-2 pt-4 border-t border-border">
-        {mode !== "magic" && (
+        {mode !== "magic" && mode !== "magic-verify" && (
           <button
             type="button"
             onClick={() => setMode("magic")}
-            className="text-xs eyebrow text-muted-foreground hover:text-foreground transition-colors"
+            className="text-xs eyebrow text-muted-foreground hover:text-foreground transition-colors text-left"
           >
             Sign in with a magic link →
           </button>
@@ -124,7 +145,7 @@ export function LoginForm() {
           <button
             type="button"
             onClick={() => setMode("password")}
-            className="text-xs eyebrow text-muted-foreground hover:text-foreground transition-colors"
+            className="text-xs eyebrow text-muted-foreground hover:text-foreground transition-colors text-left"
           >
             Use a password →
           </button>
@@ -133,7 +154,7 @@ export function LoginForm() {
           <button
             type="button"
             onClick={() => setMode("signup")}
-            className="text-xs eyebrow text-muted-foreground hover:text-foreground transition-colors"
+            className="text-xs eyebrow text-muted-foreground hover:text-foreground transition-colors text-left"
           >
             Create an account →
           </button>
