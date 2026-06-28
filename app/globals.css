@@ -1,26 +1,249 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/**
+ * Atlas — locked theme tokens.
+ * Defined per plan/04-ui-direction.md and plan/17-theme-and-shadcn.md.
+ *
+ * Dark is the default surface. Light is reserved for documents (PDF preview,
+ * print). The accent is burnt orange #FF5B1F — Blyss family — used ≤ 4× per
+ * viewport. No blue/green/purple/teal except in muted semantic variants.
+ */
+
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* Map our tokens to shadcn-expected names so generated components work */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Atlas-specific semantic */
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+
+  /* Sidebar */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Chart series — muted, never gradients */
+  --color-chart-1: var(--accent);
+  --color-chart-2: var(--info);
+  --color-chart-3: var(--success);
+  --color-chart-4: var(--warning);
+  --color-chart-5: var(--text-muted);
+
+  /* Type families */
+  --font-display: var(--font-instrument-serif), Georgia, serif;
+  --font-sans: var(--font-geist), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-heading: var(--font-display);
+
+  /* Atlas type scale */
+  --text-display: clamp(56px, 7vw, 96px);
+  --text-4xl: clamp(36px, 4vw, 56px);
+
+  /* Spacing 4pt scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+  --space-32: 128px;
+
+  /* Easings */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Durations */
+  --dur-fast: 100ms;
+  --dur-normal: 160ms;
+  --dur-slow: 200ms;
+  --dur-drawer: 300ms;
+
+  /* Radii — Atlas is sharp. Never rounded-xl. */
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+  --radius: 2px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* === Dark mode (DEFAULT for Atlas) === */
+:root,
+.dark {
+  --background: oklch(0.13 0.005 60); /* ink */
+  --foreground: oklch(0.94 0.005 80); /* paper-on-ink */
+  --card: oklch(0.18 0.005 60);
+  --card-foreground: oklch(0.94 0.005 80);
+  --popover: oklch(0.22 0.005 60);
+  --popover-foreground: oklch(0.94 0.005 80);
+
+  /* Atlas accent — burnt orange #FF5B1F, used ≤ 4× per viewport */
+  --primary: oklch(0.68 0.20 35);
+  --primary-foreground: oklch(0.13 0.005 60);
+
+  --secondary: oklch(0.22 0.005 60);
+  --secondary-foreground: oklch(0.94 0.005 80);
+
+  --muted: oklch(0.22 0.005 60);
+  --muted-foreground: oklch(0.74 0.01 80);
+  --text-muted: oklch(0.50 0.01 80);
+
+  --accent: oklch(0.68 0.20 35);
+  --accent-foreground: oklch(0.13 0.005 60);
+
+  --destructive: oklch(0.60 0.18 25);
+  --destructive-foreground: oklch(0.94 0.005 80);
+
+  --success: oklch(0.70 0.12 145);
+  --warning: oklch(0.75 0.13 75);
+  --info: oklch(0.70 0.10 220);
+
+  --border: oklch(0.28 0.005 60);
+  --border-strong: oklch(0.36 0.005 60);
+  --input: oklch(0.28 0.005 60);
+  --ring: oklch(0.68 0.20 35);
+
+  /* Sidebar */
+  --sidebar: oklch(0.13 0.005 60);
+  --sidebar-foreground: oklch(0.94 0.005 80);
+  --sidebar-primary: oklch(0.68 0.20 35);
+  --sidebar-primary-foreground: oklch(0.13 0.005 60);
+  --sidebar-accent: oklch(0.22 0.005 60);
+  --sidebar-accent-foreground: oklch(0.94 0.005 80);
+  --sidebar-border: oklch(0.28 0.005 60);
+  --sidebar-ring: oklch(0.68 0.20 35);
+}
+
+/* === Light mode (for documents only) === */
+.light {
+  --background: oklch(0.95 0.01 80); /* paper */
+  --foreground: oklch(0.13 0.005 60); /* ink-on-paper */
+  --card: oklch(0.91 0.01 80);
+  --card-foreground: oklch(0.13 0.005 60);
+  --popover: oklch(0.97 0.005 80);
+  --popover-foreground: oklch(0.13 0.005 60);
+
+  --primary: oklch(0.68 0.20 35);
+  --primary-foreground: oklch(0.95 0.01 80);
+
+  --secondary: oklch(0.91 0.01 80);
+  --secondary-foreground: oklch(0.13 0.005 60);
+
+  --muted: oklch(0.91 0.01 80);
+  --muted-foreground: oklch(0.22 0.005 60);
+  --text-muted: oklch(0.50 0.01 80);
+
+  --accent: oklch(0.68 0.20 35);
+  --accent-foreground: oklch(0.95 0.01 80);
+
+  --destructive: oklch(0.60 0.18 25);
+  --destructive-foreground: oklch(0.95 0.01 80);
+
+  --success: oklch(0.55 0.14 145);
+  --warning: oklch(0.65 0.15 75);
+  --info: oklch(0.55 0.12 220);
+
+  --border: oklch(0.79 0.01 80);
+  --border-strong: oklch(0.66 0.01 80);
+  --input: oklch(0.79 0.01 80);
+  --ring: oklch(0.68 0.20 35);
+
+  --sidebar: oklch(0.95 0.01 80);
+  --sidebar-foreground: oklch(0.13 0.005 60);
+  --sidebar-primary: oklch(0.68 0.20 35);
+  --sidebar-primary-foreground: oklch(0.95 0.01 80);
+  --sidebar-accent: oklch(0.91 0.01 80);
+  --sidebar-accent-foreground: oklch(0.13 0.005 60);
+  --sidebar-border: oklch(0.79 0.01 80);
+  --sidebar-ring: oklch(0.68 0.20 35);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
-}
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  html {
+    @apply font-sans;
+    font-feature-settings: "ss01" on, "cv01" on;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    min-height: 100vh;
+  }
+
+  /* Display headings use Instrument Serif by default */
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
+    line-height: 1.05;
+  }
+
+  /* Focus visible — instant, accent color (Emil rule: never animated) */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* Eyebrows — uppercase mono tracked */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--muted-foreground);
+    font-weight: 500;
+  }
+
+  /* Numerals — use tabular figures for tables */
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Reduce motion — collapses spatial motion to opacity crossfade */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
