@@ -1,0 +1,80 @@
+# ============================================================
+# Atlas — daily Convex export → backup PVC (keeps 14 days)
+#
+# Runs `npx convex export` against the in-cluster backend using
+# CONVEX_SELF_HOSTED_ADMIN_KEY (from atlas-convex Secret) and stores
+# the ZIP snapshot on the convex-backups PVC. Old snapshots beyond
+# 14 days are pruned.
+#
+# Restore (manual):
+#   CONVEX_SELF_HOSTED_URL=https://api.atlas.blyss.co.ke \
+#   CONVEX_SELF_HOSTED_ADMIN_KEY=<key> \
+#   npx convex import --replace /backups/atlas-YYYYMMDD-HHMMSS.zip
+# ============================================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: convex-backups
+  namespace: atlas
+  labels:
+    app: atlas
+    component: backups
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: convex-backup
+  namespace: atlas
+  labels:
+    app: atlas
+    component: backups
+spec:
+  # 02:30 UTC daily (offset from chapaswali's 02:30 if it lands here too)
+  schedule: "30 2 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: node:20-alpine
+              env:
+                - name: CONVEX_SELF_HOSTED_URL
+                  value: "http://convex-api.atlas.svc.cluster.local"
+                - name: CONVEX_SELF_HOSTED_ADMIN_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: atlas-convex
+                      key: admin-key
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+              command:
+                - sh
+                - -c
+                - |
+                  set -e
+                  ts=$(date -u +%Y%m%d-%H%M%S)
+                  out="/backups/atlas-${ts}.zip"
+                  echo "Exporting to ${out}"
+                  npx --yes convex@latest export --path "${out}"
+                  echo "Done. Pruning > 14 days old..."
+                  find /backups -name 'atlas-*.zip' -type f -mtime +14 -delete
+                  echo "Current backups:"
+                  ls -lh /backups | tail -20
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: convex-backups

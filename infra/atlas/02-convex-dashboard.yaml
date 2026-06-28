@@ -1,0 +1,75 @@
+# ============================================================
+# Atlas — Convex dashboard (admin UI, IP-allowlisted)
+#
+# Backs convex.atlas.blyss.co.ke. Ingress in 03-ingress.yaml
+# applies an IP allowlist middleware so only the operator can
+# reach it.
+# ============================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: convex-dashboard
+  namespace: atlas
+  labels:
+    app: atlas
+    component: dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: atlas
+      component: dashboard
+  template:
+    metadata:
+      labels:
+        app: atlas
+        component: dashboard
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull
+      containers:
+        - name: dashboard
+          image: ghcr.io/get-convex/convex-dashboard:latest
+          ports:
+            - name: web
+              containerPort: 6791
+          env:
+            - name: NEXT_PUBLIC_DEPLOYMENT_URL
+              value: "https://api.atlas.blyss.co.ke"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "384Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 6791
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 6791
+            initialDelaySeconds: 30
+            periodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: convex-dashboard
+  namespace: atlas
+  labels:
+    app: atlas
+    component: dashboard
+spec:
+  type: ClusterIP
+  ports:
+    - name: web
+      port: 80
+      targetPort: 6791
+  selector:
+    app: atlas
+    component: dashboard

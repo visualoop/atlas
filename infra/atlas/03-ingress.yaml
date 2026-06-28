@@ -1,0 +1,130 @@
+# ============================================================
+# Atlas — ingresses + TLS for the self-hosted Convex stack
+#
+#   api.atlas.blyss.co.ke      → convex-api (3210)         — frontend WS
+#   actions.atlas.blyss.co.ke  → convex-http-actions (3211) — webhooks
+#   convex.atlas.blyss.co.ke   → convex-dashboard (6791)    — admin UI
+#
+# Traefik + Let's Encrypt (certresolver "le"), same pattern as the
+# blyss/olestones/chapaswali apps already on this cluster.
+#
+# WebSocket: Convex client uses WebSockets against api.atlas.blyss.co.ke.
+# Traefik proxies WS automatically — no special annotation needed.
+# Cloudflare passes WS through by default when proxied.
+# ============================================================
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: atlas-https-redirect
+  namespace: atlas
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+# IP allowlist for the admin dashboard. Set your real IP(s) before
+# exposing. Left as 0.0.0.0/0 placeholder so the manifest validates;
+# TIGHTEN BEFORE DEPLOY.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: atlas-dashboard-ipallow
+  namespace: atlas
+spec:
+  ipWhiteList:
+    sourceRange:
+      # TODO: replace with operator IP, e.g. "41.90.x.x/32"
+      - "0.0.0.0/0"
+---
+# ---- api.atlas.blyss.co.ke → backend API (3210) ----
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: convex-api
+  namespace: atlas
+  labels:
+    app: atlas
+    component: backend
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls.certresolver: le
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: atlas-atlas-https-redirect@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - api.atlas.blyss.co.ke
+      secretName: convex-api-tls
+  rules:
+    - host: api.atlas.blyss.co.ke
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: convex-api
+                port:
+                  number: 80
+---
+# ---- actions.atlas.blyss.co.ke → HTTP actions (3211) ----
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: convex-http-actions
+  namespace: atlas
+  labels:
+    app: atlas
+    component: backend
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls.certresolver: le
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: atlas-atlas-https-redirect@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - actions.atlas.blyss.co.ke
+      secretName: convex-actions-tls
+  rules:
+    - host: actions.atlas.blyss.co.ke
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: convex-http-actions
+                port:
+                  number: 80
+---
+# ---- convex.atlas.blyss.co.ke → dashboard (6791), IP-allowlisted ----
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: convex-dashboard
+  namespace: atlas
+  labels:
+    app: atlas
+    component: dashboard
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls.certresolver: le
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: atlas-atlas-https-redirect@kubernetescrd,atlas-atlas-dashboard-ipallow@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - convex.atlas.blyss.co.ke
+      secretName: convex-dashboard-tls
+  rules:
+    - host: convex.atlas.blyss.co.ke
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: convex-dashboard
+                port:
+                  number: 80

@@ -1,0 +1,157 @@
+# ============================================================
+# Atlas — Convex backend (self-hosted on k3s)
+#
+# Ports:
+#   3210  API + WebSocket — exposed via api.atlas.blyss.co.ke
+#   3211  HTTP actions    — exposed via actions.atlas.blyss.co.ke
+#                           (webhooks land here: Paystack, Resend in,
+#                           Meta WhatsApp, DocuSeal)
+#
+# Within the atlas namespace 2.5Gi RAM / 15Gi storage quota.
+# Image + env names verified against the official Convex self-hosted
+# docker-compose.yml.
+# ============================================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: convex-data
+  namespace: atlas
+  labels:
+    app: atlas
+    component: backend
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi   # SQLite DB + modules + files + search indexes
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: convex-backend
+  namespace: atlas
+  labels:
+    app: atlas
+    component: backend
+spec:
+  replicas: 1
+  # SQLite on a single RWO volume → one writer only.
+  # Recreate (not rolling) so the old pod releases the PVC before the
+  # new one starts.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: atlas
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: atlas
+        component: backend
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull
+      containers:
+        - name: backend
+          image: ghcr.io/get-convex/convex-backend:latest
+          ports:
+            - name: api
+              containerPort: 3210
+            - name: http-actions
+              containerPort: 3211
+          env:
+            # Public origins — what the backend tells clients to use.
+            - name: CONVEX_CLOUD_ORIGIN
+              value: "https://api.atlas.blyss.co.ke"
+            - name: CONVEX_SITE_ORIGIN
+              value: "https://actions.atlas.blyss.co.ke"
+            # Instance identity + secret (signs admin keys).
+            - name: INSTANCE_NAME
+              value: "atlas"
+            - name: INSTANCE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: atlas-convex
+                  key: instance-secret
+            # Don't phone home.
+            - name: DISABLE_BEACON
+              value: "true"
+            - name: RUST_LOG
+              value: "info"
+            # Lower document retention to 2 days (matches the official
+            # compose default; bounds disk growth).
+            - name: DOCUMENT_RETENTION_DELAY
+              value: "172800"
+          volumeMounts:
+            - name: data
+              mountPath: /convex/data
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "768Mi"
+            limits:
+              cpu: "1500m"
+              memory: "1800Mi"   # ~72% of namespace's 2.5Gi
+          readinessProbe:
+            httpGet:
+              path: /version
+              port: 3210
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /version
+              port: 3210
+            initialDelaySeconds: 40
+            periodSeconds: 20
+          startupProbe:
+            httpGet:
+              path: /version
+              port: 3210
+            periodSeconds: 5
+            failureThreshold: 40
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: convex-data
+---
+# API service (3210) — backs api.atlas.blyss.co.ke
+apiVersion: v1
+kind: Service
+metadata:
+  name: convex-api
+  namespace: atlas
+  labels:
+    app: atlas
+    component: backend
+spec:
+  type: ClusterIP
+  ports:
+    - name: api
+      port: 80
+      targetPort: 3210
+  selector:
+    app: atlas
+    component: backend
+---
+# HTTP-actions service (3211) — backs actions.atlas.blyss.co.ke
+apiVersion: v1
+kind: Service
+metadata:
+  name: convex-http-actions
+  namespace: atlas
+  labels:
+    app: atlas
+    component: backend
+spec:
+  type: ClusterIP
+  ports:
+    - name: http-actions
+      port: 80
+      targetPort: 3211
+  selector:
+    app: atlas
+    component: backend

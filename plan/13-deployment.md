@@ -2,288 +2,244 @@
 
 ## Environments
 
-| Env | URL | DB | Notes |
+| Env | Frontend | Convex backend | Notes |
 |---|---|---|---|
-| Local | `localhost:3000` or `<port>.blyss.co.ke` (via Cloudflare tunnel) | Neon dev branch | Used during development |
-| Staging | `staging.atlas.blyss.co.ke` | Neon staging branch | Auto-deploy from `main`; for final review |
-| Production | `atlas.blyss.co.ke` | Neon production branch | Manual promotion from staging |
+| Local | `http://localhost:3010` or `https://3010.blyss.co.ke` | Docker via `docker-compose.yml` (ports 3220/3221/6791) | Active dev loop |
+| Staging | `staging.atlas.blyss.co.ke` (Vercel preview) | Same self-hosted k3s backend (separate Convex env vars + DB branch) | Pre-prod verification |
+| Production | `atlas.blyss.co.ke` (Vercel) | k3s namespace `atlas` on Oracle Cloud | – |
 
-## Hosting choice
+## Hosting
 
-**Vercel Hobby** for v1 — free for non-revenue internal use, fast deploys, edge runtime where applicable. If Vercel costs become an issue or commercial use kicks in:
+- **Frontend** → Vercel via `visualoop` GitHub account / team `daily-cutlines-projects`. Vercel CLI logged in.
+- **Backend** → self-hosted Convex on the existing k3s cluster at `130.162.184.133` (Oracle Cloud, Always Free ARM).
+- **DocuSeal** (e-signature, Phase 7a) → same k3s cluster, separate namespace or alongside Atlas.
 
-- **Cloudflare Pages** with `@opennextjs/cloudflare` — free tier, integrates natively with R2 and Email Routing
-- **Hetzner ARM VPS** (`CAX11`, €4.51/mo) — full control, host Next.js + DocuSeal on same box
+## Cluster resource allocation
 
-The plan is Vercel until volume requires migration.
+The cluster ceiling is 24 GB RAM / 195 GB storage. Atlas joins by trimming existing namespaces:
 
-## DNS
+| Namespace | RAM (was → is) | Storage (was → is) |
+|---|---|---|
+| blyss | 12 → **10.5 GB** | 90 → **82 GB** |
+| olestones | 3 → **3 GB** | 40 → **38 GB** |
+| chapaswali | 5 → **4.5 GB** | 20 → **20 GB** |
+| monitoring | 2.5 → **2 GB** | 30 → **28 GB** |
+| **atlas (new)** | — → **2.5 GB** | — → **15 GB** |
+| **System reserve** | — | **12 GB** |
+| **Total** | **24 GB ✓** | **195 GB ✓** |
 
-- `atlas.blyss.co.ke` → CNAME to Vercel
-- `staging.atlas.blyss.co.ke` → CNAME to Vercel staging
-- `pay.blyss.co.ke` → CNAME to Vercel (for public payment short links)
-- `book.blyss.co.ke` → CNAME to Vercel (for booking pages)
-- `<port>.blyss.co.ke` → Cloudflare tunnel from code-server (dev preview)
+`infra/quotas/resource-quotas.yaml` (in the shared infra repo) updated accordingly.
 
-Cloudflare proxy on; DDoS + bot management defaults.
+## DNS (Cloudflare)
+
+A records, DNS-only at first for Let's Encrypt issuance, then can flip to proxied:
+
+| Subdomain | Target | Notes |
+|---|---|---|
+| `atlas.blyss.co.ke` | Vercel | Frontend |
+| `api.atlas.blyss.co.ke` | `130.162.184.133` | Convex API + WebSocket |
+| `actions.atlas.blyss.co.ke` | `130.162.184.133` | Convex HTTP actions (webhooks) |
+| `convex.atlas.blyss.co.ke` | `130.162.184.133` | Convex dashboard (IP-allowlisted) |
+| `pay.atlas.blyss.co.ke` | Vercel | Branded payment short links |
+| `book.atlas.blyss.co.ke` | Vercel | Public booking pages |
+
+Cloudflare API token already in operator env as `CLOUDFLARE_API_TOKEN`, zone ID for `blyss.co.ke` is `c1eaaa292b9dddcb67f9592bb5bc1948`. Records can be scripted with curl or `gcloud`/`gws` if needed.
 
 ## Local development setup
 
-### Prerequisites
+### Prereqs
 
-- Node.js 20 LTS
-- npm (bundled)
+- Node 20 LTS, npm
+- Docker + docker-compose
 - Git
-- Docker (optional, for local DocuSeal)
-- A Neon account + project (free tier)
-- A Cloudflare R2 bucket (free tier)
-- A Resend account (free tier, 3K emails/mo)
+- Cloudflare tunnel running, routing `<port>.blyss.co.ke` → `localhost:<port>`
 
-### Steps
-
-1. `git clone <repo>` (already done — we're at `/home/ubuntu/workspace/atlas`)
-2. `npm install`
-3. `cp .env.example .env.local` — fill in values (see below)
-4. `npm run db:migrate` — applies Drizzle migrations to dev DB branch
-5. `npm run db:seed` — seeds Blyss org, 3 workspaces, AI model registry, ship default bindings
-6. `npm run dev` (in one terminal)
-7. `npm run worker` (in another terminal — runs pg-boss jobs)
-8. Open `http://localhost:3000` (or `<port>.blyss.co.ke` via tunnel)
-
-### `.env.example` (committed, placeholders only)
+### First-time setup
 
 ```bash
-# === System (Tier 0) — operator-controlled ===
+git clone <repo>
+cd atlas
+npm install
 
-# App
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-NODE_ENV=development
+# Copy env template, fill in the bootstrap values
+cp .env.example .env.local
+# Generate CONVEX_INSTANCE_SECRET — already in .env.local for committed dev backend
+# openssl rand -hex 32
 
-# Auth
-BETTER_AUTH_SECRET=<openssl rand -base64 32>
-BETTER_AUTH_URL=http://localhost:3000
+# Start Convex backend
+docker compose --env-file .env.local up -d
 
-# Master encryption key for Tier 1/2 secrets (32 bytes base64)
-ATLAS_MASTER_KEY=<openssl rand -base64 32>
+# Generate admin key (once)
+docker exec atlas-convex-backend ./generate_admin_key.sh
+# Paste output into .env.local as CONVEX_SELF_HOSTED_ADMIN_KEY
 
-# Database (Neon)
-DATABASE_URL=postgres://<user>:<pass>@<host>/<db>?sslmode=require
-DATABASE_URL_UNPOOLED=postgres://<user>:<pass>@<host>/<db>?sslmode=require
+# Set Convex env vars (JWT keys, JWKS, CONFIG_ENCRYPTION_KEY, SITE_URL)
+# See scripts/bootstrap-convex-env.sh (Phase 0 follow-up)
 
-# Object storage (Cloudflare R2 — S3-compatible)
-R2_ACCOUNT_ID=<your-r2-account>
-R2_ACCESS_KEY_ID=<r2-access-key>
-R2_SECRET_ACCESS_KEY=<r2-secret>
-R2_BUCKET=atlas-files
-R2_ENDPOINT=https://<account>.r2.cloudflarestorage.com
-R2_PUBLIC_BASE=https://files.atlas.blyss.co.ke   # optional CDN front
+# Push functions to local backend
+npm run dev:convex   # in one terminal
 
-# Resend (Atlas system emails — separate from org Resend keys)
-RESEND_SYSTEM_KEY=re_<system-key>
-RESEND_SYSTEM_FROM=Atlas <atlas-noreply@blyss.co.ke>
+# Run Next.js
+npm run dev:next     # in another terminal
+```
 
-# Google OAuth (sign-in)
-GOOGLE_OAUTH_CLIENT_ID=
-GOOGLE_OAUTH_CLIENT_SECRET=
+Visit `https://3010.blyss.co.ke` for the app, `https://6791.blyss.co.ke` for the Convex dashboard.
 
-# Observability
+### `.env.local` (gitignored)
+
+```bash
+NEXT_PUBLIC_APP_URL=http://localhost:3010
+NEXT_PUBLIC_CONVEX_URL=https://3220.blyss.co.ke
+NEXT_PUBLIC_CONVEX_PUBLIC_URL=https://3220.blyss.co.ke
+NEXT_PUBLIC_CONVEX_SITE_URL=https://3221.blyss.co.ke
+
+CONVEX_INSTANCE_SECRET=<from openssl rand -hex 32>
+CONVEX_SELF_HOSTED_URL=https://3220.blyss.co.ke
+CONVEX_SELF_HOSTED_ADMIN_KEY=<from generate_admin_key.sh>
+
+# Optional observability — fill in later
 SENTRY_DSN=
-SENTRY_AUTH_TOKEN=
 NEXT_PUBLIC_POSTHOG_KEY=
 NEXT_PUBLIC_POSTHOG_HOST=https://eu.i.posthog.com
-
-# Backups
-R2_BACKUP_BUCKET=atlas-backups
-R2_BACKUP_KEY=<separate-from-master-key>
 ```
 
-### Env validation
-
-`lib/env.ts` parses all env vars at boot via Zod. App refuses to start with missing or malformed values. Reduces surprise in production.
-
-### Cloudflare tunnel (for `<port>.blyss.co.ke` preview)
-
-Install once on the code-server VM:
+### Tier-0 Convex env vars (set inside Convex, not `.env.local`)
 
 ```bash
-# Add Cloudflare tunnel binary
-sudo cloudflared service install <tunnel-token>
+export CONVEX_SELF_HOSTED_URL=https://3220.blyss.co.ke
+export CONVEX_SELF_HOSTED_ADMIN_KEY=<admin key>
+
+npx convex env set SITE_URL http://localhost:3010
+npx convex env set JWT_PRIVATE_KEY --from-file /tmp/atlas-priv.pem
+npx convex env set JWKS --from-file /tmp/atlas-jwks.json
+npx convex env set CONFIG_ENCRYPTION_KEY "<base64 32-byte key>"
 ```
 
-Configure the tunnel route to send `*.blyss.co.ke` (or specific subdomain) traffic to `localhost:3000`. Already in place per the user's note.
+`scripts/bootstrap-convex-env.sh` automates this.
 
-## CI / CD pipeline (GitHub Actions)
+## k3s production deploy
 
-`.github/workflows/ci.yml`:
+### Manifests (in `infra/atlas/`)
 
-```yaml
-name: CI
-on: { pull_request: {}, push: { branches: [main] } }
-jobs:
-  install-and-cache:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: 'npm' }
-      - run: npm ci
-
-  type-check:
-    needs: install-and-cache
-    steps:
-      - run: npm run type-check
-
-  lint:
-    needs: install-and-cache
-    steps:
-      - run: npm run lint
-
-  unit-test:
-    needs: install-and-cache
-    steps:
-      - run: npm run test
-
-  e2e:
-    needs: install-and-cache
-    services:
-      postgres:
-        image: postgres:16
-        env: { POSTGRES_PASSWORD: postgres }
-        ports: [5432:5432]
-    steps:
-      - run: npm run db:migrate:test
-      - run: npx playwright install --with-deps
-      - run: npm run test:e2e
-
-  lighthouse:
-    needs: install-and-cache
-    steps:
-      - run: npm run build
-      - run: npm run start &
-      - run: npx wait-on http://localhost:3000
-      - run: npx lhci autorun --collect.url=http://localhost:3000
-        env: { LHCI_TOKEN: ${{ secrets.LHCI_TOKEN }} }
-
-  audit:
-    needs: install-and-cache
-    steps:
-      - run: npm audit --audit-level=high
+```
+infra/atlas/
+  README.md
+  01-convex-backend.yaml      Deployment + PVC (15 Gi data) + 2 Services
+  02-convex-dashboard.yaml    Dashboard Deployment + Service
+  03-ingress.yaml             3 Traefik ingresses + TLS + dashboard IP-allowlist
+  04-backup-cronjob.yaml      Daily convex export → backup PVC (keeps 14)
+  VERCEL.md                   Vercel env var wiring for the Next.js side
 ```
 
-`.github/workflows/deploy-prod.yml` — manual trigger only. Runs migrations against prod DB before deploying. Slack/email notification on success/failure.
+### GitHub Actions workflow
 
-## Database migrations
+`.github/workflows/deploy-atlas.yml` mirrors `infra/workflows/deploy-chapaswali.yml`:
 
-- Drizzle Kit `generate` produces `db/migrations/*.sql`
-- Migrations committed to git
-- `db:migrate:dev` — applies to dev branch
-- `db:migrate:staging` — applies to staging on every `main` push
-- `db:migrate:prod` — manual approval required (via GitHub Actions workflow_dispatch)
-- Migrations are never edited once committed — only additive new ones
+**Job 1 — infra**: copies manifests to server via SCP, applies via SSH+kubectl, injects `CONVEX_INSTANCE_SECRET_ATLAS` + `CONVEX_SELF_HOSTED_ADMIN_KEY_ATLAS` as k8s Secrets, waits for rollout.
 
-## Worker process
+**Job 2 — functions**: (gated on admin key existing) `npx convex deploy` against `https://api.atlas.blyss.co.ke` with the admin key.
 
-pg-boss workers run as a separate Node process. In production:
+### GitHub secrets needed
 
-- **On Vercel:** runs as a "background function" or external service (Vercel Functions don't keep alive). For v1, simplest: run worker on a Hetzner VPS (€4.51/mo) connected to the same Neon DB.
-- **Alternative:** Cloudflare Workers Cron triggers + Cloudflare Queues — more complex, post-Phase-11.
+| Secret | Source |
+|---|---|
+| `SERVER_IP` | Already set (`130.162.184.133`) |
+| `SSH_PRIVATE_KEY` | Already set |
+| `CONVEX_INSTANCE_SECRET_ATLAS` | `openssl rand -hex 32` |
+| `CONVEX_SELF_HOSTED_ADMIN_KEY_ATLAS` | Generated from backend after first deploy |
+| `VERCEL_TOKEN` | Vercel CLI token for production deploys |
+| `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` | Vercel project linking |
 
-Worker script `worker.ts`:
+### First-deploy procedure
 
-```ts
-import { PgBoss } from 'pg-boss';
-import { handlers } from '@/lib/jobs/handlers';
+1. **DNS first**: create the 4 A records (api/actions/convex/pay/book).
+2. **Add `CONVEX_INSTANCE_SECRET_ATLAS`** GitHub secret.
+3. **Copy workflow** into `.github/workflows/deploy-atlas.yml` and push.
+4. **Infra job runs**, backend pod boots. Functions job skipped (no admin key yet).
+5. **Generate admin key** once:
+   ```bash
+   sudo kubectl -n atlas exec deploy/convex-backend -- ./generate_admin_key.sh
+   ```
+6. Add the result as `CONVEX_SELF_HOSTED_ADMIN_KEY_ATLAS` GitHub secret.
+7. **Re-run workflow**. Functions job runs `npx convex deploy`.
+8. **Set Convex env vars on production** (Tier-0):
+   ```bash
+   export CONVEX_SELF_HOSTED_URL=https://api.atlas.blyss.co.ke
+   export CONVEX_SELF_HOSTED_ADMIN_KEY=<key>
+   npx convex env set SITE_URL https://atlas.blyss.co.ke
+   npx convex env set JWT_PRIVATE_KEY --from-file priv.pem
+   npx convex env set JWKS --from-file jwks.json
+   npx convex env set CONFIG_ENCRYPTION_KEY "<base64>"
+   ```
+9. **Wire Vercel**:
+   ```
+   vercel env add NEXT_PUBLIC_CONVEX_URL production       # https://api.atlas.blyss.co.ke
+   vercel env add NEXT_PUBLIC_CONVEX_PUBLIC_URL production # https://api.atlas.blyss.co.ke
+   vercel env add NEXT_PUBLIC_CONVEX_SITE_URL production   # https://actions.atlas.blyss.co.ke
+   vercel env add NEXT_PUBLIC_APP_URL production           # https://atlas.blyss.co.ke
+   vercel deploy --prod
+   ```
+10. **Smoke test**: load `https://atlas.blyss.co.ke`, sign up, verify Convex sync works.
 
-const boss = new PgBoss(process.env.DATABASE_URL_UNPOOLED);
-await boss.start();
+### Webhook callback wiring
 
-for (const [name, handler] of Object.entries(handlers)) {
-  await boss.work(name, { teamSize: 5 }, handler);
-}
+For Paystack / Resend inbound / Meta WhatsApp / DocuSeal, the callback URL base is `https://actions.atlas.blyss.co.ke`:
 
-console.log('Atlas worker running');
-```
-
-Health-checked by an external uptime monitor (BetterStack free).
-
-## Seeds
-
-`db:seed` creates the initial data needed for Atlas to feel right on first launch:
-
-- One organization `Blyss`
-- One user `justine@blyss.co.ke` as Org Owner (password set via env or first login)
-- Three workspaces: `Omnix`, `Marketplace`, `Studio`
-- Pre-seeded pipelines for each workspace with ship default stages
-- Pre-seeded AI model registry (the table in `08-ai-gateway.md`)
-- Pre-seeded ai_feature_bindings with ship defaults
-- Empty integration keys list (Justine fills in via Settings)
-- Sample notification preferences
-
-Seeds are idempotent — safe to re-run.
+- Paystack: register `https://actions.atlas.blyss.co.ke/paystack/webhook` in Paystack dashboard
+- Resend Inbound: configure inbound webhook URL in Resend dashboard
+- Meta WhatsApp: register `https://actions.atlas.blyss.co.ke/whatsapp/webhook`
+- DocuSeal: configure webhook URL in DocuSeal admin
 
 ## Backups
 
-- Neon native PITR — 6h on Free, 7d on Launch
-- Weekly logical dump via cron job (in worker process):
+- Daily `convex export` at 02:30 UTC via k8s CronJob → backup PVC, keep last 14 (per `infra/atlas/04-backup-cronjob.yaml`)
+- Verify with `kubectl -n atlas exec deploy/convex-backend -- ls -lh /backups`
+- Restore:
+  ```bash
+  CONVEX_SELF_HOSTED_URL=https://api.atlas.blyss.co.ke \
+  CONVEX_SELF_HOSTED_ADMIN_KEY=<key> \
+  npx convex import --replace /path/to/atlas-YYYYMMDD-HHMMSS.zip
   ```
-  pg_dump $DATABASE_URL_UNPOOLED | gzip | encrypt-with($R2_BACKUP_KEY) | upload-to-r2
-  ```
-- Backup retention: 12 weekly + 12 monthly
-- Restore tested quarterly (operator playbook in `/ops/restore.md`)
+- Off-site (future): rclone snapshot → R2 with separate encryption key
 
-## Monitoring
+## CI
 
-- **Sentry** for errors + slow transactions
-- **PostHog** for product analytics
-- **BetterStack** (or cron-job.org) for uptime checks on `/api/health`
-- **Vercel Speed Insights** for real-user metrics
-- Cron monitor on the worker (heartbeat every 5 min to BetterStack)
+`.github/workflows/ci.yml` on every PR:
 
-## DocuSeal hosting
-
-DocuSeal runs separately. Two options:
-
-**Option A — same Hetzner VPS as the pg-boss worker:**
-
-```bash
-# docker-compose.yml on the VPS
-services:
-  docuseal:
-    image: docuseal/docuseal:latest
-    ports: ['3001:3000']
-    environment:
-      DATABASE_URL: <its own Postgres DB or shared schema>
-      HOST: docuseal.blyss.co.ke
-    volumes:
-      - docuseal-data:/data/uploads
-```
-
-Cloudflare DNS `docuseal.blyss.co.ke` → VPS IP (proxied). Org Owner adds DocuSeal URL + API token in `Settings → Integrations → DocuSeal`.
-
-**Option B — Sliplane / Railway** managed hosting if VPS is too much.
-
-## Domain + email setup
-
-- `atlas.blyss.co.ke` — Cloudflare DNS, A/CNAME to Vercel
-- `mail.blyss.co.ke` — SPF + DKIM + DMARC records for Resend
-- `wa.blyss.co.ke` — optional vanity hostname (not strictly needed)
-- DKIM record from Resend dashboard
-- DMARC: `v=DMARC1; p=quarantine; rua=mailto:dmarc@blyss.co.ke`
+- `npm ci`
+- `npm run type-check`
+- `npm run lint`
+- `npm run build` (Next.js)
+- `npx convex deploy --dry-run` (validates schema diff)
+- `vitest run` (unit + integration via `convex-test`)
+- Playwright E2E against a preview deploy
+- Lighthouse CI on public routes
 
 ## Rollback procedure
 
-1. Vercel: instant revert via dashboard (one click to previous deploy)
-2. Database migrations are forward-only — rollback means writing a new "down" migration; never edit history
-3. If a migration corrupts data: restore from Neon PITR to a new branch, run a `db:diff-and-recover` script (manual)
+1. **Frontend** (Vercel): instant revert via dashboard (one click to previous deploy)
+2. **Convex schema/functions**: deploy the previous commit. Convex retains migration history; backwards-compatible additive changes roll back cleanly. Renames/removals require a re-add migration.
+3. **Data corruption**: restore from latest `convex export` to a clean namespace, verify, swap DNS
 
 ## Deploy checklist (per release)
 
 - [ ] All CI green
-- [ ] Migrations reviewed
+- [ ] Convex schema diff reviewed
 - [ ] Lighthouse CI gate passed
 - [ ] Sentry release tagged
-- [ ] Changelog updated in `CHANGELOG.md`
+- [ ] `CHANGELOG.md` updated
 - [ ] Staging smoke test passed
 - [ ] Prod deploy approved by operator
-- [ ] Worker process redeployed (if jobs changed)
-- [ ] Post-deploy: check `/admin/health` for 10 min
+- [ ] Post-deploy: `/admin/health` for 10 min, check Convex dashboard logs
+
+## Operator runbook
+
+`ops/runbook.md` (Phase 11) covers:
+
+- Incident response steps
+- Master key rotation
+- Restoring from backup
+- Re-issuing admin keys
+- Scaling the backend (single-writer caveat — SQLite RWO; do not scale replicas without moving to Postgres backend)
+- Adding a new workspace member with full audit trail
+- Quarterly key rotation playbook (Paystack, Resend, AI providers)
