@@ -123,10 +123,17 @@ const WORKSPACE_ROLE_ORDER: Record<WorkspaceRole, number> = {
   viewer: 1,
 };
 
+/**
+ * Returns the effective workspace membership row, OR a synthetic
+ * "owner" membership if the user is an Org Owner/Admin of the
+ * workspace's parent org (implicit workspace access).
+ *
+ * Throws NOT_IN_WORKSPACE if neither condition holds.
+ */
 export async function getWorkspaceMembership(
   ctx: QueryCtx | MutationCtx,
   workspaceId: Id<"workspaces">,
-): Promise<Doc<"workspaceMembers">> {
+): Promise<Doc<"workspaceMembers"> | { role: "owner"; synthetic: true; userId: Id<"users">; workspaceId: Id<"workspaces"> }> {
   const user = await requireUser(ctx);
   const membership = await ctx.db
     .query("workspaceMembers")
@@ -134,20 +141,44 @@ export async function getWorkspaceMembership(
       q.eq("workspaceId", workspaceId).eq("userId", user._id),
     )
     .unique();
-  if (!membership) {
+
+  if (membership) return membership;
+
+  // Fall back: Org Owners/Admins have implicit Workspace Owner access
+  // to every workspace in their org.
+  const workspace = await ctx.db.get(workspaceId);
+  if (!workspace) {
     throw authError({
       code: AuthErrorCode.NotInWorkspace,
-      message: "You do not have access to this workspace.",
+      message: "Workspace not found.",
     });
   }
-  return membership;
+  const orgMembership = await ctx.db
+    .query("members")
+    .withIndex("by_org_user", (q) =>
+      q.eq("organizationId", workspace.organizationId).eq("userId", user._id),
+    )
+    .unique();
+  if (orgMembership && (orgMembership.role === "owner" || orgMembership.role === "admin")) {
+    return {
+      role: "owner",
+      synthetic: true,
+      userId: user._id,
+      workspaceId,
+    };
+  }
+
+  throw authError({
+    code: AuthErrorCode.NotInWorkspace,
+    message: "You do not have access to this workspace.",
+  });
 }
 
 export async function requireWorkspaceRole(
   ctx: QueryCtx | MutationCtx,
   workspaceId: Id<"workspaces">,
   minimum: WorkspaceRole,
-): Promise<Doc<"workspaceMembers">> {
+) {
   const membership = await getWorkspaceMembership(ctx, workspaceId);
   if (WORKSPACE_ROLE_ORDER[membership.role as WorkspaceRole] < WORKSPACE_ROLE_ORDER[minimum]) {
     throw authError({

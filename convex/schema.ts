@@ -242,4 +242,188 @@ export default defineSchema({
     .index("by_org_time", ["organizationId", "occurredAt"])
     .index("by_resource", ["resourceType", "resourceId"])
     .index("by_actor", ["actorId"]),
+
+  /* ============================================================ */
+  /* Phase 1 — The graph                                            */
+  /* ============================================================ */
+
+  // Companies — businesses/orgs Atlas tracks. Scoped to a workspace.
+  companies: defineTable({
+    workspaceId: v.id("workspaces"),
+    name: v.string(),
+    domain: v.optional(v.string()),           // normalized lowercase, no protocol
+    industry: v.optional(v.string()),
+    size: v.optional(v.string()),             // '1-10' | '11-50' | …
+    country: v.string(),                       // ISO-2, default 'KE'
+    city: v.optional(v.string()),
+    address: v.optional(v.string()),
+    phone: v.optional(v.string()),             // E.164
+    whatsapp: v.optional(v.string()),          // E.164
+    emailPrimary: v.optional(v.string()),
+    website: v.optional(v.string()),
+    description: v.optional(v.string()),
+    googlePlaceId: v.optional(v.string()),     // for Prospector dedup
+    enrichedAt: v.optional(v.number()),
+    enrichmentData: v.optional(v.any()),       // raw Places + scraped fields
+    source: v.string(),                        // 'manual' | 'prospector' | 'inbound_email' | …
+    fitScore: v.optional(v.number()),          // AI fit 0-100
+    lifecycleStage: v.string(),                // 'cold' | 'warm' | 'qualified' | 'customer' | 'lost' | 'archived'
+    ownerId: v.optional(v.id("users")),
+    tags: v.array(v.string()),                 // tag names (denormalized for speed)
+    customFields: v.optional(v.any()),         // jsonb-shaped
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_lifecycle", ["workspaceId", "lifecycleStage"])
+    .index("by_workspace_owner", ["workspaceId", "ownerId"])
+    .index("by_workspace_place", ["workspaceId", "googlePlaceId"])
+    .index("by_workspace_domain", ["workspaceId", "domain"])
+    .searchIndex("search_name", {
+      searchField: "name",
+      filterFields: ["workspaceId", "lifecycleStage", "archivedAt"],
+    }),
+
+  // Contacts — people inside companies (or independent freelancers).
+  contacts: defineTable({
+    workspaceId: v.id("workspaces"),
+    companyId: v.optional(v.id("companies")),
+    firstName: v.string(),
+    lastName: v.optional(v.string()),
+    email: v.optional(v.string()),             // normalized lowercase
+    phone: v.optional(v.string()),             // E.164
+    whatsapp: v.optional(v.string()),          // E.164
+    title: v.optional(v.string()),
+    linkedin: v.optional(v.string()),
+    twitter: v.optional(v.string()),
+    avatarStorageId: v.optional(v.id("_storage")),
+    source: v.string(),
+    lifecycleStage: v.string(),
+    ownerId: v.optional(v.id("users")),
+    tags: v.array(v.string()),
+    customFields: v.optional(v.any()),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_company", ["workspaceId", "companyId"])
+    .index("by_workspace_email", ["workspaceId", "email"])
+    .index("by_workspace_owner", ["workspaceId", "ownerId"])
+    .searchIndex("search_name", {
+      searchField: "firstName",
+      filterFields: ["workspaceId", "lifecycleStage", "archivedAt"],
+    }),
+
+  // Tags — workspace-scoped, drives the global tag picker.
+  // tags array on companies/contacts is denormalized for speed;
+  // this table is the canonical name + color registry.
+  tags: defineTable({
+    workspaceId: v.id("workspaces"),
+    name: v.string(),                          // canonical lowercase
+    label: v.string(),                         // display case
+    color: v.optional(v.string()),             // oklch / hex
+    description: v.optional(v.string()),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_name", ["workspaceId", "name"]),
+
+  /* ============================================================ */
+  /* Timeline — every action lands here                             */
+  /* ============================================================ */
+  timelineEvents: defineTable({
+    workspaceId: v.id("workspaces"),
+    eventType: v.string(),
+    // 'contact_created' | 'company_created' | 'note_added' |
+    // 'task_created' | 'task_completed' | 'email_sent' | 'email_received' |
+    // 'whatsapp_sent' | 'whatsapp_received' | 'deal_stage_changed' |
+    // 'document_sent' | 'payment_received' | 'meeting_held' | …
+    actorId: v.optional(v.id("users")),         // null = system / inbound
+    subjectType: v.string(),                    // 'contact' | 'company' | 'deal' | …
+    subjectId: v.string(),                      // PK of subject (any table)
+    relatedRefs: v.optional(v.any()),           // { conversationId, messageId, … }
+    payload: v.optional(v.any()),               // event-specific data
+    occurredAt: v.number(),
+  })
+    .index("by_workspace_subject", ["workspaceId", "subjectType", "subjectId", "occurredAt"])
+    .index("by_workspace_occurred", ["workspaceId", "occurredAt"])
+    .index("by_workspace_type", ["workspaceId", "eventType", "occurredAt"]),
+
+  /* ============================================================ */
+  /* Notes — rich text via TipTap (stored as JSON)                  */
+  /* ============================================================ */
+  notes: defineTable({
+    workspaceId: v.id("workspaces"),
+    title: v.optional(v.string()),
+    body: v.any(),                              // TipTap JSON
+    bodyText: v.string(),                       // plain-text extract for FTS
+    relatedToType: v.optional(v.string()),      // 'contact' | 'company' | 'deal' | …
+    relatedToId: v.optional(v.string()),
+    authorId: v.id("users"),
+    pinned: v.boolean(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_related", ["relatedToType", "relatedToId"])
+    .index("by_author", ["authorId"])
+    .searchIndex("search_body", {
+      searchField: "bodyText",
+      filterFields: ["workspaceId", "relatedToType", "relatedToId", "archivedAt"],
+    }),
+
+  /* ============================================================ */
+  /* Tasks — outcome-anchored                                       */
+  /* ============================================================ */
+  tasks: defineTable({
+    workspaceId: v.id("workspaces"),
+    title: v.string(),
+    description: v.optional(v.string()),
+    priority: v.union(
+      v.literal("low"),
+      v.literal("normal"),
+      v.literal("high"),
+      v.literal("urgent"),
+    ),
+    status: v.union(
+      v.literal("open"),
+      v.literal("doing"),
+      v.literal("done"),
+      v.literal("cancelled"),
+    ),
+    dueAt: v.optional(v.number()),
+    reminderAt: v.optional(v.number()),
+    recurrence: v.optional(v.string()),         // cron-like, future
+    assigneeId: v.optional(v.id("users")),
+    relatedToType: v.optional(v.string()),
+    relatedToId: v.optional(v.string()),
+    aiSuggested: v.boolean(),
+    completedAt: v.optional(v.number()),
+    completedBy: v.optional(v.id("users")),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_status", ["workspaceId", "status"])
+    .index("by_workspace_assignee_due", ["workspaceId", "assigneeId", "dueAt"])
+    .index("by_related", ["relatedToType", "relatedToId"])
+    .searchIndex("search_title", {
+      searchField: "title",
+      filterFields: ["workspaceId", "status", "archivedAt"],
+    }),
+
+  /* ============================================================ */
+  /* Files — Convex storage Ids + metadata                          */
+  /* ============================================================ */
+  files: defineTable({
+    workspaceId: v.id("workspaces"),
+    filename: v.string(),
+    contentType: v.string(),
+    sizeBytes: v.number(),
+    storageId: v.id("_storage"),
+    extractedText: v.optional(v.string()),      // for PDF/image OCR (Phase 2+)
+    relatedToType: v.optional(v.string()),
+    relatedToId: v.optional(v.string()),
+    uploadedBy: v.id("users"),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_related", ["relatedToType", "relatedToId"])
+    .index("by_uploader", ["uploadedBy"]),
 });

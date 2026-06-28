@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useQuery, useMutation } from "convex/react";
-import { Mail, Phone, MessageSquare } from "lucide-react";
+import { useState } from "react";
+import { useQuery } from "convex/react";
+import { Globe, MapPin } from "lucide-react";
 import { ListLayout } from "@/components/atlas/list-layout";
 import { FilterChips } from "@/components/atlas/filter-chips";
-import { NewContactSheet } from "./new-contact-sheet";
-import { ContactDetailSheet } from "./contact-detail-sheet";
+import { NewCompanySheet } from "./new-company-sheet";
+import { CompanyDetailSheet } from "./company-detail-sheet";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,13 +20,13 @@ const LIFECYCLE_FILTERS = [
 ] as const;
 type LifecycleStage = (typeof LIFECYCLE_FILTERS)[number]["value"];
 
-export default function ContactsPage() {
+export default function CompaniesPage() {
   const [search, setSearch] = useState("");
   const [lifecycle, setLifecycle] = useState<LifecycleStage | null>(null);
   const [newOpen, setNewOpen] = useState(false);
-  const [activeId, setActiveId] = useState<Id<"contacts"> | null>(null);
+  const [activeId, setActiveId] = useState<Id<"companies"> | null>(null);
 
-  const contacts = useQuery(api.contacts.list, {
+  const companies = useQuery(api.companies.list, {
     search: search.trim() || undefined,
     lifecycleStage: lifecycle ?? undefined,
     limit: 200,
@@ -35,14 +35,14 @@ export default function ContactsPage() {
   return (
     <>
       <ListLayout
-        eyebrow="Contacts"
-        title="Your network."
-        description="People you've spoken to, sold to, or want to. Click any row to open."
+        eyebrow="Companies"
+        title="The book."
+        description="Every business in your orbit. Prospects, customers, partners — one list."
         searchPlaceholder="Search by name…"
         searchValue={search}
         onSearch={setSearch}
-        primaryAction={{ label: "New contact", onClick: () => setNewOpen(true) }}
-        count={contacts?.length}
+        primaryAction={{ label: "New company", onClick: () => setNewOpen(true) }}
+        count={companies?.length}
         filterStrip={
           <FilterChips<LifecycleStage>
             options={LIFECYCLE_FILTERS as unknown as { value: LifecycleStage; label: string }[]}
@@ -51,22 +51,19 @@ export default function ContactsPage() {
           />
         }
       >
-        {contacts === undefined ? (
-          <ContactsTableSkeleton />
-        ) : contacts.length === 0 ? (
+        {companies === undefined ? (
+          <TableSkeleton />
+        ) : companies.length === 0 ? (
           <EmptyState onCreate={() => setNewOpen(true)} />
         ) : (
-          <ContactsTable
-            contacts={contacts}
-            onOpen={(id) => setActiveId(id)}
-          />
+          <CompaniesTable companies={companies} onOpen={(id) => setActiveId(id)} />
         )}
       </ListLayout>
 
-      <NewContactSheet open={newOpen} onOpenChange={setNewOpen} />
+      <NewCompanySheet open={newOpen} onOpenChange={setNewOpen} />
       {activeId && (
-        <ContactDetailSheet
-          contactId={activeId}
+        <CompanyDetailSheet
+          companyId={activeId}
           open={true}
           onOpenChange={(o) => !o && setActiveId(null)}
         />
@@ -75,22 +72,21 @@ export default function ContactsPage() {
   );
 }
 
-function ContactsTable({
-  contacts,
+function CompaniesTable({
+  companies,
   onOpen,
 }: {
-  contacts: Array<{
-    _id: Id<"contacts">;
-    firstName: string;
-    lastName?: string;
-    email?: string;
-    phone?: string;
-    whatsapp?: string;
-    title?: string;
+  companies: Array<{
+    _id: Id<"companies">;
+    name: string;
+    domain?: string;
+    city?: string;
+    country: string;
+    industry?: string;
     lifecycleStage: string;
     _creationTime: number;
   }>;
-  onOpen: (id: Id<"contacts">) => void;
+  onOpen: (id: Id<"companies">) => void;
 }) {
   return (
     <div className="border border-border">
@@ -98,14 +94,15 @@ function ContactsTable({
         <thead className="text-left">
           <tr className="border-b border-[var(--border-strong)] bg-background sticky top-0">
             <Th>Name</Th>
-            <Th>Title</Th>
-            <Th>Contact</Th>
+            <Th>Domain</Th>
+            <Th>Industry</Th>
+            <Th>Location</Th>
             <Th>Stage</Th>
             <Th className="text-right">Added</Th>
           </tr>
         </thead>
         <tbody>
-          {contacts.map((c) => (
+          {companies.map((c) => (
             <tr
               key={c._id}
               tabIndex={0}
@@ -116,30 +113,26 @@ function ContactsTable({
               className="border-b border-border hover:bg-muted/40 cursor-pointer transition-colors focus:outline-none focus:bg-muted/60"
             >
               <Td>
-                <span className="font-medium">
-                  {c.firstName}
-                  {c.lastName && ` ${c.lastName}`}
-                </span>
+                <span className="font-medium">{c.name}</span>
               </Td>
-              <Td className="text-muted-foreground">{c.title ?? "—"}</Td>
               <Td>
-                <div className="flex items-center gap-3 text-muted-foreground">
-                  {c.email && (
-                    <span className="flex items-center gap-1.5 truncate max-w-[200px]">
-                      <Mail className="size-3 shrink-0" />
-                      <span className="truncate">{c.email}</span>
-                    </span>
-                  )}
-                  {c.phone && (
-                    <span className="flex items-center gap-1.5 num text-xs">
-                      <Phone className="size-3 shrink-0" />
-                      {c.phone}
-                    </span>
-                  )}
-                  {c.whatsapp && (
-                    <MessageSquare className="size-3 shrink-0" />
-                  )}
-                </div>
+                {c.domain ? (
+                  <span className="text-muted-foreground flex items-center gap-1.5 truncate max-w-[200px]">
+                    <Globe className="size-3 shrink-0" />
+                    <span className="truncate">{c.domain}</span>
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </Td>
+              <Td className="text-muted-foreground">{c.industry ?? "—"}</Td>
+              <Td>
+                <span className="text-muted-foreground flex items-center gap-1.5">
+                  {(c.city || c.country !== "KE") && <MapPin className="size-3" />}
+                  <span className="truncate">
+                    {[c.city, c.country].filter(Boolean).join(", ")}
+                  </span>
+                </span>
               </Td>
               <Td>
                 <LifecyclePill stage={c.lifecycleStage} />
@@ -159,16 +152,14 @@ function ContactsTable({
   );
 }
 
-function ContactsTableSkeleton() {
+function TableSkeleton() {
   return (
     <div className="border border-border divide-y divide-border">
       {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="px-4 py-3 grid grid-cols-5 gap-4 items-center">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-4 w-40" />
-          <Skeleton className="h-4 w-16" />
-          <Skeleton className="h-4 w-12 justify-self-end" />
+        <div key={i} className="px-4 py-3 grid grid-cols-6 gap-4 items-center">
+          {Array.from({ length: 6 }).map((_, j) => (
+            <Skeleton key={j} className="h-4 w-full max-w-[120px]" />
+          ))}
         </div>
       ))}
     </div>
@@ -179,17 +170,16 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="border border-border border-dashed py-16 text-center space-y-4">
       <p className="font-display text-2xl italic text-muted-foreground">
-        Your network starts here.
+        No companies yet.
       </p>
       <p className="text-sm text-muted-foreground max-w-prose mx-auto">
-        Add your first contact manually, or use Prospector (coming in Phase 3) to
-        bulk-import from Google Maps.
+        Add your first company manually, or use Prospector (coming in Phase 3) to bulk-import from Google Maps.
       </p>
       <button
         onClick={onCreate}
         className="font-mono uppercase tracking-[0.12em] text-xs px-6 py-3 bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
       >
-        + New contact
+        + New company
       </button>
     </div>
   );
@@ -197,9 +187,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
 
 function Th({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <th
-      className={`eyebrow font-mono h-9 px-4 text-muted-foreground font-medium ${className ?? ""}`}
-    >
+    <th className={`eyebrow font-mono h-9 px-4 text-muted-foreground font-medium ${className ?? ""}`}>
       {children}
     </th>
   );
@@ -215,7 +203,6 @@ const LIFECYCLE_STYLES: Record<string, string> = {
   qualified: "border-[var(--info)] text-[var(--info)]",
   customer: "border-[var(--success)] text-[var(--success)]",
   lost: "border-[var(--danger)] text-[var(--danger)]",
-  archived: "border-border text-muted-foreground opacity-60",
 };
 
 function LifecyclePill({ stage }: { stage: string }) {
