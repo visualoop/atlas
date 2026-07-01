@@ -541,6 +541,15 @@ export const loadContact = internalQuery({
   },
 });
 
+export const getWorkspaceOrg = internalQuery({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, { workspaceId }) => {
+    const ws = await ctx.db.get(workspaceId);
+    if (!ws) return null;
+    return { organizationId: ws.organizationId };
+  },
+});
+
 /**
  * Called from the inbound email/WA ingest when a message arrives from
  * a contact who is currently in a campaign. Pauses the recipient if

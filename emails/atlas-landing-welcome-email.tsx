@@ -65,7 +65,7 @@ export function AtlasLandingWelcomeEmail({
           <Button
             href={leadMagnetUrl}
             style={{
-              backgroundColor: "#FF5B1F",
+              backgroundColor: "#059669",
               color: "#FFFFFF",
               fontFamily: "ui-monospace,monospace",
               fontSize: "12px",

@@ -56,7 +56,7 @@ export function AtlasMeetingConfirmationEmail({
       </Text>
       <Section
         style={{
-          borderLeft: "3px solid #FF5B1F",
+          borderLeft: "3px solid #059669",
           padding: "12px 0 12px 16px",
           margin: "0 0 24px",
         }}
@@ -96,7 +96,7 @@ export function AtlasMeetingConfirmationEmail({
           <Button
             href={conferenceUrl}
             style={{
-              backgroundColor: "#FF5B1F",
+              backgroundColor: "#059669",
               color: "#FFFFFF",
               fontFamily: "ui-monospace,monospace",
               fontSize: "12px",

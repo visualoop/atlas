@@ -37,7 +37,7 @@ export function AtlasInvitationEmail({
         <Button
           href={acceptUrl}
           style={{
-            backgroundColor: "#FF5B1F",
+            backgroundColor: "#059669",
             color: "#FFFFFF",
             fontFamily: "ui-monospace,monospace",
             fontSize: "12px",

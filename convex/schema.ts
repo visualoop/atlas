@@ -1338,6 +1338,25 @@ export default defineSchema({
     .index("by_recipient_time", ["recipientId", "occurredAt"])
     .index("by_workspace_type", ["workspaceId", "eventType"]),
 
+  broadcastEvents: defineTable({
+    broadcastId: v.id("broadcasts"),
+    workspaceId: v.id("workspaces"),
+    audienceMemberId: v.id("audienceMembers"),
+    eventType: v.union(
+      v.literal("sent"),
+      v.literal("failed"),
+      v.literal("opened"),
+      v.literal("clicked"),
+      v.literal("unsubscribed"),
+    ),
+    messageId: v.optional(v.id("messages")),
+    occurredAt: v.number(),
+    payload: v.optional(v.any()),
+  })
+    .index("by_broadcast_member", ["broadcastId", "audienceMemberId"])
+    .index("by_broadcast_time", ["broadcastId", "occurredAt"])
+    .index("by_workspace_time", ["workspaceId", "occurredAt"]),
+
   /* ============================================================ */
   /* Phase 8a — Social Publishing (FB / IG / LinkedIn)              */
   /* ============================================================ */

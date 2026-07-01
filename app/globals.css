@@ -6,8 +6,10 @@
  * Defined per plan/04-ui-direction.md and plan/17-theme-and-shadcn.md.
  *
  * Dark is the default surface. Light is reserved for documents (PDF preview,
- * print). The accent is burnt orange #FF5B1F — Blyss family — used ≤ 4× per
- * viewport. No blue/green/purple/teal except in muted semantic variants.
+ * print). Primary accent is deep emerald #059669 — growth, prosperity —
+ * paired with gold #D4A017 for milestones and wins. Used ≤ 4× per viewport.
+ * Emerald signals forward motion; gold signals achievement. This mapping
+ * intentionally leaves red for danger, amber for warning, sky for info.
  */
 
 @custom-variant dark (&:is(.dark *));
@@ -39,6 +41,7 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-info: var(--info);
+  --color-gold: var(--gold);
 
   /* Sidebar */
   --color-sidebar: var(--sidebar);
@@ -52,8 +55,8 @@
 
   /* Chart series — muted, never gradients */
   --color-chart-1: var(--accent);
-  --color-chart-2: var(--info);
-  --color-chart-3: var(--success);
+  --color-chart-2: var(--gold);
+  --color-chart-3: var(--info);
   --color-chart-4: var(--warning);
   --color-chart-5: var(--text-muted);
 
@@ -111,9 +114,9 @@
   --popover: oklch(0.22 0.005 60);
   --popover-foreground: oklch(0.94 0.005 80);
 
-  /* Atlas accent — burnt orange #FF5B1F, used ≤ 4× per viewport */
-  --primary: oklch(0.68 0.20 35);
-  --primary-foreground: oklch(0.13 0.005 60);
+  /* Atlas accent — deep emerald #059669, used ≤ 4× per viewport */
+  --primary: oklch(0.62 0.14 158);
+  --primary-foreground: oklch(0.97 0.005 80);
 
   --secondary: oklch(0.22 0.005 60);
   --secondary-foreground: oklch(0.94 0.005 80);
@@ -122,30 +125,32 @@
   --muted-foreground: oklch(0.74 0.01 80);
   --text-muted: oklch(0.50 0.01 80);
 
-  --accent: oklch(0.68 0.20 35);
-  --accent-foreground: oklch(0.13 0.005 60);
+  --accent: oklch(0.62 0.14 158);
+  --accent-foreground: oklch(0.97 0.005 80);
 
   --destructive: oklch(0.60 0.18 25);
   --destructive-foreground: oklch(0.94 0.005 80);
 
-  --success: oklch(0.70 0.12 145);
-  --warning: oklch(0.75 0.13 75);
+  --success: oklch(0.72 0.16 150);
+  --warning: oklch(0.77 0.14 75);
   --info: oklch(0.70 0.10 220);
+  /* Gold for wins + milestones — the second signal */
+  --gold: oklch(0.78 0.13 82);
 
   --border: oklch(0.28 0.005 60);
   --border-strong: oklch(0.36 0.005 60);
   --input: oklch(0.28 0.005 60);
-  --ring: oklch(0.68 0.20 35);
+  --ring: oklch(0.62 0.14 158);
 
   /* Sidebar */
   --sidebar: oklch(0.13 0.005 60);
   --sidebar-foreground: oklch(0.94 0.005 80);
-  --sidebar-primary: oklch(0.68 0.20 35);
-  --sidebar-primary-foreground: oklch(0.13 0.005 60);
+  --sidebar-primary: oklch(0.62 0.14 158);
+  --sidebar-primary-foreground: oklch(0.97 0.005 80);
   --sidebar-accent: oklch(0.22 0.005 60);
   --sidebar-accent-foreground: oklch(0.94 0.005 80);
   --sidebar-border: oklch(0.28 0.005 60);
-  --sidebar-ring: oklch(0.68 0.20 35);
+  --sidebar-ring: oklch(0.62 0.14 158);
 }
 
 /* === Light mode (for documents only) === */
@@ -157,8 +162,8 @@
   --popover: oklch(0.97 0.005 80);
   --popover-foreground: oklch(0.13 0.005 60);
 
-  --primary: oklch(0.68 0.20 35);
-  --primary-foreground: oklch(0.95 0.01 80);
+  --primary: oklch(0.55 0.14 158);
+  --primary-foreground: oklch(0.97 0.005 80);
 
   --secondary: oklch(0.91 0.01 80);
   --secondary-foreground: oklch(0.13 0.005 60);
@@ -167,29 +172,30 @@
   --muted-foreground: oklch(0.22 0.005 60);
   --text-muted: oklch(0.50 0.01 80);
 
-  --accent: oklch(0.68 0.20 35);
-  --accent-foreground: oklch(0.95 0.01 80);
+  --accent: oklch(0.55 0.14 158);
+  --accent-foreground: oklch(0.97 0.005 80);
 
   --destructive: oklch(0.60 0.18 25);
   --destructive-foreground: oklch(0.95 0.01 80);
 
-  --success: oklch(0.55 0.14 145);
-  --warning: oklch(0.65 0.15 75);
+  --success: oklch(0.55 0.14 150);
+  --warning: oklch(0.70 0.15 75);
   --info: oklch(0.55 0.12 220);
+  --gold: oklch(0.68 0.13 82);
 
   --border: oklch(0.79 0.01 80);
   --border-strong: oklch(0.66 0.01 80);
   --input: oklch(0.79 0.01 80);
-  --ring: oklch(0.68 0.20 35);
+  --ring: oklch(0.55 0.14 158);
 
   --sidebar: oklch(0.95 0.01 80);
   --sidebar-foreground: oklch(0.13 0.005 60);
-  --sidebar-primary: oklch(0.68 0.20 35);
-  --sidebar-primary-foreground: oklch(0.95 0.01 80);
+  --sidebar-primary: oklch(0.55 0.14 158);
+  --sidebar-primary-foreground: oklch(0.97 0.005 80);
   --sidebar-accent: oklch(0.91 0.01 80);
   --sidebar-accent-foreground: oklch(0.13 0.005 60);
   --sidebar-border: oklch(0.79 0.01 80);
-  --sidebar-ring: oklch(0.68 0.20 35);
+  --sidebar-ring: oklch(0.55 0.14 158);
 }
 
 @layer base {

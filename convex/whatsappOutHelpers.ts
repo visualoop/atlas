@@ -59,3 +59,44 @@ export const prepareSend = internalQuery({
     };
   },
 });
+
+
+export const prepareSystemSend = internalQuery({
+  args: {
+    workspaceId: v.id("workspaces"),
+    organizationId: v.id("organizations"),
+  },
+  handler: async (ctx, args): Promise<{
+    connection: Doc<"whatsappConnections"> | null;
+    accessToken?: string;
+  }> => {
+    const connection = await ctx.db
+      .query("whatsappConnections")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .filter((q) => q.eq(q.field("status"), "connected"))
+      .first();
+
+    // Fetch access token using the org owner as actor
+    const members = await ctx.db
+      .query("members")
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .collect();
+    const owner = members.find((m) => m.role === "owner") ?? members[0];
+    if (!owner) return { connection, accessToken: undefined };
+
+    let accessToken: string | undefined;
+    try {
+      const key = await getOrgKey(ctx, {
+        organizationId: args.organizationId,
+        provider: "meta_whatsapp",
+        reason: "whatsapp_system_send",
+        actorId: owner.userId,
+      });
+      accessToken = key.value;
+    } catch {
+      // Not configured
+    }
+
+    return { connection, accessToken };
+  },
+});

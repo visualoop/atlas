@@ -41,6 +41,19 @@ export const processDueRecipients = internalAction({
         continue;
       }
 
+      // Resolve organizationId for the workspace once per job.
+      const orgLookup = await ctx.runQuery(internal.campaigns.getWorkspaceOrg, {
+        workspaceId: job.campaign.workspaceId,
+      });
+      if (!orgLookup) {
+        await ctx.runMutation(internal.campaigns.advanceRecipient, {
+          recipientId: job.recipient._id,
+          error: "workspace_missing",
+        });
+        failed++;
+        continue;
+      }
+
       try {
         let messageId: Id<"messages"> | undefined;
         let conversationId: Id<"conversations"> | undefined;
@@ -50,11 +63,16 @@ export const processDueRecipients = internalAction({
             throw new Error("no_email");
           }
           const res = await ctx.runAction(internal.campaignRunnerHelpers.sendEmailStep, {
+            workspaceId: job.campaign.workspaceId,
+            organizationId: orgLookup.organizationId,
             to: [contact.email],
             subject: job.step.subject ?? "",
             bodyHtml: job.step.bodyHtml ?? "",
             bodyText: job.step.bodyText ?? "",
             senderIdentityId: job.step.senderIdentityId,
+            contactId: contact._id,
+            campaignId: job.campaign._id,
+            campaignRecipientId: job.recipient._id,
           });
           messageId = res.messageId;
           conversationId = res.conversationId;
@@ -66,6 +84,8 @@ export const processDueRecipients = internalAction({
             throw new Error("template_missing");
           }
           const res = await ctx.runAction(internal.campaignRunnerHelpers.sendWaTemplateStep, {
+            workspaceId: job.campaign.workspaceId,
+            organizationId: orgLookup.organizationId,
             toPhone: contact.whatsapp,
             templateName: job.step.templateName,
             templateLanguage: job.step.templateLanguage,

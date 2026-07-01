@@ -40,7 +40,7 @@ const CSS = {
     color: "#0A0A0B",
   },
   accent: {
-    color: "#FF5B1F",
+    color: "#059669",
   },
   eyebrow: {
     fontFamily: "ui-monospace,SFMono-Regular,Menlo,monospace",

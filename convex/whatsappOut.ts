@@ -209,3 +209,88 @@ export const sendTemplate = action({
     return { ...persisted, status: result.status, error: result.error };
   },
 });
+
+/* ------------------------------------------------------------------ */
+/* sendTemplateSystem — session-less template send (for campaigns)     */
+/* ------------------------------------------------------------------ */
+
+import { internalAction } from "./_generated/server";
+
+export const sendTemplateSystem = internalAction({
+  args: {
+    workspaceId: v.id("workspaces"),
+    organizationId: v.id("organizations"),
+    toPhone: v.string(),
+    templateName: v.string(),
+    templateLanguage: v.optional(v.string()),
+    variables: v.optional(v.array(v.string())),
+    contactId: v.id("contacts"),
+  },
+  handler: async (ctx, args): Promise<{
+    conversationId: Id<"conversations">;
+    messageId: Id<"messages">;
+    status: SendResult["status"];
+    error?: string;
+  }> => {
+    const setup = await ctx.runQuery(internal.whatsappOutHelpers.prepareSystemSend, {
+      workspaceId: args.workspaceId,
+      organizationId: args.organizationId,
+    });
+
+    if (!setup.accessToken || !setup.connection) {
+      throw new ConvexError({
+        code: "NO_CONNECTION",
+        message: "WhatsApp is not connected for this workspace.",
+      });
+    }
+
+    const to = args.toPhone.replace(/^\+/, "");
+    const lang = args.templateLanguage ?? "en";
+
+    const templateBody: Record<string, unknown> = {
+      messaging_product: "whatsapp",
+      to,
+      type: "template",
+      template: {
+        name: args.templateName,
+        language: { code: lang },
+        components: args.variables?.length
+          ? [
+              {
+                type: "body",
+                parameters: args.variables.map((v) => ({ type: "text", text: v })),
+              },
+            ]
+          : undefined,
+      },
+    };
+
+    const result = await callMeta({
+      accessToken: setup.accessToken,
+      phoneNumberId: setup.connection.phoneNumberId,
+      body: templateBody,
+    });
+
+    const bodyText = args.variables?.length
+      ? `[Template: ${args.templateName}] ${args.variables.join(" ")}`
+      : `[Template: ${args.templateName}]`;
+
+    const persisted: {
+      conversationId: Id<"conversations">;
+      messageId: Id<"messages">;
+    } = await ctx.runMutation(internal.whatsapp.persistOutboundMessage, {
+      workspaceId: args.workspaceId,
+      toPhone: args.toPhone,
+      contactId: args.contactId,
+      bodyText,
+      messageType: "template",
+      templateName: args.templateName,
+      templateLanguage: lang,
+      metaMessageId: result.metaMessageId,
+      status: result.status,
+      failureReason: result.error,
+    });
+
+    return { ...persisted, status: result.status, error: result.error };
+  },
+});

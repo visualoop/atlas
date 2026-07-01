@@ -51,7 +51,7 @@ export function AtlasReferralCreditedEmail({
             fontWeight: 600,
             lineHeight: "1.2",
             margin: 0,
-            color: "#FF5B1F",
+            color: "#059669",
           }}
         >
           + {creditedAmountFormatted}
