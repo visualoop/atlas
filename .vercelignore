@@ -1,0 +1,11 @@
+.convex
+.env.local
+.env.production.local
+.env.development.local
+node_modules
+.next
+docker-compose.yml
+infra/
+scripts/
+.github/
+plan/
