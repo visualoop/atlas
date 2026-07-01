@@ -544,6 +544,11 @@ export default defineSchema({
     receivedAt: v.optional(v.number()),
     readAt: v.optional(v.number()),
     senderIdentityId: v.optional(v.id("senderIdentities")),
+    // WhatsApp-specific
+    messageType: v.optional(v.string()),                     // 'text' | 'template' | 'image' | …
+    templateName: v.optional(v.string()),
+    templateLanguage: v.optional(v.string()),
+    templateVariables: v.optional(v.any()),
   })
     .index("by_conversation_time", ["conversationId"])
     .index("by_workspace_time", ["workspaceId"])
@@ -677,5 +682,78 @@ export default defineSchema({
     addedBy: v.optional(v.id("users")),
   })
     .index("by_workspace_place", ["workspaceId", "googlePlaceId"])
+    .index("by_workspace", ["workspaceId"]),
+
+  /* ============================================================ */
+  /* Phase 4 — WhatsApp (Meta Cloud API)                            */
+  /* ============================================================ */
+
+  // Per-workspace WhatsApp connection. Multiple phone numbers may
+  // belong to one WABA, so we key by phoneNumberId. The access token
+  // and app secret live encrypted under orgIntegrationKeys
+  // (provider='meta_whatsapp'); this table stores the non-secret ids
+  // and status so we can validate webhooks without decrypting.
+  whatsappConnections: defineTable({
+    workspaceId: v.id("workspaces"),
+    wabaId: v.string(),                                       // Meta WhatsApp Business Account ID
+    phoneNumberId: v.string(),                                // Meta Phone Number ID (unique across Meta)
+    displayPhoneNumber: v.string(),                           // "+254 700 000 000"
+    verifiedName: v.optional(v.string()),
+    webhookVerifyToken: v.string(),                           // shared secret set on Meta side
+    qualityRating: v.optional(v.string()),                    // GREEN|YELLOW|RED from Meta
+    messagingLimitTier: v.optional(v.string()),               // TIER_1K|TIER_10K|TIER_100K|UNLIMITED
+    status: v.union(
+      v.literal("connected"),
+      v.literal("disconnected"),
+      v.literal("banned"),
+      v.literal("pending"),
+    ),
+    lastSyncAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_phone_number_id", ["phoneNumberId"])
+    .index("by_waba", ["wabaId"]),
+
+  // Approved templates (cache) — fetched from Meta on connect + refresh
+  // via cron. Templates are how you initiate conversations outside the
+  // 24-hour customer service window.
+  whatsappTemplates: defineTable({
+    workspaceId: v.id("workspaces"),
+    wabaId: v.string(),
+    externalTemplateId: v.optional(v.string()),               // Meta's template ID
+    name: v.string(),
+    language: v.string(),                                      // 'en' | 'en_US' | 'sw'
+    category: v.string(),                                      // MARKETING | UTILITY | AUTHENTICATION
+    status: v.string(),                                        // APPROVED | PENDING | REJECTED | DISABLED
+    components: v.any(),                                       // full structure
+    lastSyncAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_status", ["workspaceId", "status"])
+    .index("by_workspace_name", ["workspaceId", "name"]),
+
+  // Media cache — Meta uses opaque media_id references. We download
+  // once, store in Convex _storage, and reuse.
+  whatsappMedia: defineTable({
+    workspaceId: v.id("workspaces"),
+    metaMediaId: v.string(),                                   // Meta media id
+    storageId: v.optional(v.id("_storage")),                  // set after download
+    filename: v.optional(v.string()),
+    contentType: v.optional(v.string()),
+    sizeBytes: v.optional(v.number()),
+    direction: v.union(v.literal("inbound"), v.literal("outbound")),
+    downloadedAt: v.optional(v.number()),
+    downloadError: v.optional(v.string()),
+  })
+    .index("by_workspace_media", ["workspaceId", "metaMediaId"]),
+
+  // Opt-outs — anyone who replies "STOP" or requests removal.
+  whatsappOptOuts: defineTable({
+    workspaceId: v.id("workspaces"),
+    phone: v.string(),                                         // E.164
+    reason: v.optional(v.string()),
+    at: v.number(),
+  })
+    .index("by_workspace_phone", ["workspaceId", "phone"])
     .index("by_workspace", ["workspaceId"]),
 });

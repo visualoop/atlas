@@ -440,6 +440,12 @@ function ThreadReader({ conversationId, onClose }: {
         {replying ? (
           <ReplyBar
             conversationId={conversationId}
+            channel={conversation.channel}
+            toPhone={
+              conversation.channel === "whatsapp"
+                ? conversation.participantPhones?.[0]
+                : undefined
+            }
             onSent={() => setReplying(false)}
             onCancel={() => setReplying(false)}
           />

@@ -186,6 +186,233 @@ http.route({
 });
 
 /* ------------------------------------------------------------------ */
+/* WhatsApp (Meta Cloud API) webhook                                   */
+/* ------------------------------------------------------------------ */
+/*
+ * Meta sends a GET during verification with:
+ *   ?hub.mode=subscribe&hub.verify_token=<...>&hub.challenge=<...>
+ * We look up the workspace by verify_token (there can be many —
+ * one per connected number) and echo back the challenge.
+ *
+ * Ongoing POSTs carry messages and status updates. Envelope shape:
+ * {
+ *   object: 'whatsapp_business_account',
+ *   entry: [{
+ *     id: '<WABA_ID>',
+ *     changes: [{
+ *       field: 'messages',
+ *       value: {
+ *         messaging_product: 'whatsapp',
+ *         metadata: { display_phone_number, phone_number_id },
+ *         contacts: [{ profile: { name }, wa_id }],
+ *         messages: [{ id, from, timestamp, type, text: { body } }] // or image/audio/etc
+ *         statuses: [{ id, status, timestamp, recipient_id }]
+ *       }
+ *     }]
+ *   }]
+ * }
+ */
+
+http.route({
+  path: "/webhook/whatsapp",
+  method: "GET",
+  handler: httpAction(async (ctx, req) => {
+    const url = new URL(req.url);
+    const mode = url.searchParams.get("hub.mode");
+    const token = url.searchParams.get("hub.verify_token");
+    const challenge = url.searchParams.get("hub.challenge");
+    if (mode !== "subscribe" || !token || !challenge) {
+      return new Response("Bad request", { status: 400 });
+    }
+    // Look up any connection with this verify token — either the
+    // workspace's own token or a global env fallback (multi-tenant).
+    const envFallback = process.env.WHATSAPP_VERIFY_TOKEN;
+    if (envFallback && token === envFallback) {
+      return new Response(challenge, { status: 200 });
+    }
+    const matched = await ctx.runQuery(internal.whatsappInbound.findByVerifyToken, {
+      verifyToken: token,
+    });
+    if (matched) {
+      return new Response(challenge, { status: 200 });
+    }
+    return new Response("Forbidden", { status: 403 });
+  }),
+});
+
+http.route({
+  path: "/webhook/whatsapp",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const rawBody = await req.text();
+
+    // Verify Meta signature: header x-hub-signature-256: sha256=<hex>
+    const appSecret = process.env.WHATSAPP_APP_SECRET;
+    if (appSecret) {
+      const provided = req.headers.get("x-hub-signature-256");
+      if (!provided || !provided.startsWith("sha256=")) {
+        return new Response("Missing signature", { status: 401 });
+      }
+      const expected = await hmacSha256Hex(appSecret, rawBody);
+      if (!timingSafeEqualStrings(provided.slice("sha256=".length), expected)) {
+        return new Response("Invalid signature", { status: 401 });
+      }
+    }
+
+    let payload: MetaWebhookPayload;
+    try {
+      payload = JSON.parse(rawBody) as MetaWebhookPayload;
+    } catch {
+      return new Response("Invalid JSON", { status: 400 });
+    }
+
+    // Route each entry/change/message
+    for (const entry of payload.entry ?? []) {
+      for (const change of entry.changes ?? []) {
+        if (change.field !== "messages") continue;
+        const value = change.value;
+        const phoneNumberId = value?.metadata?.phone_number_id;
+        if (!phoneNumberId) continue;
+
+        const route = await ctx.runQuery(
+          internal.whatsapp.findWorkspaceByPhoneNumberId,
+          { phoneNumberId },
+        );
+        if (!route) continue;
+
+        // Statuses (delivered/read/failed)
+        for (const s of value?.statuses ?? []) {
+          const status = normalizeMetaStatus(s.status);
+          if (!status) continue;
+          const ts = Number(s.timestamp ?? 0) * 1000 || Date.now();
+          await ctx.runMutation(internal.whatsapp.markStatusUpdate, {
+            metaMessageId: s.id,
+            status,
+            failureReason: s.errors?.[0]?.message,
+            timestamp: ts,
+          });
+        }
+
+        // Inbound messages
+        for (const m of value?.messages ?? []) {
+          const from = m.from ? `+${m.from}` : "";
+          const contactProfile = value?.contacts?.find((c) => c.wa_id === m.from);
+          const receivedAt = Number(m.timestamp ?? 0) * 1000 || Date.now();
+
+          const bodyText = extractInboundBody(m);
+          const mediaMetaId =
+            m.image?.id ?? m.video?.id ?? m.audio?.id ?? m.document?.id ?? undefined;
+
+          await ctx.runMutation(internal.whatsapp.ingestInboundMessage, {
+            workspaceId: route.workspaceId,
+            connectionId: route.connectionId,
+            fromPhone: from,
+            fromName: contactProfile?.profile?.name,
+            metaMessageId: m.id,
+            messageType: m.type,
+            bodyText,
+            receivedAt,
+            mediaMetaId,
+            mediaFilename: m.document?.filename,
+            mediaContentType: m.document?.mime_type ?? m.image?.mime_type ?? m.video?.mime_type,
+            rawPayload: m,
+          });
+        }
+      }
+    }
+
+    return new Response("ok", { status: 200 });
+  }),
+});
+
+/* ------------------------------------------------------------------ */
+/* Types + helpers for the WhatsApp webhook                            */
+/* ------------------------------------------------------------------ */
+
+interface MetaWebhookMessage {
+  id: string;
+  from?: string;
+  timestamp?: string;
+  type: string;
+  text?: { body?: string };
+  image?: { id?: string; mime_type?: string; caption?: string };
+  video?: { id?: string; mime_type?: string; caption?: string };
+  audio?: { id?: string; mime_type?: string };
+  document?: { id?: string; mime_type?: string; filename?: string; caption?: string };
+  sticker?: { id?: string };
+  location?: { latitude?: number; longitude?: number; name?: string; address?: string };
+  interactive?: {
+    button_reply?: { id?: string; title?: string };
+    list_reply?: { id?: string; title?: string; description?: string };
+  };
+  button?: { text?: string; payload?: string };
+  reaction?: { message_id?: string; emoji?: string };
+  contacts?: Array<Record<string, unknown>>;
+}
+
+interface MetaWebhookStatus {
+  id: string;
+  status: string;
+  timestamp?: string;
+  recipient_id?: string;
+  errors?: Array<{ code?: number; message?: string; title?: string }>;
+}
+
+interface MetaWebhookValue {
+  messaging_product?: string;
+  metadata?: {
+    display_phone_number?: string;
+    phone_number_id?: string;
+  };
+  contacts?: Array<{ profile?: { name?: string }; wa_id?: string }>;
+  messages?: MetaWebhookMessage[];
+  statuses?: MetaWebhookStatus[];
+}
+
+interface MetaWebhookPayload {
+  object?: string;
+  entry?: Array<{
+    id?: string;
+    changes?: Array<{ field?: string; value?: MetaWebhookValue }>;
+  }>;
+}
+
+function extractInboundBody(m: MetaWebhookMessage): string {
+  if (m.text?.body) return m.text.body;
+  if (m.image?.caption) return `[image] ${m.image.caption}`;
+  if (m.image) return `[image]`;
+  if (m.video?.caption) return `[video] ${m.video.caption}`;
+  if (m.video) return `[video]`;
+  if (m.audio) return `[audio]`;
+  if (m.document?.filename) return `[document] ${m.document.filename}`;
+  if (m.document) return `[document]`;
+  if (m.location) return `[location] ${m.location.name ?? m.location.address ?? ""}`;
+  if (m.interactive?.button_reply?.title) return m.interactive.button_reply.title;
+  if (m.interactive?.list_reply?.title) return m.interactive.list_reply.title;
+  if (m.reaction?.emoji) return `[reaction] ${m.reaction.emoji}`;
+  return `[${m.type}]`;
+}
+
+function normalizeMetaStatus(s: string | undefined): "sent" | "delivered" | "read" | "failed" | null {
+  if (s === "sent" || s === "delivered" || s === "read" || s === "failed") return s;
+  return null;
+}
+
+async function hmacSha256Hex(secret: string, body: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/* ------------------------------------------------------------------ */
 /* Svix signature verification (HMAC-SHA256)                            */
 /* ------------------------------------------------------------------ */
 
