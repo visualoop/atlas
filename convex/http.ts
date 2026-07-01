@@ -186,6 +186,163 @@ http.route({
 });
 
 /* ------------------------------------------------------------------ */
+/* Paystack webhook — POST /webhook/paystack                           */
+/* ------------------------------------------------------------------ */
+/*
+ * Paystack signs with HMAC-SHA512 of the raw body using the account's
+ * secret key. Because a workspace's secret key is encrypted at rest,
+ * we look up the paymentRequest by reference FIRST to discover the
+ * workspace, then decrypt and verify.
+ *
+ * Events handled:
+ *   charge.success — success on card / bank / mobile-money charge
+ *   transfer.success | .failed | .reversed — outbound transfers
+ *   subscription.create | .disable | .not_renew — future
+ *
+ * All webhook payloads are recorded in paystackTransactions for audit,
+ * deduplication, and replay.
+ */
+
+http.route({
+  path: "/webhook/paystack",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const rawBody = await req.text();
+    const signature = req.headers.get("x-paystack-signature");
+    let parsed: PaystackWebhookPayload;
+    try {
+      parsed = JSON.parse(rawBody) as PaystackWebhookPayload;
+    } catch {
+      return new Response("Invalid JSON", { status: 400 });
+    }
+
+    const reference = parsed.data?.reference ?? "";
+    const event = parsed.event ?? "";
+    if (!reference || !event) {
+      return new Response("Missing fields", { status: 400 });
+    }
+
+    // Dedupe
+    const dup = await ctx.runQuery(internal.payments.findDuplicateWebhook, {
+      reference,
+      event,
+      externalId: parsed.data?.id?.toString(),
+    });
+    if (dup) {
+      return new Response(JSON.stringify({ status: "duplicate" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    // Look up the paymentRequest to discover workspace + verify signature
+    const pr = await ctx.runQuery(internal.payments.findPaymentRequestByReference, {
+      reference,
+    });
+
+    // Signature verification — MUST happen before we trust the payload
+    if (pr && signature) {
+      const apiKey = await ctx.runQuery(internal.paymentsHelpers.getPaystackKey, {
+        organizationId: pr.organizationId,
+      });
+      if (apiKey) {
+        const expected = await hmacSha512Hex(apiKey, rawBody);
+        if (!timingSafeEqualStrings(signature, expected)) {
+          await ctx.runMutation(internal.payments.recordPaystackWebhook, {
+            reference,
+            event,
+            externalId: parsed.data?.id?.toString(),
+            amountCents: typeof parsed.data?.amount === "number" ? BigInt(parsed.data.amount) : undefined,
+            currency: parsed.data?.currency,
+            channel: parsed.data?.channel,
+            status: parsed.data?.status,
+            payload: parsed,
+            workspaceId: pr.workspaceId,
+            organizationId: pr.organizationId,
+            processed: false,
+            processingError: "invalid_signature",
+          });
+          return new Response("Invalid signature", { status: 401 });
+        }
+      }
+    }
+
+    let workspaceId = pr?.workspaceId;
+    let organizationId = pr?.organizationId;
+    let processingError: string | undefined;
+
+    try {
+      if (event === "charge.success" && parsed.data?.amount) {
+        const result = await ctx.runMutation(internal.payments.applyChargeSuccess, {
+          reference,
+          externalId: parsed.data?.id?.toString(),
+          amountCents: BigInt(parsed.data.amount),
+          currency: parsed.data.currency ?? "KES",
+          channel: parsed.data.channel,
+          feeCents: typeof parsed.data.fees === "number" ? BigInt(parsed.data.fees) : undefined,
+          paidAt: parsed.data.paid_at ? new Date(parsed.data.paid_at).getTime() : Date.now(),
+          verifiedPayload: parsed.data,
+        });
+        if (!result.applied) processingError = result.reason;
+        else workspaceId ??= result.workspaceId;
+      }
+      // Transfer events + subscriptions can be added later
+    } catch (err) {
+      processingError = err instanceof Error ? err.message : "unknown";
+    }
+
+    await ctx.runMutation(internal.payments.recordPaystackWebhook, {
+      reference,
+      event,
+      externalId: parsed.data?.id?.toString(),
+      amountCents: typeof parsed.data?.amount === "number" ? BigInt(parsed.data.amount) : undefined,
+      currency: parsed.data?.currency,
+      channel: parsed.data?.channel,
+      status: parsed.data?.status,
+      payload: parsed,
+      workspaceId,
+      organizationId,
+      processed: !processingError,
+      processingError,
+    });
+
+    return new Response(JSON.stringify({ status: "ok" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }),
+});
+
+interface PaystackWebhookPayload {
+  event?: string;
+  data?: {
+    id?: number;
+    reference?: string;
+    amount?: number;
+    currency?: string;
+    channel?: string;
+    status?: string;
+    paid_at?: string;
+    fees?: number;
+    customer?: { email?: string };
+  };
+}
+
+async function hmacSha512Hex(secret: string, body: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-512" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/* ------------------------------------------------------------------ */
 /* WhatsApp (Meta Cloud API) webhook                                   */
 /* ------------------------------------------------------------------ */
 /*

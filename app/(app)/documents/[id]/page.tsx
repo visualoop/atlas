@@ -442,6 +442,10 @@ export default function DocumentEditorPage({
             </SidebarSection>
           )}
 
+          {isInvoice && (
+            <PaystackSection documentId={documentId} />
+          )}
+
           <SidebarSection title="Share links">
             {shares.length === 0 ? (
               <p className="text-xs text-muted-foreground italic">No share links yet.</p>
@@ -733,6 +737,109 @@ function ShareRow({
         {share.acceptedAt && <span className="text-[var(--success)]">Accepted</span>}
       </div>
     </li>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Paystack payment section                                              */
+/* ------------------------------------------------------------------ */
+
+function PaystackSection({ documentId }: { documentId: Id<"documents"> }) {
+  const requests = useQuery(api.payments.listPaymentRequestsForDocument, { documentId });
+  const initialize = useAction(api.paymentsActions.initializePayment);
+  const markPaid = useMutation(api.payments.markManuallyPaid);
+  const [busy, setBusy] = useState(false);
+  const [copiedRef, setCopiedRef] = useState<string | null>(null);
+
+  async function generateLink() {
+    setBusy(true);
+    try {
+      const res = await initialize({ documentId });
+      await navigator.clipboard.writeText(res.authorizationUrl);
+      setCopiedRef(res.reference);
+      setTimeout(() => setCopiedRef(null), 3000);
+      toast.success("Payment link copied.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SidebarSection title="Paystack">
+      <button
+        onClick={generateLink}
+        disabled={busy}
+        className={cn(
+          "w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-primary hover:text-primary transition-colors",
+          "disabled:opacity-50 disabled:cursor-not-allowed",
+        )}
+      >
+        {busy ? <Loader2 className="size-3.5 animate-spin" /> : <ExternalLink className="size-3.5" />}
+        Generate payment link
+      </button>
+
+      {requests && requests.length > 0 && (
+        <ul className="space-y-1 mt-2">
+          {requests.slice(0, 5).map((r) => (
+            <li key={r._id} className="border border-border p-2 space-y-1 text-[11px]">
+              <div className="flex items-center justify-between gap-2">
+                <PaymentStatusPill status={r.status} />
+                <span className="font-mono num">{formatCurrency(Number(r.amountCents), r.currency)}</span>
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
+                <span>…{r.reference.slice(-10)}</span>
+                {r.authorizationUrl && r.status !== "success" && (
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(r.authorizationUrl!);
+                      setCopiedRef(r.reference);
+                      setTimeout(() => setCopiedRef(null), 3000);
+                      toast.success("Copied.");
+                    }}
+                    className="hover:text-foreground transition-colors"
+                  >
+                    {copiedRef === r.reference ? "✓ copied" : "copy link"}
+                  </button>
+                )}
+                {r.status !== "success" && r.status !== "cancelled" && (
+                  <button
+                    onClick={async () => {
+                      if (!confirm("Mark as paid manually? (Use for M-PESA STK, cash, or bank confirmations.)")) return;
+                      await markPaid({ id: r._id, channel: "manual" });
+                      toast.success("Marked paid.");
+                    }}
+                    className="hover:text-[var(--success)] transition-colors"
+                  >
+                    mark paid
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SidebarSection>
+  );
+}
+
+function PaymentStatusPill({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    initialized: "border-border text-muted-foreground",
+    pending: "border-[var(--info)] text-[var(--info)]",
+    success: "border-[var(--success)] text-[var(--success)]",
+    failed: "border-[var(--danger)] text-[var(--danger)]",
+    abandoned: "border-border text-muted-foreground opacity-60",
+    cancelled: "border-border text-muted-foreground opacity-60",
+  };
+  return (
+    <span className={cn(
+      "inline-flex items-center font-mono uppercase tracking-[0.12em] text-[9px] border px-1.5 py-0.5",
+      styles[status] ?? styles.initialized,
+    )}>
+      {status}
+    </span>
   );
 }
 

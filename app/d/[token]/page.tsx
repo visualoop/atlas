@@ -52,7 +52,7 @@ export default function PublicDocumentPage({
     );
   }
 
-  const { doc, share, lineItems, companyName, contactName } = data;
+  const { doc, share, lineItems, companyName, contactName, paymentLink, paidAny } = data;
   const already = share.acceptedAt !== undefined;
 
   async function submitAccept() {
@@ -223,6 +223,36 @@ export default function PublicDocumentPage({
                 eTIMS reference: <span className="font-mono">{doc.etimsReference}</span>
               </p>
             )}
+          </section>
+        )}
+
+        {/* Paystack pay-online button */}
+        {doc.kind === "invoice" && !paidAny && paymentLink && (
+          <section className="mb-10 border border-primary bg-primary/5 p-5 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="font-medium">Pay online via Paystack</p>
+              <p className="text-sm text-muted-foreground">
+                Card, mobile money, or bank transfer — settles instantly.
+              </p>
+            </div>
+            <a
+              href={paymentLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 h-10 px-6 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+            >
+              Pay {formatCurrency(Number(doc.totalCents), doc.currency)}
+            </a>
+          </section>
+        )}
+
+        {doc.kind === "invoice" && paidAny && (
+          <section className="mb-10 border border-[var(--success)] bg-[var(--success)]/5 p-5 flex items-center gap-3">
+            <Check className="size-5 text-[var(--success)]" />
+            <div>
+              <p className="font-medium text-[var(--success)]">Paid.</p>
+              <p className="text-xs text-muted-foreground">Thank you.</p>
+            </div>
           </section>
         )}
 

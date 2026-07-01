@@ -1082,4 +1082,107 @@ export default defineSchema({
       searchField: "bodyText",
       filterFields: ["workspaceId", "kind", "productId", "archivedAt"],
     }),
+
+  /* ============================================================ */
+  /* Phase 7b — Payments (Paystack full-stack)                       */
+  /* ============================================================ */
+
+  // A Paystack customer, keyed by our contact id. One customer_code
+  // per (workspace, contact) so historic payments accumulate.
+  paystackCustomers: defineTable({
+    workspaceId: v.id("workspaces"),
+    contactId: v.id("contacts"),
+    paystackCustomerCode: v.string(),                        // 'CUS_xxx'
+    email: v.string(),
+    firstSyncAt: v.number(),
+    lastSyncAt: v.optional(v.number()),
+  })
+    .index("by_workspace_contact", ["workspaceId", "contactId"])
+    .index("by_customer_code", ["paystackCustomerCode"]),
+
+  // A specific request-to-pay tied to an invoice or ad-hoc amount.
+  // Reference is unique and used by Paystack to correlate.
+  paymentRequests: defineTable({
+    workspaceId: v.id("workspaces"),
+    organizationId: v.id("organizations"),
+    // Reference sent to Paystack — must be unique per Paystack account
+    reference: v.string(),
+    amountCents: v.int64(),                                  // in currency subunits
+    currency: v.string(),                                     // 'KES' | 'USD' | 'NGN' etc.
+    description: v.string(),
+    // Links
+    documentId: v.optional(v.id("documents")),              // invoice being paid
+    contactId: v.optional(v.id("contacts")),
+    dealId: v.optional(v.id("deals")),
+    // Paystack response
+    accessCode: v.optional(v.string()),                     // for embed
+    authorizationUrl: v.optional(v.string()),               // hosted checkout URL
+    // State
+    status: v.union(
+      v.literal("initialized"),
+      v.literal("pending"),
+      v.literal("success"),
+      v.literal("failed"),
+      v.literal("abandoned"),
+      v.literal("cancelled"),
+    ),
+    // Verification payload from Paystack (after charge.success)
+    channel: v.optional(v.string()),                        // 'card' | 'mobile_money' | 'bank_transfer'
+    paidAt: v.optional(v.number()),
+    feeCents: v.optional(v.int64()),                        // Paystack's fee
+    verifiedPayload: v.optional(v.any()),
+    // Who initiated it
+    createdBy: v.optional(v.id("users")),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_status", ["workspaceId", "status"])
+    .index("by_workspace_document", ["workspaceId", "documentId"])
+    .index("by_reference", ["reference"]),
+
+  // Full webhook payloads — kept for audit + replay.
+  paystackTransactions: defineTable({
+    workspaceId: v.optional(v.id("workspaces")),
+    organizationId: v.optional(v.id("organizations")),
+    reference: v.string(),
+    event: v.string(),                                       // 'charge.success' | 'transfer.success' | …
+    externalId: v.optional(v.string()),                      // paystack tx id
+    amountCents: v.optional(v.int64()),
+    currency: v.optional(v.string()),
+    channel: v.optional(v.string()),
+    status: v.optional(v.string()),
+    payload: v.any(),
+    receivedAt: v.number(),
+    processed: v.boolean(),
+    processingError: v.optional(v.string()),
+  })
+    .index("by_reference", ["reference"])
+    .index("by_workspace_time", ["workspaceId", "receivedAt"])
+    .index("by_event_time", ["event", "receivedAt"]),
+
+  // Outbound transfers (payouts to bank accounts or M-PESA).
+  paystackTransfers: defineTable({
+    workspaceId: v.id("workspaces"),
+    organizationId: v.id("organizations"),
+    reference: v.string(),
+    recipientCode: v.string(),                              // Paystack RCP_xxx
+    recipientLabel: v.string(),                             // human-readable name
+    amountCents: v.int64(),
+    currency: v.string(),
+    reason: v.optional(v.string()),
+    externalId: v.optional(v.string()),                     // paystack transfer id
+    status: v.union(
+      v.literal("pending"),
+      v.literal("processing"),
+      v.literal("success"),
+      v.literal("failed"),
+      v.literal("reversed"),
+      v.literal("otp_required"),
+    ),
+    failureReason: v.optional(v.string()),
+    transferredAt: v.optional(v.number()),
+    createdBy: v.id("users"),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_reference", ["reference"])
+    .index("by_workspace_status", ["workspaceId", "status"]),
 });

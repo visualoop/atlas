@@ -168,14 +168,24 @@ export const getBySharedToken = query({
     if (share.expiresAt && share.expiresAt < Date.now()) return null;
     const doc = await ctx.db.get(share.documentId);
     if (!doc || doc.archivedAt !== undefined) return null;
-    const [lineItems, company, contact] = await Promise.all([
+    const [lineItems, company, contact, paymentReqs] = await Promise.all([
       ctx.db
         .query("documentLineItems")
         .withIndex("by_document_order", (q) => q.eq("documentId", doc._id))
         .collect(),
       doc.companyId ? ctx.db.get(doc.companyId) : Promise.resolve(null),
       doc.contactId ? ctx.db.get(doc.contactId) : Promise.resolve(null),
+      ctx.db
+        .query("paymentRequests")
+        .withIndex("by_workspace_document", (q) =>
+          q.eq("workspaceId", doc.workspaceId).eq("documentId", doc._id),
+        )
+        .collect(),
     ]);
+    // Pick the most recent active payment link (if any)
+    const activePayment = paymentReqs
+      .filter((p) => p.authorizationUrl && p.status !== "success" && p.status !== "cancelled")
+      .sort((a, b) => b._creationTime - a._creationTime)[0];
     return {
       doc,
       share,
@@ -183,6 +193,8 @@ export const getBySharedToken = query({
       // Company + contact display info only (not the full row)
       companyName: company?.name,
       contactName: contact ? `${contact.firstName}${contact.lastName ? " " + contact.lastName : ""}` : undefined,
+      paymentLink: activePayment?.authorizationUrl ?? null,
+      paidAny: paymentReqs.some((p) => p.status === "success"),
     };
   },
 });
