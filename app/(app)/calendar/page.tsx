@@ -488,8 +488,9 @@ function NewMeetingLinkDialog({ onClose }: { onClose: () => void }) {
           className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none" />
       </label>
       <p className="text-xs text-muted-foreground">
-        Availability defaults to Mon-Fri 09:00-17:00 (Africa/Nairobi). Adjust from
-        the Convex dashboard for now — an in-app editor comes in the follow-up.
+        Availability defaults to Mon-Fri 09:00-17:00 (Africa/Nairobi). After
+        create, click the Settings icon on the row to open the availability
+        editor and add / remove hour ranges per weekday.
       </p>
     </ModalShell>
   );

@@ -296,16 +296,11 @@ export function CampaignSheet({ campaignId, onClose }: Props) {
           )}
         </section>
 
-        {/* Note about deferred send */}
-        <div className="border border-[var(--warning)] p-3 text-xs text-[var(--warning)]">
-          <p className="font-medium">Send path not yet wired.</p>
-          <p className="text-muted-foreground mt-1">
-            Campaign state machine and cron are live, but actual outbound
-            dispatch requires workspace-aware system paths (Phase 8 follow-up).
-            Test enrollment and sequence editing today; sends will start once
-            the runner is finalised.
-          </p>
-        </div>
+        <p className="text-[11px] text-muted-foreground italic">
+          Campaign runner ticks every minute — pending recipients get emails
+          via your Resend key + WhatsApp via your Meta connection. Ensure
+          the org has senders + connections set at Settings → Integrations.
+        </p>
       </div>
     </SheetShell>
   );

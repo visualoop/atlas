@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useAction } from "convex/react";
-import { X, Paperclip, Send, Loader2 } from "lucide-react";
+import { X, Send, Loader2 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Id, Doc } from "@/convex/_generated/dataModel";
 import { RichComposer } from "@/components/atlas/rich-composer";
@@ -202,14 +202,6 @@ export function ComposeSheet({ open, onOpenChange, prefill }: ComposeSheetProps)
         </div>
 
         <footer className="border-t border-border px-6 py-3 flex items-center gap-3">
-          <button
-            type="button"
-            className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            title="Attach (coming soon)"
-            disabled
-          >
-            <Paperclip className="size-4" />
-          </button>
           <span className="text-[11px] text-muted-foreground ml-auto">
             {noSender ? "Queued — needs sender identity" : ""}
           </span>

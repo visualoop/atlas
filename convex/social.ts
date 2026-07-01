@@ -17,6 +17,7 @@
 
 import { v, ConvexError } from "convex/values";
 import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requireWorkspaceContext } from "./lib/workspaceContext";
 import { recordAudit } from "./lib/authHelpers";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -293,7 +294,10 @@ export const publishPostNow = mutation({
       status: "publishing",
       scheduledFor: undefined,
     });
-    // Real API calls go here — deferred to Phase 8a follow-up.
+    // Fire the publish action — it will route through Composio if a
+    // connection is configured, else mark the post as failed with a
+    // clear reason.
+    await ctx.scheduler.runAfter(0, internal.socialActions.publishOne, { postId: id });
   },
 });
 

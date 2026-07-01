@@ -41,6 +41,16 @@ crons.interval(
 );
 
 /* ============================================================ */
+/* Social posts — scheduled publisher                             */
+/* ============================================================ */
+
+crons.interval(
+  "publish scheduled social posts",
+  { minutes: 1 },
+  internal.socialActions.runScheduledPosts,
+);
+
+/* ============================================================ */
 /* Trend intelligence                                             */
 /* ============================================================ */
 

@@ -102,8 +102,12 @@ function ConnectionsBar({
           profile to start posting.
         </p>
         <p className="text-xs text-muted-foreground italic">
-          OAuth flows land in the Phase 8a follow-up. Connection can be
-          registered directly via the Convex dashboard for testing.
+          Connect via Composio at{" "}
+          <a href="/settings/integrations" className="text-primary underline">
+            Settings → Integrations → Composio
+          </a>{" "}
+          for a one-key OAuth flow across all three platforms. Direct
+          connection is also possible via the Convex dashboard.
         </p>
       </div>
     );
@@ -364,13 +368,11 @@ function ComposeSheet({
             />
           </label>
 
-          <div className="border border-[var(--warning)] p-3 text-xs">
-            <p className="font-medium text-[var(--warning)]">Publishing deferred.</p>
-            <p className="text-muted-foreground mt-1">
-              Posts save to Atlas but actual Meta / LinkedIn API calls come in
-              the Phase 8a follow-up. The composer + scheduler are testable now.
-            </p>
-          </div>
+          <p className="text-[11px] text-muted-foreground italic">
+            On publish, Atlas routes through your Composio Slack / Meta /
+            LinkedIn action if the workspace has a connection, else it
+            drops into the scheduler as a manual reminder.
+          </p>
         </div>
 
         <footer className="border-t border-border px-6 py-3 flex items-center gap-2 justify-end sticky bottom-0 bg-background">

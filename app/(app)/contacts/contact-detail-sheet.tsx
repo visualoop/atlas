@@ -7,6 +7,7 @@ import { TimelineFeed } from "@/components/atlas/timeline-feed";
 import { NotesTab } from "@/components/atlas/notes-tab";
 import { TasksTab } from "@/components/atlas/tasks-tab";
 import { FilesTab } from "@/components/atlas/files-tab";
+import { DealsTab } from "@/components/atlas/deals-tab";
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -130,7 +131,7 @@ export function ContactDetailSheet({
         {
           id: "deals",
           label: "Deals",
-          content: <PlaceholderTab name="Deals" phase="Phase 5" />,
+          content: <DealsTab scope="contact" id={contactId} />,
         },
       ]}
     />

@@ -175,13 +175,29 @@ async function executeNativeAction(
       });
     }
     case "add_tag": {
-      // TODO: mutation for adding a tag to a contact
-      return { skipped: "add_tag_not_implemented" };
+      const contactId = args.contactId as Id<"contacts"> | undefined;
+      const companyId = args.companyId as Id<"companies"> | undefined;
+      const tag = args.tag as string | undefined;
+      if (!tag) throw new Error("add_tag requires 'tag'");
+      if (!contactId && !companyId) {
+        throw new Error("add_tag requires contactId or companyId");
+      }
+      await ctx.runMutation(internal.automationEngineHelpers.addTag, {
+        contactId,
+        companyId,
+        tag,
+      });
+      return { added: tag };
     }
     case "wait": {
-      // Waits aren't inline — automation engine treats them as durable steps
-      // in a follow-up. For now we no-op.
-      return { skipped: "wait" };
+      // Durable waits are implemented via ctx.scheduler on the caller side.
+      // The engine schedules the NEXT node executeRun after the delay.
+      const seconds = Number(args.seconds ?? args.minutes ? (args.minutes as number) * 60 : 0);
+      if (seconds > 0) {
+        // Return the target time so the engine can schedule the follow-up
+        return { waitedSeconds: seconds };
+      }
+      return { skipped: "wait_no_duration" };
     }
     default:
       throw new Error(`unknown_native_action:${node.action}`);

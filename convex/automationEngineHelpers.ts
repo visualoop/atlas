@@ -202,3 +202,28 @@ export const listRuns = query({
       .take(args.limit ?? 20);
   },
 });
+
+
+export const addTag = internalMutation({
+  args: {
+    contactId: v.optional(v.id("contacts")),
+    companyId: v.optional(v.id("companies")),
+    tag: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (args.contactId) {
+      const c = await ctx.db.get(args.contactId);
+      if (c) {
+        const tags = Array.from(new Set([...(c.tags ?? []), args.tag]));
+        await ctx.db.patch(args.contactId, { tags });
+      }
+    }
+    if (args.companyId) {
+      const c = await ctx.db.get(args.companyId);
+      if (c) {
+        const tags = Array.from(new Set([...(c.tags ?? []), args.tag]));
+        await ctx.db.patch(args.companyId, { tags });
+      }
+    }
+  },
+});

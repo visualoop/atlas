@@ -146,13 +146,10 @@ function NewsletterTab() {
             ))}
           </ul>
         )}
-        <div className="border border-[var(--warning)] p-3 text-xs text-[var(--warning)]">
-          <p className="font-medium">Send path deferred.</p>
-          <p className="text-muted-foreground mt-1">
-            Broadcasts save + hold state but actual Resend Broadcasts API dispatch
-            lands in the Phase 8b follow-up. Compose today, wire dispatch soon.
-          </p>
-        </div>
+        <p className="text-[11px] text-muted-foreground italic">
+          Draft broadcasts, hit "Send now" from the row detail — dispatch fans
+          out through your Resend key with per-member idempotency.
+        </p>
       </section>
 
       {newAudienceOpen && (
@@ -549,8 +546,8 @@ function SeoTab() {
             {status === "new" ? "Backlog is empty." : `No ${status} ideas.`}
           </p>
           <p className="text-sm text-muted-foreground max-w-prose mx-auto">
-            Add manually, or let the daily AI ideation cron (Phase 8c) fill this
-            with topic candidates pulled from competitor blogs + industry trends.
+            Add manually below, or ask the Copilot (⌘J) — "give me 5 SEO
+            angles for {"{"}our brand{"}"}" — and paste the best ones in.
           </p>
         </div>
       ) : (

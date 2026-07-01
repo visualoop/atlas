@@ -83,6 +83,8 @@ import type * as search from "../search.js";
 import type * as security from "../security.js";
 import type * as securityActions from "../securityActions.js";
 import type * as social from "../social.js";
+import type * as socialActions from "../socialActions.js";
+import type * as socialActionsHelpers from "../socialActionsHelpers.js";
 import type * as tasks from "../tasks.js";
 import type * as trends from "../trends.js";
 import type * as trendsActions from "../trendsActions.js";
@@ -177,6 +179,8 @@ declare const fullApi: ApiFromModules<{
   security: typeof security;
   securityActions: typeof securityActions;
   social: typeof social;
+  socialActions: typeof socialActions;
+  socialActionsHelpers: typeof socialActionsHelpers;
   tasks: typeof tasks;
   trends: typeof trends;
   trendsActions: typeof trendsActions;

@@ -99,15 +99,10 @@ export default function TrendsPage() {
               </ul>
             )}
 
-            <div className="border border-[var(--warning)] p-3 text-xs text-[var(--warning)] mt-4">
-              <p className="font-medium">Daily scan deferred.</p>
-              <p className="text-muted-foreground mt-1">
-                Schema + triage UI ship today. The Groq Compound web-search
-                cron that populates mentions lands in the Phase 8c follow-up.
-                Meanwhile you can seed mentions manually via the Convex
-                dashboard to test the workflow.
-              </p>
-            </div>
+            <p className="text-[11px] text-muted-foreground italic mt-4">
+              The scan runs every 6 hours via Groq Compound web search.
+              Add a watch, then wait one cron cycle for mentions to appear.
+            </p>
           </section>
         </div>
       </div>
@@ -195,23 +190,23 @@ function MentionCard({
           >
             <Eye className="size-3" /> Triage
           </button>
+          <a
+            href={m.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => updateStatus({ id: m._id, status: "responded" })}
+            className="text-xs font-mono uppercase tracking-[0.12em] px-2 h-7 border border-border hover:border-primary hover:text-primary transition-colors inline-flex items-center gap-1"
+          >
+            <MessageSquare className="size-3" /> Reply on source
+          </a>
           <button
             onClick={() => {
-              toast.info("Reply flow lands in Phase 8c follow-up.");
-              updateStatus({ id: m._id, status: "triaged" });
+              updateStatus({ id: m._id, status: "posted" });
+              toast.success("Marked as posted. Draft a social post from /social to reference this mention.");
             }}
             className="text-xs font-mono uppercase tracking-[0.12em] px-2 h-7 border border-border hover:border-primary hover:text-primary transition-colors inline-flex items-center gap-1"
           >
-            <MessageSquare className="size-3" /> Reply
-          </button>
-          <button
-            onClick={() => {
-              toast.info("Post flow lands in Phase 8c follow-up.");
-              updateStatus({ id: m._id, status: "triaged" });
-            }}
-            className="text-xs font-mono uppercase tracking-[0.12em] px-2 h-7 border border-border hover:border-primary hover:text-primary transition-colors inline-flex items-center gap-1"
-          >
-            <Sparkles className="size-3" /> Turn into post
+            <Sparkles className="size-3" /> Mark posted
           </button>
           <button
             onClick={() => updateStatus({ id: m._id, status: "dismissed" })}
