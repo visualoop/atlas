@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import {
   Mail, MessageSquare, Inbox as InboxIcon, Star, Archive as ArchiveIcon,
-  Clock, Reply, Pen,
+  Clock, Reply, Pen, Sparkles, Loader2,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
@@ -320,8 +320,31 @@ function ThreadReader({ conversationId, onClose }: {
   const snooze = useMutation(api.emails.snooze);
   const pin = useMutation(api.emails.pin);
   const unpin = useMutation(api.emails.unpin);
+  const draftEmail = useAction(api.aiWorkflows.draftEmailReply);
+  const draftWa = useAction(api.aiWorkflows.draftWhatsAppReply);
 
   const [replying, setReplying] = useState(false);
+  const [draft, setDraft] = useState<string | undefined>();
+  const [drafting, setDrafting] = useState(false);
+
+  async function generateDraft() {
+    if (!data) return;
+    setDrafting(true);
+    try {
+      const channel = data.conversation.channel;
+      const result =
+        channel === "whatsapp"
+          ? await draftWa({ conversationId })
+          : await draftEmail({ conversationId });
+      setDraft(result.draft);
+      setReplying(true);
+      toast.success(`AI draft ready · ${result.provider}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "AI draft failed.");
+    } finally {
+      setDrafting(false);
+    }
+  }
 
   // Mark read on open
   useEffect(() => {
@@ -446,8 +469,9 @@ function ThreadReader({ conversationId, onClose }: {
                 ? conversation.participantPhones?.[0]
                 : undefined
             }
-            onSent={() => setReplying(false)}
-            onCancel={() => setReplying(false)}
+            initialDraft={draft}
+            onSent={() => { setReplying(false); setDraft(undefined); }}
+            onCancel={() => { setReplying(false); setDraft(undefined); }}
           />
         ) : (
           <div className="px-6 py-3 flex items-center gap-2">
@@ -459,6 +483,14 @@ function ThreadReader({ conversationId, onClose }: {
               <span className="text-muted-foreground normal-case tracking-normal text-[10px] ml-1">
                 R
               </span>
+            </button>
+            <button
+              onClick={generateDraft}
+              disabled={drafting}
+              className="inline-flex items-center gap-2 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+            >
+              {drafting ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+              AI draft
             </button>
           </div>
         )}

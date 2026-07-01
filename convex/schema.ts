@@ -756,4 +756,61 @@ export default defineSchema({
   })
     .index("by_workspace_phone", ["workspaceId", "phone"])
     .index("by_workspace", ["workspaceId"]),
+
+  /* ============================================================ */
+  /* Phase 5 — AI gateway                                           */
+  /* ============================================================ */
+
+  // Per-workspace feature → model chain override. If a row exists,
+  // its chain is used. Otherwise the gateway falls back to the
+  // hard-coded default chain from `convex/ai/registry.ts`.
+  aiFeatureBindings: defineTable({
+    workspaceId: v.id("workspaces"),
+    featureId: v.string(),                                    // 'draft_email_reply' | 'fit_score_lead' | …
+    chain: v.array(
+      v.object({
+        provider: v.string(),                                  // 'groq' | 'gemini' | …
+        model: v.string(),                                     // 'llama-3.3-70b-versatile' | …
+        maxTokens: v.optional(v.number()),
+        temperature: v.optional(v.number()),
+        // Optional per-step tools (Composio + Groq Compound autonomous)
+        tools: v.optional(v.array(v.string())),
+      }),
+    ),
+    updatedBy: v.optional(v.id("users")),
+  })
+    .index("by_workspace_feature", ["workspaceId", "featureId"]),
+
+  // Every AI call — for cost accounting, debugging, and rate-limit
+  // enforcement.
+  aiCallLog: defineTable({
+    workspaceId: v.id("workspaces"),
+    organizationId: v.id("organizations"),
+    actorId: v.optional(v.id("users")),
+    featureId: v.string(),
+    provider: v.string(),
+    model: v.string(),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    latencyMs: v.optional(v.number()),
+    status: v.union(
+      v.literal("success"),
+      v.literal("fallback"),
+      v.literal("failed"),
+    ),
+    error: v.optional(v.string()),
+    // Correlation ids to link back to the record we were acting on
+    resourceType: v.optional(v.string()),
+    resourceId: v.optional(v.string()),
+    // Cost in USD micro-units (int64 for precision — no floats)
+    costMicroUsd: v.optional(v.int64()),
+    // Truncated prompt/response — for debugging; full payload is
+    // typically re-derivable from the resource
+    promptPreview: v.optional(v.string()),
+    responsePreview: v.optional(v.string()),
+  })
+    .index("by_workspace_time", ["workspaceId"])
+    .index("by_workspace_feature_time", ["workspaceId", "featureId"])
+    .index("by_org_time", ["organizationId"])
+    .index("by_resource", ["resourceType", "resourceId"]),
 });

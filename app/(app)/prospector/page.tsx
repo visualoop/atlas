@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import {
   Search, MapPin, Star, ExternalLink, Loader2, Phone, Globe,
-  Check, X, Trash2, ChevronRight, RefreshCw,
+  Check, X, Trash2, ChevronRight, RefreshCw, Sparkles, Zap,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
@@ -355,6 +355,41 @@ function ResultRow({
   onReject: () => void;
 }) {
   const imported = r.importedAt !== undefined;
+  const scoreLead = useAction(api.aiWorkflows.scoreLeadFit);
+  const enrichWebsite = useAction(api.aiWorkflows.enrichWebsite);
+  const [aiBusy, setAiBusy] = useState<"score" | "enrich" | null>(null);
+
+  async function handleScore() {
+    setAiBusy("score");
+    try {
+      const res = await scoreLead({ resultId: r._id });
+      toast.success(`Fit: ${res.score}/100`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "AI scoring failed.");
+    } finally {
+      setAiBusy(null);
+    }
+  }
+
+  async function handleEnrich() {
+    if (!r.website) {
+      toast.error("No website — nothing to enrich.");
+      return;
+    }
+    setAiBusy("enrich");
+    try {
+      const res = await enrichWebsite({ resultId: r._id });
+      if (res.error) toast.error(`Enrichment: ${res.error}`);
+      else if (res.email || res.phone) {
+        toast.success(`Found: ${res.email ?? ""}${res.phone ? " · " + res.phone : ""}`);
+      } else toast.info("Website fetched but no contact info found.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Enrichment failed.");
+    } finally {
+      setAiBusy(null);
+    }
+  }
+
   return (
     <div className={cn("px-4 py-4 flex items-start gap-4", imported && "opacity-70")}>
       {!imported && (
@@ -368,23 +403,42 @@ function ResultRow({
       <div className="flex-1 min-w-0 space-y-1.5">
         <div className="flex items-baseline gap-3 justify-between">
           <p className="font-medium text-sm truncate">{r.name}</p>
-          {r.rating && (
-            <span className="text-xs text-muted-foreground flex items-center gap-1 shrink-0 num">
-              <Star className="size-3 fill-[var(--warning)] text-[var(--warning)]" />
-              {r.rating.toFixed(1)}
-              {r.ratingCount && <span className="text-muted-foreground/60">({r.ratingCount})</span>}
-            </span>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {typeof r.fitScore === "number" && (
+              <span
+                title={r.fitReasoning}
+                className={cn(
+                  "text-[10px] font-mono uppercase tracking-[0.12em] border px-1.5 py-0.5",
+                  r.fitScore >= 70
+                    ? "border-[var(--success)] text-[var(--success)]"
+                    : r.fitScore >= 40
+                      ? "border-[var(--warning)] text-[var(--warning)]"
+                      : "border-border text-muted-foreground",
+                )}
+              >
+                {r.fitScore}
+              </span>
+            )}
+            {r.rating && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1 num">
+                <Star className="size-3 fill-[var(--warning)] text-[var(--warning)]" />
+                {r.rating.toFixed(1)}
+              </span>
+            )}
+          </div>
         </div>
         {r.address && (
           <p className="text-xs text-muted-foreground truncate">{r.address}</p>
         )}
         <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-          {r.phone && (
+          {(r.phone) && (
             <span className="flex items-center gap-1 num">
               <Phone className="size-3" />
               {r.phone}
             </span>
+          )}
+          {r.email && (
+            <span className="text-primary">{r.email}</span>
           )}
           {r.website && (
             <a
@@ -416,9 +470,30 @@ function ResultRow({
             </a>
           )}
         </div>
+        {r.fitReasoning && (
+          <p className="text-[11px] text-muted-foreground italic line-clamp-2">
+            {r.fitReasoning}
+          </p>
+        )}
       </div>
       {!imported && (
         <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={handleScore}
+            disabled={aiBusy !== null}
+            title="AI fit score"
+            className="size-8 grid place-items-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            {aiBusy === "score" ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+          </button>
+          <button
+            onClick={handleEnrich}
+            disabled={aiBusy !== null || !r.website}
+            title="AI enrich from website"
+            className="size-8 grid place-items-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors disabled:opacity-30"
+          >
+            {aiBusy === "enrich" ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
+          </button>
           <button
             onClick={onReject}
             title="Reject — suppress from future searches"

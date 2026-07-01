@@ -13,18 +13,20 @@ interface ReplyBarProps {
   conversationId: Id<"conversations">;
   channel: "email" | "whatsapp" | "sms" | "call" | "social_comment";
   toPhone?: string;
+  initialDraft?: string;                                        // AI-generated pre-fill
   onSent: () => void;
   onCancel: () => void;
 }
 
 export function ReplyBar({
-  conversationId, channel, toPhone, onSent, onCancel,
+  conversationId, channel, toPhone, initialDraft, onSent, onCancel,
 }: ReplyBarProps) {
   if (channel === "whatsapp") {
     return (
       <WhatsAppReplyBar
         conversationId={conversationId}
         toPhone={toPhone ?? ""}
+        initialDraft={initialDraft}
         onSent={onSent}
         onCancel={onCancel}
       />
@@ -33,6 +35,7 @@ export function ReplyBar({
   return (
     <EmailReplyBar
       conversationId={conversationId}
+      initialDraft={initialDraft}
       onSent={onSent}
       onCancel={onCancel}
     />
@@ -44,10 +47,15 @@ export function ReplyBar({
 /* ------------------------------------------------------------------ */
 
 function EmailReplyBar({
-  conversationId, onSent, onCancel,
-}: { conversationId: Id<"conversations">; onSent: () => void; onCancel: () => void }) {
-  const [html, setHtml] = useState("");
-  const [text, setText] = useState("");
+  conversationId, initialDraft, onSent, onCancel,
+}: {
+  conversationId: Id<"conversations">;
+  initialDraft?: string;
+  onSent: () => void;
+  onCancel: () => void;
+}) {
+  const [html, setHtml] = useState(initialDraft ? toHtml(initialDraft) : "");
+  const [text, setText] = useState(initialDraft ?? "");
   const [sending, setSending] = useState(false);
   const sendReply = useAction(api.emailsOut.sendReply);
 
@@ -81,6 +89,7 @@ function EmailReplyBar({
         Reply by email
       </div>
       <RichComposer
+        initialHtml={html}
         placeholder="Type your reply… ⌘↵ to send"
         autofocus
         minHeight={140}
@@ -113,19 +122,37 @@ function EmailReplyBar({
   );
 }
 
+/** Convert plain text with newlines to minimal HTML for the editor. */
+function toHtml(text: string): string {
+  return text
+    .split(/\n{2,}/)
+    .map((para) => `<p>${escapeHtml(para).replace(/\n/g, "<br/>")}</p>`)
+    .join("");
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /* ------------------------------------------------------------------ */
 /* WhatsApp reply — 24h window aware                                    */
 /* ------------------------------------------------------------------ */
 
 function WhatsAppReplyBar({
-  conversationId, toPhone, onSent, onCancel,
+  conversationId, toPhone, initialDraft, onSent, onCancel,
 }: {
   conversationId: Id<"conversations">;
   toPhone: string;
+  initialDraft?: string;
   onSent: () => void;
   onCancel: () => void;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialDraft ?? "");
   const [sending, setSending] = useState(false);
   const canFree = useQuery(api.whatsapp.canReplyFree, { conversationId });
   const templates = useQuery(api.whatsapp.listTemplates, { onlyApproved: true });
