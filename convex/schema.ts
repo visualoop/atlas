@@ -1783,4 +1783,192 @@ export default defineSchema({
   })
     .index("by_workspace", ["workspaceId"])
     .index("by_workspace_active", ["workspaceId", "active"]),
+
+  /* ============================================================ */
+  /* Phase 10 — Calendar + Meetings + Demo Ops                      */
+  /* ============================================================ */
+
+  calendarEvents: defineTable({
+    workspaceId: v.id("workspaces"),
+    ownerId: v.id("users"),                                  // whose calendar this belongs to
+    kind: v.union(
+      v.literal("meeting"),
+      v.literal("reminder"),
+      v.literal("blocked"),                                    // time-off / focus block
+      v.literal("deadline"),
+    ),
+    title: v.string(),
+    description: v.optional(v.string()),
+    location: v.optional(v.string()),                        // Zoom URL / physical location
+    conferenceUrl: v.optional(v.string()),                   // separate from location for click
+    // Time — always UTC ms; UI localizes
+    startAt: v.number(),
+    endAt: v.number(),
+    allDay: v.boolean(),
+    // Attendees — participant emails as tokens; contact links per row in a separate table would be ideal but for MVP we inline
+    attendeeEmails: v.optional(v.array(v.string())),
+    // Related records
+    dealId: v.optional(v.id("deals")),
+    contactId: v.optional(v.id("contacts")),
+    companyId: v.optional(v.id("companies")),
+    // If this event came from a booking link
+    bookingId: v.optional(v.id("meetingBookings")),
+    // External sync — Google Calendar event id after OAuth is wired
+    externalCalendarId: v.optional(v.string()),
+    externalEventId: v.optional(v.string()),
+    lastSyncedAt: v.optional(v.number()),
+    // Reminders
+    reminderMinutesBefore: v.optional(v.array(v.number())),
+    // AI-generated pre-meeting brief
+    aiBriefText: v.optional(v.string()),
+    aiBriefAt: v.optional(v.number()),
+    // AI post-meeting summary
+    aiSummaryText: v.optional(v.string()),
+    aiActionItems: v.optional(v.array(v.string())),
+    aiSummaryAt: v.optional(v.number()),
+    status: v.union(
+      v.literal("scheduled"),
+      v.literal("in_progress"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+      v.literal("no_show"),
+    ),
+    createdAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace_start", ["workspaceId", "startAt"])
+    .index("by_workspace_owner_start", ["workspaceId", "ownerId", "startAt"])
+    .index("by_workspace_status", ["workspaceId", "status"])
+    .index("by_contact", ["contactId"])
+    .index("by_deal", ["dealId"])
+    .index("by_external_event", ["externalCalendarId", "externalEventId"]),
+
+  // Public booking page config — one per unique meeting kind.
+  meetingLinks: defineTable({
+    workspaceId: v.id("workspaces"),
+    ownerId: v.id("users"),
+    slug: v.string(),                                        // 'omnix-demo' — unique per workspace
+    title: v.string(),                                        // 'Omnix 30-minute demo'
+    description: v.optional(v.string()),
+    durationMinutes: v.number(),                             // 15 / 30 / 45 / 60
+    // Availability rules — an array of { weekday: 0-6, startMin: 480, endMin: 1020 }
+    availability: v.array(v.any()),
+    bufferMinutesBefore: v.number(),
+    bufferMinutesAfter: v.number(),
+    // Booking window
+    minLeadHours: v.number(),                                 // can't book less than N hours ahead
+    maxLeadDays: v.number(),                                  // can't book further than N days out
+    // Timezone the availability rules live in (Africa/Nairobi default)
+    timezone: v.string(),
+    // Optional fields to collect on booking
+    formFields: v.optional(v.array(v.string())),             // ['note', 'company', 'phone']
+    // Redirect after successful booking
+    confirmationUrl: v.optional(v.string()),
+    // Meeting shape
+    location: v.optional(v.string()),
+    conferenceUrl: v.optional(v.string()),
+    // Publication
+    active: v.boolean(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace_slug", ["workspaceId", "slug"])
+    .index("by_workspace_active", ["workspaceId", "active"]),
+
+  meetingBookings: defineTable({
+    workspaceId: v.id("workspaces"),
+    linkId: v.id("meetingLinks"),
+    // Who booked
+    bookerEmail: v.string(),
+    bookerName: v.optional(v.string()),
+    bookerPhone: v.optional(v.string()),
+    bookerCompany: v.optional(v.string()),
+    note: v.optional(v.string()),
+    // Slot
+    startAt: v.number(),
+    endAt: v.number(),
+    timezone: v.string(),                                     // booker's chosen TZ
+    // Contact/deal linkage — set post-creation as follow-ups happen
+    contactId: v.optional(v.id("contacts")),
+    dealId: v.optional(v.id("deals")),
+    // State
+    status: v.union(
+      v.literal("confirmed"),
+      v.literal("cancelled_by_host"),
+      v.literal("cancelled_by_booker"),
+      v.literal("no_show"),
+      v.literal("completed"),
+    ),
+    cancellationReason: v.optional(v.string()),
+    // Correlation with calendarEvents (created on confirmation)
+    eventId: v.optional(v.id("calendarEvents")),
+    // Reminder tracking
+    reminderSentAt: v.optional(v.number()),
+    ip: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
+    receivedAt: v.number(),
+  })
+    .index("by_workspace_start", ["workspaceId", "startAt"])
+    .index("by_link_start", ["linkId", "startAt"])
+    .index("by_link", ["linkId"])
+    .index("by_booker_email", ["workspaceId", "bookerEmail"]),
+
+  // Async demo recordings — founder uploads a demo video, AI extracts
+  // questions/topics/next steps for later playback + shareable link.
+  demoRecordings: defineTable({
+    workspaceId: v.id("workspaces"),
+    title: v.string(),
+    description: v.optional(v.string()),
+    // Recording file
+    videoFileId: v.optional(v.id("files")),
+    videoUrl: v.optional(v.string()),                        // external URL for now
+    durationSeconds: v.optional(v.number()),
+    // AI-extracted content
+    transcriptText: v.optional(v.string()),
+    transcriptedAt: v.optional(v.number()),
+    aiSummary: v.optional(v.string()),
+    aiQuestions: v.optional(v.array(v.string())),            // questions asked
+    aiActionItems: v.optional(v.array(v.string())),
+    // Sharing
+    shareToken: v.optional(v.string()),                      // if public shared
+    viewCount: v.number(),
+    // Correlation
+    dealId: v.optional(v.id("deals")),
+    contactId: v.optional(v.id("contacts")),
+    linkedEventId: v.optional(v.id("calendarEvents")),
+    ownerId: v.id("users"),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_deal", ["workspaceId", "dealId"])
+    .index("by_share_token", ["shareToken"]),
+
+  // Trial licenses — Omnix product-specific but reusable pattern.
+  trialLicenses: defineTable({
+    workspaceId: v.id("workspaces"),
+    contactId: v.optional(v.id("contacts")),
+    companyId: v.optional(v.id("companies")),
+    productSlug: v.string(),                                 // 'omnix' | 'blyss_studio'
+    licenseKey: v.string(),                                  // human-readable code
+    trialStartAt: v.number(),
+    trialEndAt: v.number(),
+    // Feature flags per trial
+    features: v.optional(v.any()),
+    seatCap: v.optional(v.number()),
+    status: v.union(
+      v.literal("active"),
+      v.literal("expired"),
+      v.literal("converted"),                                 // upgraded to paid
+      v.literal("cancelled"),
+    ),
+    activatedAt: v.optional(v.number()),
+    lastActiveAt: v.optional(v.number()),
+    convertedAt: v.optional(v.number()),
+    dealId: v.optional(v.id("deals")),
+    ownerId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_license_key", ["licenseKey"])
+    .index("by_workspace_status", ["workspaceId", "status"])
+    .index("by_workspace_end", ["workspaceId", "trialEndAt"]),
 });
