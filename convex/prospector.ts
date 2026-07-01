@@ -412,3 +412,111 @@ function domainFrom(url: string): string | undefined {
     return undefined;
   }
 }
+
+
+/* ============================================================ */
+/* Map-browse import — one-shot company create from Google Place */
+/* ============================================================ */
+
+export const importMapPlace = internalMutation({
+  args: {
+    googlePlaceId: v.string(),
+    name: v.string(),
+    address: v.optional(v.string()),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
+    phoneRaw: v.optional(v.string()),
+    website: v.optional(v.string()),
+    googleMapsUri: v.optional(v.string()),
+    types: v.optional(v.array(v.string())),
+    rating: v.optional(v.number()),
+    ratingCount: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    // Import here (inside handler) to avoid circular imports
+    const { requireWorkspaceContext } = await import("./lib/workspaceContext");
+    const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
+
+    // Dedupe by (workspace, googlePlaceId)
+    const existing = await ctx.db
+      .query("companies")
+      .withIndex("by_workspace_place", (q) =>
+        q.eq("workspaceId", wsCtx.workspace._id).eq("googlePlaceId", args.googlePlaceId),
+      )
+      .first();
+    if (existing) {
+      return { companyId: existing._id, duplicated: true };
+    }
+
+    // Extract domain from website
+    let domain: string | undefined;
+    if (args.website) {
+      try {
+        const u = new URL(args.website);
+        domain = u.hostname.replace(/^www\./, "").toLowerCase();
+      } catch {}
+    }
+
+    const companyId = await ctx.db.insert("companies", {
+      workspaceId: wsCtx.workspace._id,
+      name: args.name,
+      domain,
+      country: "KE",
+      city: undefined,
+      address: args.address,
+      phone: args.phoneRaw,
+      website: args.website,
+      googlePlaceId: args.googlePlaceId,
+      lifecycleStage: "lead",
+      tags: ["prospector"],
+      source: "prospector_map",
+      enrichmentData: {
+        googleMapsUri: args.googleMapsUri,
+        types: args.types,
+        rating: args.rating,
+        ratingCount: args.ratingCount,
+        latitude: args.latitude,
+        longitude: args.longitude,
+      },
+      enrichedAt: Date.now(),
+      ownerId: wsCtx.user._id,
+    });
+
+    const { recordTimelineEvent } = await import("./lib/timeline");
+    await recordTimelineEvent(ctx, {
+      workspaceId: wsCtx.workspace._id,
+      eventType: "company_created",
+      actorId: wsCtx.user._id,
+      subjectType: "company",
+      subjectId: companyId,
+      payload: { source: "prospector_map", googlePlaceId: args.googlePlaceId },
+    });
+
+    return { companyId, duplicated: false };
+  },
+});
+
+
+/* ============================================================ */
+/* Maps client key — for the frontend Google Maps JS SDK          */
+/* ============================================================ */
+
+export const getMapsClientKey = query({
+  args: {},
+  handler: async (ctx): Promise<{ key: string | null }> => {
+    const { requireWorkspaceContext } = await import("./lib/workspaceContext");
+    const { getOrgKey } = await import("./lib/secretsAccess");
+    const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
+    try {
+      const k = await getOrgKey(ctx, {
+        organizationId: wsCtx.workspace.organizationId,
+        provider: "google_maps_places",
+        reason: "map_browse_client",
+        actorId: wsCtx.user._id,
+      });
+      return { key: k.value };
+    } catch {
+      return { key: null };
+    }
+  },
+});

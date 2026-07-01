@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import {
   Search, MapPin, Star, ExternalLink, Loader2, Phone, Globe,
-  Check, X, Trash2, ChevronRight, RefreshCw, Sparkles, Zap,
+  Check, X, Trash2, ChevronRight, RefreshCw, Sparkles, Zap, Map as MapIcon,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
@@ -13,10 +13,12 @@ import { formatDistanceToNowStrict } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { MapBrowse } from "./map-browse";
 
 export default function ProspectorPage() {
   const searches = useQuery(api.prospector.listSearches, {});
   const [activeSearchId, setActiveSearchId] = useState<Id<"prospectorSearches"> | null>(null);
+  const [mode, setMode] = useState<"search" | "map">("search");
 
   // Auto-select the newest search
   const derivedActive = activeSearchId ?? searches?.[0]?._id ?? null;
@@ -35,6 +37,19 @@ export default function ProspectorPage() {
         </p>
       </header>
 
+      {/* Mode tabs */}
+      <div className="flex items-center gap-1 mb-6 border-b border-border">
+        <TabButton active={mode === "search"} onClick={() => setMode("search")} icon={Search} label="Text search" />
+        <TabButton active={mode === "map"} onClick={() => setMode("map")} icon={MapIcon} label="Map browse" />
+        <span className="ml-auto text-[11px] text-muted-foreground italic self-center pb-2">
+          {mode === "search" ? "AI-driven query" : "Pan + pick yourself"}
+        </span>
+      </div>
+
+      {mode === "map" ? (
+        <MapBrowse />
+      ) : (
+        <>
       <NewSearchForm
         onCreated={(id) => setActiveSearchId(id)}
       />
@@ -97,7 +112,33 @@ export default function ProspectorPage() {
           )}
         </div>
       </div>
+      </>
+      )}
     </div>
+  );
+}
+
+function TabButton({
+  active, onClick, icon: Icon, label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "px-4 py-2 text-sm border-b-2 -mb-px transition-colors inline-flex items-center gap-1.5",
+        active
+          ? "text-foreground border-primary"
+          : "text-muted-foreground border-transparent hover:text-foreground hover:border-primary/40",
+      )}
+    >
+      <Icon className="size-3.5" />
+      {label}
+    </button>
   );
 }
 

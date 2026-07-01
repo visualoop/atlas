@@ -173,3 +173,148 @@ export const searchAndPersist = action({
     return { persisted: persisted.persisted, nextPageToken: json.nextPageToken };
   },
 });
+
+
+/* ------------------------------------------------------------------ */
+/* searchNearby — bounds-based query for the map browse UI              */
+/* ------------------------------------------------------------------ */
+
+const NEARBY_ENDPOINT = "https://places.googleapis.com/v1/places:searchNearby";
+const NEARBY_FIELD_MASK = [
+  "places.id",
+  "places.displayName",
+  "places.formattedAddress",
+  "places.location",
+  "places.types",
+  "places.internationalPhoneNumber",
+  "places.nationalPhoneNumber",
+  "places.websiteUri",
+  "places.googleMapsUri",
+  "places.rating",
+  "places.userRatingCount",
+  "places.businessStatus",
+].join(",");
+
+const INCLUDED_TYPE_MAP: Record<string, string[]> = {
+  restaurant: ["restaurant", "cafe", "bar"],
+  retail: ["store", "supermarket", "clothing_store", "shopping_mall"],
+  services: ["accounting", "lawyer", "real_estate_agency", "insurance_agency"],
+  health: ["hospital", "pharmacy", "dental_clinic", "spa"],
+  auto: ["car_dealer", "car_repair", "gas_station"],
+  hotel: ["hotel", "lodging"],
+  office: ["corporate_office"],
+};
+
+export const searchNearby = action({
+  args: {
+    latitude: v.number(),
+    longitude: v.number(),
+    radiusMeters: v.number(),                             // 1-50000
+    category: v.optional(v.string()),                     // key of INCLUDED_TYPE_MAP
+    includedType: v.optional(v.string()),                 // explicit override
+  },
+  handler: async (ctx, args): Promise<{
+    places: Array<{
+      googlePlaceId: string;
+      name: string;
+      address?: string;
+      latitude?: number;
+      longitude?: number;
+      phoneRaw?: string;
+      website?: string;
+      googleMapsUri?: string;
+      types?: string[];
+      rating?: number;
+      ratingCount?: number;
+      businessStatus?: string;
+    }>;
+    error?: string;
+  }> => {
+    const setup = await ctx.runQuery(internal.prospectorHelpers.prepareForNearby, {});
+    if (!setup.apiKey) {
+      throw new ConvexError({
+        code: "NO_KEY",
+        message: "Google Maps Places key not configured. Add it in Settings → Integrations.",
+      });
+    }
+
+    const includedTypes = args.includedType
+      ? [args.includedType]
+      : args.category
+      ? INCLUDED_TYPE_MAP[args.category]
+      : undefined;
+
+    const body: Record<string, unknown> = {
+      maxResultCount: 20,
+      locationRestriction: {
+        circle: {
+          center: { latitude: args.latitude, longitude: args.longitude },
+          radius: Math.min(Math.max(args.radiusMeters, 1), 50_000),
+        },
+      },
+    };
+    if (includedTypes) body.includedTypes = includedTypes;
+
+    try {
+      const res = await fetch(NEARBY_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": setup.apiKey,
+          "X-Goog-FieldMask": NEARBY_FIELD_MASK,
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        return { places: [], error: `Places API ${res.status}: ${(await res.text()).slice(0, 200)}` };
+      }
+      const json = (await res.json()) as PlacesResponse;
+      if (json.error) {
+        return { places: [], error: json.error.message ?? json.error.status ?? "unknown" };
+      }
+      const places = (json.places ?? []).map((p) => ({
+        googlePlaceId: p.id,
+        name: p.displayName?.text ?? "(unnamed)",
+        address: p.formattedAddress,
+        latitude: p.location?.latitude,
+        longitude: p.location?.longitude,
+        phoneRaw: p.internationalPhoneNumber ?? p.nationalPhoneNumber,
+        website: p.websiteUri,
+        googleMapsUri: p.googleMapsUri,
+        types: p.types,
+        rating: p.rating,
+        ratingCount: p.userRatingCount,
+        businessStatus: p.businessStatus,
+      }));
+      return { places };
+    } catch (err) {
+      return { places: [], error: err instanceof Error ? err.message : "Network error" };
+    }
+  },
+});
+
+/**
+ * importOneFromMap — one-shot: pass a full place payload, we upsert
+ * a company + optional contact stub.
+ */
+export const importOneFromMap = action({
+  args: {
+    googlePlaceId: v.string(),
+    name: v.string(),
+    address: v.optional(v.string()),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
+    phoneRaw: v.optional(v.string()),
+    website: v.optional(v.string()),
+    googleMapsUri: v.optional(v.string()),
+    types: v.optional(v.array(v.string())),
+    rating: v.optional(v.number()),
+    ratingCount: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<{
+    companyId: Id<"companies">;
+    duplicated: boolean;
+  }> => {
+    return await ctx.runMutation(internal.prospector.importMapPlace, args);
+  },
+});
