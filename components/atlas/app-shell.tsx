@@ -56,6 +56,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CommandPalette } from "@/components/atlas/command-palette";
 import { CopilotPanel } from "@/components/atlas/copilot-panel";
+import { AppShellSkeleton } from "@/components/atlas/app-shell-skeleton";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
@@ -138,11 +139,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   if (bootstrap === undefined) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-muted-foreground text-sm">
-        Loading…
-      </div>
-    );
+    return <AppShellSkeleton />;
   }
   if (bootstrap === null) return null;
 
