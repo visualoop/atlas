@@ -9,6 +9,7 @@
 import { v } from "convex/values";
 import { internalQuery, internalMutation } from "./_generated/server";
 import { getOrgKey } from "./lib/secretsAccess";
+import { workspaceBrandBlock } from "./lib/workspaceContextAi";
 import type { Doc, Id } from "./_generated/dataModel";
 
 const REMINDER_WINDOW_MS = 65 * 60 * 1000; // 65 minutes = ~1 hour lead
@@ -151,6 +152,7 @@ export const gatherBriefContext = internalQuery({
       contactSummary,
       recentThreads,
       dealNotes,
+      brandBlock: await workspaceBrandBlock(ctx, event.workspaceId),
     };
   },
 });

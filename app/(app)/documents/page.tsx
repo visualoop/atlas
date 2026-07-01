@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, usePaginatedQuery } from "convex/react";
 import Link from "next/link";
 import {
   FileText, Receipt, FileSignature, ClipboardList, Plus, Loader2,
@@ -39,11 +39,19 @@ export default function DocumentsPage() {
   const [kind, setKind] = useState<Kind | null>(null);
   const [newOpen, setNewOpen] = useState(false);
 
-  const documents = useQuery(api.documents.listDocuments, {
-    search: search.trim() || undefined,
-    kind: kind ?? undefined,
-    limit: 200,
-  });
+  const {
+    results: documents,
+    status: pageStatus,
+    loadMore,
+  } = usePaginatedQuery(
+    api.documents.listDocumentsPaginated,
+    { kind: kind ?? undefined },
+    { initialNumItems: 30 },
+  );
+
+  const isInitialLoad = pageStatus === "LoadingFirstPage";
+  const canLoadMore = pageStatus === "CanLoadMore";
+  const isLoadingMore = pageStatus === "LoadingMore";
 
   return (
     <>
@@ -55,7 +63,7 @@ export default function DocumentsPage() {
         searchValue={search}
         onSearch={setSearch}
         primaryAction={{ label: "New document", onClick: () => setNewOpen(true) }}
-        count={documents?.length}
+        count={documents.length}
         filterStrip={
           <FilterChips<Kind>
             options={KIND_FILTERS as unknown as { value: Kind; label: string }[]}
@@ -64,12 +72,26 @@ export default function DocumentsPage() {
           />
         }
       >
-        {documents === undefined ? (
+        {isInitialLoad ? (
           <ListSkeleton />
         ) : documents.length === 0 ? (
           <EmptyState onCreate={() => setNewOpen(true)} kind={kind} />
         ) : (
-          <DocumentsTable documents={documents} />
+          <>
+            <DocumentsTable documents={documents} />
+            {(canLoadMore || isLoadingMore) && (
+              <div className="pt-4 flex justify-center">
+                <button
+                  onClick={() => loadMore(30)}
+                  disabled={isLoadingMore}
+                  className="inline-flex items-center gap-1.5 h-9 px-6 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                >
+                  {isLoadingMore ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                  Load more
+                </button>
+              </div>
+            )}
+          </>
         )}
       </ListLayout>
 

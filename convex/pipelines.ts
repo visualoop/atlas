@@ -18,6 +18,7 @@ import { requireWorkspaceContext } from "./lib/workspaceContext";
 import { recordAudit } from "./lib/authHelpers";
 import { recordTimelineEvent } from "./lib/timeline";
 import { recordAttribution } from "./lib/attribution";
+import { workspaceBrandBlock } from "./lib/workspaceContextAi";
 import type { Doc, Id } from "./_generated/dataModel";
 
 /* ============================================================ */
@@ -568,26 +569,43 @@ export const listRottingDeals = internalQuery({
       stages.set(s._id, { name: s.name, rotDays: s.rotDays });
     }
 
-    const rotting = deals
-      .map((d) => {
-        const stage = stages.get(d.stageId);
-        const rotDays = stage?.rotDays ?? 14;
-        const daysSinceActivity = Math.floor((now - d.lastActivityAt) / oneDay);
-        if (daysSinceActivity < rotDays) return null;
-        return {
-          _id: d._id,
-          workspaceId: d.workspaceId,
-          name: d.name,
-          stageName: stage?.name ?? "unknown",
-          amountCents: d.amountCents.toString(),
-          currency: d.currency,
-          daysSinceActivity,
-          ageDays: Math.floor((now - d._creationTime) / oneDay),
-          notes: undefined as string | undefined,
-        };
-      })
-      .filter((x): x is NonNullable<typeof x> => x !== null)
-      .slice(0, limit);
+    // Cache brand blocks per workspace
+    const brandCache = new Map<string, string>();
+
+    const rotting = await Promise.all(
+      deals
+        .filter((d) => {
+          const stage = stages.get(d.stageId);
+          const rotDays = stage?.rotDays ?? 14;
+          const daysSinceActivity = Math.floor((now - d.lastActivityAt) / oneDay);
+          return daysSinceActivity >= rotDays;
+        })
+        .slice(0, limit)
+        .map(async (d) => {
+          const stage = stages.get(d.stageId);
+          const rotDays = stage?.rotDays ?? 14;
+          const daysSinceActivity = Math.floor((now - d.lastActivityAt) / oneDay);
+
+          let brandBlock = brandCache.get(d.workspaceId as string);
+          if (brandBlock === undefined) {
+            brandBlock = await workspaceBrandBlock(ctx, d.workspaceId);
+            brandCache.set(d.workspaceId as string, brandBlock);
+          }
+
+          return {
+            _id: d._id,
+            workspaceId: d.workspaceId,
+            name: d.name,
+            stageName: stage?.name ?? "unknown",
+            amountCents: d.amountCents.toString(),
+            currency: d.currency,
+            daysSinceActivity,
+            ageDays: Math.floor((now - d._creationTime) / oneDay),
+            notes: undefined as string | undefined,
+            brandBlock,
+          };
+        }),
+    );
 
     return rotting;
   },

@@ -35,7 +35,7 @@ export const classifyRottingDeals = internalAction({
 
       const prompt = `You are a sales coach. Score this deal 0-100 for how likely it is to still close, and give one crisp reason why.
 
-Deal:
+${d.brandBlock ? d.brandBlock + "\n\n" : ""}Deal:
 - Name: ${d.name}
 - Stage: ${d.stageName}
 - Amount: ${d.amountCents} ${d.currency}

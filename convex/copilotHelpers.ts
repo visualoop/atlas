@@ -233,3 +233,36 @@ export const kpiSummary = internalQuery({
     };
   },
 });
+
+
+/* ============================================================ */
+/* Public preflight — used by the CopilotPanel                    */
+/* ============================================================ */
+
+import { query } from "./_generated/server";
+
+export const canRun = query({
+  args: {},
+  handler: async (ctx): Promise<{ ready: boolean; reason?: string }> => {
+    const user = await requireUser(ctx);
+    const profile = await ctx.db
+      .query("userProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .first();
+    if (!profile?.lastActiveOrgId) return { ready: false, reason: "not_in_workspace" };
+
+    // Check for any AI key
+    for (const provider of ["groq", "openrouter"] as const) {
+      try {
+        const k = await getOrgKey(ctx, {
+          organizationId: profile.lastActiveOrgId,
+          provider,
+          reason: "copilot_preflight",
+          actorId: user._id,
+        });
+        if (k.value) return { ready: true };
+      } catch {}
+    }
+    return { ready: false, reason: "no_ai_key" };
+  },
+});

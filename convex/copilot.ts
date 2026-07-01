@@ -378,3 +378,10 @@ async function handleAtlasTool(
     };
   }
 }
+
+
+/* ============================================================ */
+/* Preflight — can the Copilot actually respond?                 */
+/* (Public wrapper lives in copilotHelpers.ts because this        */
+/*  module is "use node".)                                        */
+/* ============================================================ */

@@ -105,12 +105,13 @@ export const generateAiBrief = internalAction({
       contactSummary?: string;
       recentThreads?: string;
       dealNotes?: string;
+      brandBlock?: string;
     } | null = await ctx.runQuery(internal.calendarActionsHelpers.gatherBriefContext, args);
     if (!context || !context.apiKey) return null;
 
     const prompt = `Write a 4-bullet pre-meeting brief for the founder before a scheduled meeting.
 
-Context:
+${context.brandBlock ? context.brandBlock + "\n\n" : ""}Context:
 ${context.contactSummary ? `Contact: ${context.contactSummary}\n` : ""}${context.dealNotes ? `Deal: ${context.dealNotes}\n` : ""}${context.recentThreads ? `Recent messages:\n${context.recentThreads}\n` : ""}
 
 Rules:

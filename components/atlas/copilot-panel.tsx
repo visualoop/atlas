@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useAction } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import Link from "next/link";
 import { Sparkles, Send, X, Trash2, KeyRound, Loader2 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
@@ -29,6 +29,13 @@ export function CopilotPanel({ open, onOpenChange }: Props) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const chat = useAction(api.copilot.chat);
+  const preflight = useQuery(api.copilotHelpers.canRun, open ? {} : "skip");
+
+  // Reflect preflight into needsSetup so open+empty shows the right state
+  useEffect(() => {
+    if (preflight?.reason === "no_ai_key") setNeedsSetup(true);
+    else if (preflight?.ready) setNeedsSetup(false);
+  }, [preflight]);
 
   // Load persisted thread
   useEffect(() => {
