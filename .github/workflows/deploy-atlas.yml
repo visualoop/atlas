@@ -128,20 +128,15 @@ jobs:
           )
           echo "$REMOTE_SCRIPT" | ssh ubuntu@"$IP" 'bash -s'
 
-      - name: Generate admin key if missing
+      - name: Generate admin key
         id: gen_key
         env:
           IP: ${{ secrets.SERVER_IP }}
-          EXISTING_KEY: ${{ secrets.CONVEX_SELF_HOSTED_ADMIN_KEY_ATLAS }}
         run: |
           set -e
-          if [ -n "$EXISTING_KEY" ]; then
-            echo "existing=true" >> "$GITHUB_OUTPUT"
-            echo "Admin key already stored."
-            exit 0
-          fi
-          echo "==> Generating admin key on backend"
-          # Wait for backend pod to accept exec (occasionally races the rollout)
+          # generate_admin_key.sh is deterministic when the instance-secret
+          # is unchanged, so we regenerate each run and use it in-process.
+          # Wait for backend pod to accept exec.
           for i in 1 2 3 4 5 6; do
             if ssh ubuntu@"$IP" "sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl -n atlas exec deploy/convex-backend -- true" >/dev/null 2>&1; then
               break
@@ -151,29 +146,15 @@ jobs:
           done
 
           OUT=$(ssh ubuntu@"$IP" "sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl -n atlas exec deploy/convex-backend -- ./generate_admin_key.sh" 2>&1 || true)
-          echo "==== raw output ===="
-          echo "$OUT"
-          echo "==== end ===="
-
-          # Convex prints something like: "You may want to write this down: <slug>|<hex>"
+          # Convex prints one line with the key: "<slug>|<long hex>"
           KEY=$(echo "$OUT" | grep -Eo '[a-z][a-z0-9-]*\|[a-f0-9]{60,}' | head -1)
           if [ -z "$KEY" ]; then
-            echo "!! Could not extract admin key"
+            echo "!! Could not extract admin key. Raw output:"
+            echo "$OUT"
             exit 1
           fi
           echo "::add-mask::$KEY"
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
-          echo "existing=false" >> "$GITHUB_OUTPUT"
-          echo "Generated admin key (masked)."
-
-      - name: Save admin key as repo secret
-        if: ${{ steps.gen_key.outputs.existing == 'false' && steps.gen_key.outputs.key != '' }}
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT_FOR_SECRETS || secrets.GITHUB_TOKEN }}
-          NEW_KEY: ${{ steps.gen_key.outputs.key }}
-        run: |
-          echo "$NEW_KEY" | gh secret set CONVEX_SELF_HOSTED_ADMIN_KEY_ATLAS --repo ${{ github.repository }}
-          echo "Admin key saved."
 
       - name: Install deps
         run: npm ci
@@ -181,17 +162,13 @@ jobs:
       - name: Push Convex functions
         env:
           CONVEX_SELF_HOSTED_URL: https://api.atlas.blyss.co.ke
-          CONVEX_SELF_HOSTED_ADMIN_KEY: ${{ steps.gen_key.outputs.key || secrets.CONVEX_SELF_HOSTED_ADMIN_KEY_ATLAS }}
+          CONVEX_SELF_HOSTED_ADMIN_KEY: ${{ steps.gen_key.outputs.key }}
         run: |
-          if [ -z "$CONVEX_SELF_HOSTED_ADMIN_KEY" ]; then
-            echo "!! No admin key available"
-            exit 1
-          fi
           # Wait for the ingress TLS cert to issue before deploy
           for i in 1 2 3 4 5 6 7 8 9 10; do
-            code=$(curl -sk -o /dev/null -w "%{http_code}" "$CONVEX_SELF_HOSTED_URL/api/version" || echo "0")
+            code=$(curl -sk -o /dev/null -w "%{http_code}" "$CONVEX_SELF_HOSTED_URL/version" || echo "0")
             echo "api probe attempt $i: HTTP $code"
-            if [ "$code" != "0" ] && [ "$code" != "000" ]; then break; fi
+            if [ "$code" != "000" ] && [ "$code" != "0" ] && [ "$code" != "502" ] && [ "$code" != "503" ]; then break; fi
             sleep 12
           done
           npx convex deploy -y
