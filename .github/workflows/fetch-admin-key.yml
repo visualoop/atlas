@@ -1,0 +1,87 @@
+# ============================================================
+# Fetch Atlas Convex admin key
+#
+# Manual workflow: SSHes to the k3s server, runs
+# `generate_admin_key.sh` on the running Convex backend pod, and
+# writes the key to the workflow run's step summary. Only visible
+# to users with read access to the visualoop/atlas repo.
+#
+# Convex's generate_admin_key.sh is deterministic when the
+# instance-secret is unchanged, so running this is safe — it
+# returns the same key every time (doesn't invalidate anything).
+#
+# Use this key to sign into:
+#   https://convex.atlas.blyss.co.ke  (self-hosted dashboard)
+#
+# Trigger via: gh workflow run "Fetch Atlas Admin Key" --repo visualoop/atlas
+#          or: Actions tab → "Fetch Atlas Admin Key" → Run workflow
+# ============================================================
+name: Fetch Atlas Admin Key
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    name: Fetch admin key
+    runs-on: ubuntu-latest
+    steps:
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        env:
+          IP: ${{ secrets.SERVER_IP }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$IP" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Generate admin key + write to summary
+        env:
+          IP: ${{ secrets.SERVER_IP }}
+        run: |
+          set -e
+
+          # Wait for backend exec (in case it's mid-rollout)
+          for i in 1 2 3 4 5; do
+            if ssh ubuntu@"$IP" "sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl -n atlas exec deploy/convex-backend -- true" >/dev/null 2>&1; then
+              break
+            fi
+            echo "waiting for backend exec ($i/5)..."
+            sleep 6
+          done
+
+          OUT=$(ssh ubuntu@"$IP" "sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl -n atlas exec deploy/convex-backend -- ./generate_admin_key.sh" 2>&1 || true)
+          KEY=$(echo "$OUT" | grep -Eo '[a-z][a-z0-9-]*\|[a-f0-9]{60,}' | head -1)
+
+          if [ -z "$KEY" ]; then
+            echo "!! Could not extract admin key. Raw output:"
+            echo "$OUT"
+            exit 1
+          fi
+
+          # Do NOT mask in this workflow — user needs to copy it.
+          # Only visible to repo-admins in the workflow run UI.
+          {
+            echo "## Atlas Convex admin key"
+            echo ""
+            echo "Sign into **https://convex.atlas.blyss.co.ke** with:"
+            echo ""
+            echo "**Deployment URL:** \`https://api.atlas.blyss.co.ke\`"
+            echo ""
+            echo "**Admin key:**"
+            echo ""
+            echo "\`\`\`"
+            echo "$KEY"
+            echo "\`\`\`"
+            echo ""
+            echo "This key is deterministic — running this workflow again returns the same value as long as the \`CONVEX_INSTANCE_SECRET_ATLAS\` GitHub secret is unchanged."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo ""
+          echo "Admin key written to the workflow run summary."
+          echo "View it at: https://github.com/visualoop/atlas/actions/runs/$GITHUB_RUN_ID"
