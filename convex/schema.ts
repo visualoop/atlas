@@ -426,4 +426,174 @@ export default defineSchema({
     .index("by_workspace", ["workspaceId"])
     .index("by_related", ["relatedToType", "relatedToId"])
     .index("by_uploader", ["uploadedBy"]),
+
+  /* ============================================================ */
+  /* Phase 2 — Email + unified conversations                        */
+  /* ============================================================ */
+
+  // Sender identities per workspace. Each workspace can have multiple
+  // "from" addresses (e.g. justine@blyss.co.ke, sales@omnix.co.ke).
+  senderIdentities: defineTable({
+    workspaceId: v.id("workspaces"),
+    channel: v.union(v.literal("email"), v.literal("whatsapp")),
+    // Email: 'justine@blyss.co.ke'; WhatsApp: Meta phone_number_id
+    address: v.string(),
+    displayName: v.optional(v.string()),          // "Justine Gichana"
+    signature: v.optional(v.any()),               // TipTap JSON, email only
+    dkimVerified: v.optional(v.boolean()),        // From Resend domain check
+    spfVerified: v.optional(v.boolean()),
+    isDefault: v.boolean(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_channel", ["workspaceId", "channel"])
+    .index("by_workspace_address", ["workspaceId", "address"]),
+
+  // Conversations — polymorphic across channels. One row per thread.
+  conversations: defineTable({
+    workspaceId: v.id("workspaces"),
+    channel: v.union(
+      v.literal("email"),
+      v.literal("whatsapp"),
+      v.literal("sms"),
+      v.literal("call"),
+      v.literal("social_comment"),
+    ),
+    // Provider thread identifier (Gmail thread ID, WhatsApp wa_id,
+    // Resend message_id for the first message, etc.). Nullable
+    // because we start threading before knowing external IDs.
+    externalId: v.optional(v.string()),
+    // Email: canonical subject (from the first message). Empty for WA.
+    subject: v.optional(v.string()),
+    participantEmails: v.optional(v.array(v.string())),
+    participantPhones: v.optional(v.array(v.string())),
+    companyId: v.optional(v.id("companies")),
+    contactIds: v.array(v.id("contacts")),
+    state: v.union(
+      v.literal("open"),
+      v.literal("snoozed"),
+      v.literal("archived"),
+      v.literal("pinned"),
+      v.literal("spam"),
+    ),
+    snoozedUntil: v.optional(v.number()),
+    lastMessageAt: v.number(),
+    lastInboundAt: v.optional(v.number()),
+    lastOutboundAt: v.optional(v.number()),
+    unreadCount: v.number(),
+    messageCount: v.number(),
+    aiSummary: v.optional(v.string()),
+    aiSummaryAt: v.optional(v.number()),
+    // Threading key for email: normalized References chain, so replies
+    // that arrive without our internal externalId still find home.
+    threadingKey: v.optional(v.string()),
+    // Sender identity used for outbound in this thread (defaults to
+    // workspace default if null).
+    senderIdentityId: v.optional(v.id("senderIdentities")),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace_state_time", ["workspaceId", "state", "lastMessageAt"])
+    .index("by_workspace_channel_time", ["workspaceId", "channel", "lastMessageAt"])
+    .index("by_workspace_external", ["workspaceId", "channel", "externalId"])
+    .index("by_workspace_threading_key", ["workspaceId", "threadingKey"])
+    .index("by_company", ["companyId"])
+    .searchIndex("search_subject", {
+      searchField: "subject",
+      filterFields: ["workspaceId", "state", "archivedAt"],
+    }),
+
+  // Messages — individual emails / WA messages / comments.
+  messages: defineTable({
+    workspaceId: v.id("workspaces"),
+    conversationId: v.id("conversations"),
+    direction: v.union(v.literal("inbound"), v.literal("outbound")),
+    senderEmail: v.optional(v.string()),
+    senderPhone: v.optional(v.string()),
+    senderName: v.optional(v.string()),
+    recipientEmails: v.optional(v.array(v.string())),      // To
+    recipientCcEmails: v.optional(v.array(v.string())),    // Cc
+    recipientBccEmails: v.optional(v.array(v.string())),   // Bcc, outbound only
+    recipientPhones: v.optional(v.array(v.string())),
+    subject: v.optional(v.string()),
+    bodyText: v.string(),                                   // plaintext
+    bodyHtml: v.optional(v.string()),                       // sanitized HTML for email
+    // Raw provider payload for debugging / re-parsing later.
+    providerPayload: v.optional(v.any()),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("queued"),
+      v.literal("scheduled"),
+      v.literal("sending"),
+      v.literal("sent"),
+      v.literal("delivered"),
+      v.literal("read"),
+      v.literal("failed"),
+      v.literal("received"),
+    ),
+    failureReason: v.optional(v.string()),
+    externalId: v.optional(v.string()),                     // provider message id
+    // RFC 5322 Message-ID for email threading.
+    messageId: v.optional(v.string()),
+    // Reply-to chain — for threading.
+    inReplyTo: v.optional(v.string()),
+    referencesChain: v.optional(v.array(v.string())),
+    aiDrafted: v.boolean(),
+    aiModel: v.optional(v.string()),
+    scheduledFor: v.optional(v.number()),
+    sentAt: v.optional(v.number()),
+    receivedAt: v.optional(v.number()),
+    readAt: v.optional(v.number()),
+    senderIdentityId: v.optional(v.id("senderIdentities")),
+  })
+    .index("by_conversation_time", ["conversationId"])
+    .index("by_workspace_time", ["workspaceId"])
+    .index("by_external", ["externalId"])
+    .index("by_message_id", ["messageId"])
+    .searchIndex("search_body", {
+      searchField: "bodyText",
+      filterFields: ["workspaceId", "conversationId"],
+    }),
+
+  // Attachments — link a Convex _storage id to a message.
+  messageAttachments: defineTable({
+    messageId: v.id("messages"),
+    filename: v.string(),
+    contentType: v.string(),
+    sizeBytes: v.number(),
+    storageId: v.id("_storage"),
+    inline: v.boolean(),                                    // inline images vs true attachments
+    contentId: v.optional(v.string()),                      // for inline <img src="cid:...">
+  })
+    .index("by_message", ["messageId"]),
+
+  // Suppression list — bounces, complaints, hard-unsubscribes.
+  emailSuppressions: defineTable({
+    workspaceId: v.id("workspaces"),
+    email: v.string(),                                       // normalized lowercase
+    reason: v.union(
+      v.literal("bounce_hard"),
+      v.literal("bounce_soft"),
+      v.literal("complaint"),
+      v.literal("unsubscribe"),
+      v.literal("manual"),
+    ),
+    source: v.optional(v.string()),                          // 'resend_webhook' | 'operator' | …
+    addedBy: v.optional(v.id("users")),
+  })
+    .index("by_workspace_email", ["workspaceId", "email"])
+    .index("by_workspace", ["workspaceId"]),
+
+  // Idempotent webhook event log — used by inbound Resend + Paystack + Meta.
+  webhookEvents: defineTable({
+    provider: v.string(),                                    // 'resend' | 'paystack' | 'meta_whatsapp' | 'docuseal'
+    externalId: v.string(),                                  // provider event id
+    organizationId: v.optional(v.id("organizations")),
+    eventType: v.string(),
+    rawPayload: v.any(),
+    receivedAt: v.number(),
+    processedAt: v.optional(v.number()),
+    processingError: v.optional(v.string()),
+  })
+    .index("by_provider_external", ["provider", "externalId"])
+    .index("by_provider_received", ["provider", "receivedAt"]),
 });

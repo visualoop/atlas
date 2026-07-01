@@ -4,6 +4,7 @@ const ITEMS = [
   { href: "/settings/profile", label: "Profile" },
   { href: "/settings/security", label: "Security" },
   { href: "/settings/integrations", label: "Integrations" },
+  { href: "/settings/senders", label: "Senders" },
   { href: "/settings/members", label: "Members" },
 ];
 
