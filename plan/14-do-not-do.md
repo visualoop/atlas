@@ -38,19 +38,21 @@ Hard rules. Each one was hard-won from the brief above. Anything in this file is
 
 ## Architecture bans
 
-- ❌ Prisma (we use Drizzle)
-- ❌ MongoDB / Firebase / Supabase auth (we use Neon Postgres + Better Auth)
+- ❌ Prisma (we use Drizzle) — obsolete (we now use Convex). Do not add Prisma.
+- ❌ MongoDB / Firebase / Supabase auth (we use Convex)
 - ❌ Electron (PWA install instead)
-- ❌ Apollo / GraphQL client (Server Actions + typed RPC)
-- ❌ Redux / Zustand for *server* state (RSC + Server Actions already covers it)
+- ❌ Apollo / GraphQL client (Convex queries are typed RPC)
+- ❌ Redux / Zustand for *server* state (Convex `useQuery` covers it)
 - ❌ MUI / Chakra / Ant Design / Mantine (shadcn only, theme-modified)
 - ❌ jQuery
-- ❌ Raw SQL in route handlers / components (go through Drizzle; FTS hybrid queries are the documented exception)
+- ❌ Raw SQL — no SQL layer, Convex is the DB
 - ❌ `any` in TypeScript (use `unknown` + narrow)
-- ❌ Default exports for components (named exports)
+- ❌ Default exports for Convex functions (named exports only)
 - ❌ Mixing JS and TS (TS strict throughout)
-- ❌ Client-side fetch to our own API (use Server Actions or RSC)
-- ❌ Long-running synchronous work in Server Actions (≥ 2s → pg-boss)
+- ❌ Client-side fetch to our own API (use Convex mutations/queries)
+- ❌ Long-running synchronous work in mutations (≥ 2s → `internalAction` + `scheduler.runAfter`)
+- ❌ **Zapier** — Atlas uses Composio for third-party integrations. Zapier is 2010s no-code and does not fit the AI-agent-native architecture. See `plan/19-integrations.md`.
+- ❌ **Building per-app OAuth flows for long-tail SaaS** — Composio handles GitHub / Slack / HubSpot / Notion / etc. Native OAuth is reserved for the platforms core to Atlas (Meta, LinkedIn, Google, Resend, Paystack, Meta WhatsApp).
 
 ## Data integrity bans
 
@@ -79,7 +81,7 @@ Hard rules. Each one was hard-won from the brief above. Anything in this file is
 - ❌ Master key in any committed file (env only)
 - ❌ Permissive CORS (locked to our own origins)
 
-## AI bans
+## AI bans (extended)
 
 - ❌ Auto-send any AI-generated message (always founder-approval gated)
 - ❌ Auto-charge / auto-pay anything based on AI output
@@ -89,7 +91,9 @@ Hard rules. Each one was hard-won from the brief above. Anything in this file is
 - ❌ Skipping fallback chain
 - ❌ Logging full AI inputs without PII redaction policy applied
 - ❌ Loud "Made with AI" badges on every AI artifact (we make AI invisible by default)
-- ❌ Chatbot sidebar that demands prompting (AI is in the work, not a separate panel)
+- ❌ Chatbot sidebar that demands prompting (AI is in the work, not a separate panel — the ⌘J Copilot is the ONE exception)
+- ❌ Auto-executing Composio tool calls that write to third-party systems without user preview + confirm (read-only tools are OK to auto-invoke; writes gate through the automation preview UI)
+- ❌ Groq Compound calls without a workspace-level daily budget cap (agentic tools use tokens fast)
 
 ## Payment bans
 
@@ -110,6 +114,19 @@ Hard rules. Each one was hard-won from the brief above. Anything in this file is
 - ❌ Loop unsubscribe handling (every email has working unsubscribe)
 - ❌ Bulk-send without rate limit (Meta tier-respecting, Resend IP-respecting)
 - ❌ Track opens / clicks by default for personal correspondence (only campaigns)
+
+## Social publishing bans
+
+- ❌ Auto-publishing without a founder-approval gate (draft → review → send)
+- ❌ Posting the same generic content across all platforms (per-platform variants are the point)
+- ❌ Cross-posting X/TikTok/YouTube via a scraper or unauthorized aggregator
+- ❌ Buying followers / engagement / reviews
+- ❌ Auto-liking / auto-following on any platform (violates ToS; reputation risk)
+- ❌ Fake urgency / stat inflation ("Only 3 spots left!" without truth)
+- ❌ Stock photos without attribution
+- ❌ Marketing content that promises deliverables the studio can't ship
+
+## AI bans (extended)
 
 ## Mobile / responsive bans
 

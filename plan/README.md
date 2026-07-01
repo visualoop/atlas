@@ -26,6 +26,8 @@ This brief is the source of truth. If code disagrees with the brief, the brief w
 | – | [15-phases.md](./15-phases.md) | 12 phases (0–11), each a shippable slice with acceptance criteria |
 | – | [16-skills-and-references.md](./16-skills-and-references.md) | Which skills to invoke when |
 | – | [17-theme-and-shadcn.md](./17-theme-and-shadcn.md) | shadcn install plan, theme tokens, component overrides |
+| – | [18-growth-engine.md](./18-growth-engine.md) | Social publishing · content hub · trend intelligence · attribution · sales enablement · growth loops · demo ops · cash flow · voice/vision |
+| – | [19-integrations.md](./19-integrations.md) | Composio (no Zapier) · automation builder · public API |
 
 ## How to use this brief
 

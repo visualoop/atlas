@@ -333,15 +333,46 @@ Slot in without re-platforming because the foundation handles it:
 | Week | Milestone |
 |---|---|
 | 1 | Atlas shell + auth + theme demo |
-| 3 | Contact graph + universal search demo |
+| 3 | Contact graph + Notes + Tasks + Files + universal ⌘K search |
 | 5 | Email module — Atlas replaces Gmail |
 | 6 | Prospector — first cold leads imported |
 | 8 | WhatsApp module — Atlas replaces WhatsApp Business app |
-| 10 | AI gateway live, all 14 workflows |
-| 11.5 | Pipelines demo with real deals |
-| 13.5 | Documents + PDF + signing |
+| 10 | AI gateway live, all 20+ workflows including Groq Compound + Free Router + voice + vision + image gen |
+| 11.5 | Pipelines demo with real deals + referral tracking |
+| 13.5 | Documents + PDF + signing + Sales Enablement Vault |
 | 15.5 | Payments wired, first invoice paid via Atlas |
 | 17 | Campaigns + sequences |
-| 18.5 | Analytics + morning digest |
-| 20 | Calendar + meeting booker |
-| 21.5 | Atlas v1.0 launches |
+| **19** | **Social Publishing — Facebook + Instagram + LinkedIn from one composer** |
+| **20.5** | **Content & Marketing Hub — Newsletter + landing pages + SEO ideation** |
+| **21.5** | **Trend Intelligence — daily brand + competitor + industry digest** |
+| 23 | Analytics + Attribution + Cash flow + morning digest |
+| 24.5 | Calendar + Meetings + Async Demos + Trial Licenses |
+| 25.5 | Polish + PWA + hardening |
+| 26+ | **Integrations & Automation Builder (Composio) + Public API + ⌘J Copilot** |
+
+**Atlas v1.0 launches by week ~26.**
+
+## Revised phase plan (with growth engine)
+
+The plan expanded from 11 to 14 phases. The core sequence (0–7b) is unchanged. The growth-engine phases (8a, 8b, 8c) slot after Campaigns and before Analytics so all outbound channels exist before we measure them. Automation moves into Phase 12 with Composio as the substrate.
+
+| # | Phase | Weeks | Slice output |
+|---|---|---|---|
+| 0 | Foundation | 0–1 ✅ | Auth, theme, shell, palette |
+| 1 | The graph | 1–3 🟢 | Contacts + Companies + Notes + Tasks + Files + Timeline + Search |
+| 2 | Email | 3–5 | Resend in + out + threaded inbox |
+| 3 | Prospector | 5–6 | Google Maps lead gen |
+| 4 | WhatsApp | 6–8 | Meta Cloud API |
+| 5 | AI gateway + workflows | 8–10 | 10-provider abstraction, all workflows, voice + vision + image gen |
+| 6 | Pipelines + deals | 10–11.5 | Kanban + rotting detection + **referral tracker** |
+| 7a | Documents + signing + **Sales Enablement Vault** | 11.5–13.5 | Proposals, quotes, invoices, PDF, DocuSeal, playbooks, testimonials, case studies |
+| 7b | Payments (Paystack full-stack) | 13.5–15.5 | Subaccounts, links, invoices, subs, transfers, splits |
+| 8 | Campaigns + sequences | 15.5–17 | Email + WhatsApp sequences |
+| **8a** | **Social Publishing** (new) | **17–19** | **FB + IG + LinkedIn composer, scheduler, comment inbox** |
+| **8b** | **Content & Marketing Hub** (new) | **19–20.5** | **Newsletter (Resend Broadcasts), landing pages, lead magnets, SEO ideation** |
+| **8c** | **Trend & Brand Intelligence** (new) | **20.5–21.5** | **Groq Compound-powered daily digest of mentions + competitors + trends** |
+| 9 | Analytics + Attribution + Cash flow | 21.5–23 | Per-workspace dashboards, UTM tracking, multi-touch attribution, cash flow + runway, daily AI digest |
+| 10 | Calendar + Meetings + **Demo Ops** | 23–24.5 | Google Cal sync + booking + async demos + trial licenses |
+| 11 | Polish + PWA + hardening | 24.5–25.5 | PWA install, offline read, Lighthouse ≥ 95, security audit |
+| **12** | **Extensions: Composio integrations, Automation Builder, Public API, ⌘J Copilot** | **25.5+** | **Full agent orchestration; connect to 1000+ apps via Composio; no-code automations; persistent AI copilot** |
+| 12+ | Long-tail extensions | ongoing | Contracts redlining, knowledge base, customer portal, SMS, voice, browser extension, native mobile, AI autonomous agents |

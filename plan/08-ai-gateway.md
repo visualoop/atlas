@@ -82,30 +82,51 @@ Feature code never sees provider keys. Feature code passes `workspaceId` + `feat
 
 ```ts
 type AIFeature =
+  // Messaging
   | "draft_email_reply"
   | "draft_email_compose"
   | "draft_whatsapp_reply"
   | "draft_whatsapp_compose"
   | "summarize_thread"
+  // Lead classification + research
   | "classify_lead_intent"
   | "classify_lead_fit"
   | "score_lead_readiness"
   | "research_company"
+  | "research_web"                        // Groq Compound-powered live web research
   | "enrich_company_from_website"
+  // Digests + forecasting
   | "generate_daily_digest"
   | "generate_weekly_review"
   | "generate_monthly_forecast"
+  // Documents
   | "generate_document"
   | "critique_document"
+  | "generate_case_study"                 // Won deal → case study
+  | "pull_relevant_assets"                // Battlecards + testimonials for a proposal
+  // Meetings
   | "meeting_prep_brief"
   | "meeting_summary_extract"
+  | "transcribe_audio"                    // Groq Whisper (free)
+  // Deal management
   | "detect_rotting_deals"
   | "recommend_next_action"
+  // Campaigns
   | "subject_line_optimizer"
   | "send_time_optimizer"
   | "pre_send_critic"
-  | "ai_qa_search"
+  // Growth engine
+  | "generate_social_post"                // Cross-platform post variants
+  | "suggest_content_ideas"               // From workspace context + trends
+  | "find_trending_topics"                // Groq Compound web scan
+  | "respond_to_review"                   // Draft reply to public review/mention
+  // Vision + image
+  | "extract_from_receipt"                // Gemini vision OCR
+  | "generate_image"                      // Gemini Flash Image / FLUX
+  // Copilot
+  | "ai_qa_search"                        // "who did I forget to reply to?"
   | "memory_fact_extract"
+  // Search
   | "embed_search_index";
 ```
 
@@ -138,7 +159,22 @@ type AIFeature =
 | `memory_fact_extract` | Gemini Flash Lite | Groq Llama 3.3 | – |
 | `embed_search_index` | Gemini text-embedding-004 | Cohere embed-v3 | – |
 
-Rationale unchanged from the original plan — Gemini Flash is the workhorse, Groq is for speed-critical, Cohere only for embeddings + rerank, paid providers only when org explicitly enables them.
+**New features added in the Growth Engine expansion:**
+
+| Feature | Primary | Fallback 1 | Fallback 2 |
+|---|---|---|---|
+| `research_web` | Groq Compound (Beta) | OpenRouter Free | Anthropic (paid) |
+| `find_trending_topics` | Groq Compound (Beta) | OpenRouter Free | – |
+| `generate_social_post` | Gemini 2.5 Flash | Groq Llama 3.3 | OpenRouter Free |
+| `suggest_content_ideas` | Groq Compound (Beta) | Gemini Flash | OpenRouter Free |
+| `respond_to_review` | Groq Compound (Beta) | Gemini Flash | – |
+| `generate_case_study` | Gemini 2.5 Flash + Groq Compound (fact-gathering) | Anthropic | – |
+| `pull_relevant_assets` | Cohere Rerank + Gemini Flash | Groq Llama 3.3 | – |
+| `transcribe_audio` | Groq Whisper large-v3-turbo | – | – |
+| `extract_from_receipt` | Gemini 2.5 Flash (vision) | Groq Llama 4 Scout (vision) | – |
+| `generate_image` | Gemini Flash Image (nano-banana) | Together FLUX schnell | – |
+
+Rationale: the meta-routers (`openrouter/free`, `groq/compound-beta`) are used aggressively where they fit — Compound whenever the task needs live web / agentic tools, Free Router as the universal safety-net fallback.
 
 ## Resolver logic (inside the gateway action)
 
@@ -276,31 +312,48 @@ The gateway has a dispatcher switch on `model.provider`.
 gemini · gemini-2.5-flash      · {chat, tools, json_mode, vision, long_context} · 1M ctx · free
 gemini · gemini-2.5-pro        · {chat, tools, json_mode, vision, long_context} · 1M ctx · free
 gemini · gemini-2.5-flash-lite · {chat, tools, json_mode}                       · 1M ctx · free
+gemini · gemini-2.5-flash-image (nano-banana) · {image_generation}              · -     · free
 gemini · text-embedding-004    · {embedding}                                    · -     · free
 
 groq · llama-3.3-70b-versatile · {chat, tools, json_mode} · 128K ctx · free (30 RPM / 1K RPD)
 groq · llama-3.1-8b-instant    · {chat, tools, json_mode} · 128K ctx · free
 groq · whisper-large-v3-turbo  · {audio_transcription}    · -        · free
+groq · compound-beta           · {chat, tools, web_search, code_exec, browser} · 128K · free  ← AGENT
+groq · compound-mini           · {chat, tools, web_search, code_exec}          · 128K · free  ← lighter agent
 
+openrouter · openrouter/free            · {meta-router — any free model, capability-aware} · free ← META
+openrouter · openrouter/auto            · {meta-router — picks optimal, paid downstream} · paid ← META
 openrouter · deepseek/deepseek-chat-v3:free    · {chat} · 128K · free
 openrouter · qwen/qwen3-235b-a22b:free         · {chat} · 128K · free
 openrouter · meta-llama/llama-4-maverick:free  · {chat} · -    · free
 
-mistral · mistral-small-latest                 · {chat, tools, json_mode} · free (with phone verify)
-mistral · mistral-large-latest                 · {chat, tools, json_mode} · paid
+vertex-model-optimizer · gemini-router  · {meta-router — Pro / Flash / Flash-Lite} · paid   ← META
 
-cohere · embed-v3-multilingual                 · {embedding}       · 1024d · free
-cohere · rerank-v3.5                           · {rerank}          · -     · free
+mistral · mistral-small-latest          · {chat, tools, json_mode} · free (with phone verify)
+mistral · mistral-large-latest          · {chat, tools, json_mode} · paid
 
-cerebras · llama-3.3-70b                       · {chat, tools}     · 128K  · free (fast)
+cohere · embed-v3-multilingual          · {embedding}       · 1024d · free
+cohere · rerank-v3.5                    · {rerank}          · -     · free
 
-github_models · gpt-4o-mini                    · {chat, tools}     · 128K  · free (with GH account)
+cerebras · llama-3.3-70b                · {chat, tools}     · 128K  · free (fast)
 
-together · meta-llama/Llama-3.3-70B            · {chat}            · -     · paid (trial credit)
+github_models · gpt-4o-mini             · {chat, tools}     · 128K  · free (with GH account)
 
-openai · gpt-5                                 · {chat, tools, json_mode, vision} · paid
-anthropic · claude-sonnet-4-5                  · {chat, tools, json_mode, vision} · paid
+together · flux-schnell                 · {image_generation} · -    · free trial
+together · meta-llama/Llama-3.3-70B     · {chat}            · -     · paid (trial credit)
+
+openai · gpt-5                          · {chat, tools, json_mode, vision} · paid
+anthropic · claude-sonnet-4-5           · {chat, tools, json_mode, vision} · paid
 ```
+
+### Intelligent router meta-models
+
+Three "routers" behave like regular models — feature code binds to them and they pick a concrete model per call. All are declared in `aiModels` with `capabilities: ['meta-router', ...]` and a special dispatch in the gateway.
+
+- **`groq/compound-beta`** (free) — agentic system: single API call auto-uses web search + code execution + browser control. Use for `research_web`, `find_trending_topics`, `respond_to_review`, `generate_case_study` (fact-gathering half).
+- **`openrouter/free`** (free) — random-picks a capable free model from OpenRouter's catalog. **The universal safety net** — every feature's fallback chain ends here.
+- **`openrouter/auto`** (paid) — picks the optimal model considering prompt complexity + task type. For orgs that opt into paid.
+- **`vertex-model-optimizer/gemini-router`** (paid) — routes across Gemini Pro / Flash / Flash-Lite by cost-quality preference. Paid via GCP.
 
 ## Settings UI (Org Owner, `/settings/integrations` + `/settings/ai`)
 
