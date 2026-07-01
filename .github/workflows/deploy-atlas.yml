@@ -221,12 +221,12 @@ jobs:
               ")
               PRIV=$(echo "$KEYS" | awk 'BEGIN{f=1} /^---$/{f=0; next} f')
               JWKS_VAL=$(echo "$KEYS" | awk 'BEGIN{f=0} /^---$/{f=1; next} f')
-              npx convex env set JWT_PRIVATE_KEY "$PRIV"
-              npx convex env set JWKS "$JWKS_VAL"
+              npx convex env set -- JWT_PRIVATE_KEY "$PRIV"
+              npx convex env set -- JWKS "$JWKS_VAL"
             fi
           else
-            npx convex env set JWT_PRIVATE_KEY "$JWT_PRIVATE_KEY_ENV"
-            npx convex env set JWKS "$JWKS_ENV"
+            npx convex env set -- JWT_PRIVATE_KEY "$JWT_PRIVATE_KEY_ENV"
+            npx convex env set -- JWKS "$JWKS_ENV"
           fi
 
           echo "==> Env vars now set:"
