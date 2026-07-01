@@ -27,6 +27,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -181,15 +182,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <ChevronDown className="size-3 shrink-0" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="rounded-none min-w-[220px]">
-                    <DropdownMenuLabel className="eyebrow">Workspaces</DropdownMenuLabel>
-                    {workspaces.map((w, i) => (
-                      <DropdownMenuItem key={w._id}>
-                        <span className="flex-1 truncate">{w.name}</span>
-                        {i < 9 && (
-                          <span className="ml-2 eyebrow text-muted-foreground">⌘{i + 1}</span>
-                        )}
-                      </DropdownMenuItem>
-                    ))}
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel className="eyebrow">Workspaces</DropdownMenuLabel>
+                      {workspaces.map((w, i) => (
+                        <DropdownMenuItem key={w._id}>
+                          <span className="flex-1 truncate">{w.name}</span>
+                          {i < 9 && (
+                            <span className="ml-2 eyebrow text-muted-foreground">⌘{i + 1}</span>
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuGroup>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onSelect={() => router.push("/onboarding/new-workspace")}>
                       + New workspace
@@ -223,14 +226,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <span aria-hidden="true">{initials}</span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="rounded-none w-56">
-                <DropdownMenuLabel className="flex flex-col gap-0.5">
-                  <span className="text-sm truncate">{displayName}</span>
-                  {user.email && (
-                    <span className="text-xs text-muted-foreground font-normal truncate">
-                      {user.email}
-                    </span>
-                  )}
-                </DropdownMenuLabel>
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="flex flex-col gap-0.5">
+                    <span className="text-sm truncate">{displayName}</span>
+                    {user.email && (
+                      <span className="text-xs text-muted-foreground font-normal truncate">
+                        {user.email}
+                      </span>
+                    )}
+                  </DropdownMenuLabel>
+                </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => router.push("/settings/profile")}>
                   <UserIcon className="size-3.5 mr-2" />
@@ -305,10 +310,12 @@ function AtlasSidebar({
             align="start"
             side="right"
           >
-            <DropdownMenuLabel className="eyebrow">Organizations</DropdownMenuLabel>
-            {organizations.map((o) => (
-              <DropdownMenuItem key={o._id}>{o.name}</DropdownMenuItem>
-            ))}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="eyebrow">Organizations</DropdownMenuLabel>
+              {organizations.map((o) => (
+                <DropdownMenuItem key={o._id}>{o.name}</DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={onNewOrg}>+ Create organization</DropdownMenuItem>
           </DropdownMenuContent>
