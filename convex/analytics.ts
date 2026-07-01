@@ -492,3 +492,113 @@ function randomShortCode(): string {
   for (let i = 0; i < 7; i++) out += chars.charAt(Math.floor(Math.random() * chars.length));
   return out;
 }
+
+
+/* ============================================================ */
+/* Today page — counts + short lists for the four queue cards    */
+/* ============================================================ */
+
+export const todayQueues = query({
+  args: {},
+  handler: async (ctx): Promise<{
+    repliesWaiting: number;
+    dealsRotting: number;
+    tasksDueToday: number;
+    meetingsToday: number;
+    // Top 3 items per queue for the tagline preview
+    firstReply?: { conversationId: string; subject?: string };
+    firstRottingDeal?: { dealId: string; name: string };
+    firstTask?: { taskId: string; title: string };
+    firstMeeting?: { eventId: string; title: string; startAt: number };
+  }> => {
+    const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "viewer" });
+    const wsId = wsCtx.workspace._id;
+
+    const now = Date.now();
+    const oneDay = 24 * 60 * 60 * 1000;
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Replies waiting — unread open email/whatsapp conversations
+    const unreadConvs = await ctx.db
+      .query("conversations")
+      .withIndex("by_workspace_state_time", (q) => q.eq("workspaceId", wsId).eq("state", "open"))
+      .filter((q) => q.gt(q.field("unreadCount"), 0))
+      .order("desc")
+      .take(20);
+
+    // Deals rotting — open deals whose lastActivityAt is beyond stage.rotDays
+    const openDeals = await ctx.db
+      .query("deals")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", wsId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("archivedAt"), undefined),
+          q.eq(q.field("wonAt"), undefined),
+          q.eq(q.field("lostAt"), undefined),
+        ),
+      )
+      .take(200);
+    const stages = await ctx.db
+      .query("pipelineStages")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", wsId))
+      .collect();
+    const rotDaysByStage = new Map(stages.map((s) => [s._id as unknown as string, s.rotDays ?? 14]));
+    const rotting = openDeals.filter((d) => {
+      const rotDays = rotDaysByStage.get(d.stageId as unknown as string) ?? 14;
+      return (now - d.lastActivityAt) / oneDay >= rotDays;
+    });
+
+    // Tasks due today
+    const tasks = await ctx.db
+      .query("tasks")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", wsId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("archivedAt"), undefined),
+          q.eq(q.field("status"), "open"),
+          q.gte(q.field("dueAt"), startOfDay.getTime()),
+          q.lte(q.field("dueAt"), endOfDay.getTime()),
+        ),
+      )
+      .take(20);
+
+    // Meetings today
+    const events = await ctx.db
+      .query("calendarEvents")
+      .withIndex("by_workspace_start", (q) =>
+        q
+          .eq("workspaceId", wsId)
+          .gte("startAt", startOfDay.getTime())
+          .lte("startAt", endOfDay.getTime()),
+      )
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("archivedAt"), undefined),
+          q.eq(q.field("status"), "scheduled"),
+        ),
+      )
+      .take(20);
+
+    return {
+      repliesWaiting: unreadConvs.length,
+      dealsRotting: rotting.length,
+      tasksDueToday: tasks.length,
+      meetingsToday: events.length,
+      firstReply: unreadConvs[0]
+        ? { conversationId: unreadConvs[0]._id, subject: unreadConvs[0].subject }
+        : undefined,
+      firstRottingDeal: rotting[0]
+        ? { dealId: rotting[0]._id, name: rotting[0].name }
+        : undefined,
+      firstTask: tasks[0] ? { taskId: tasks[0]._id, title: tasks[0].title } : undefined,
+      firstMeeting: events[0]
+        ? { eventId: events[0]._id, title: events[0].title, startAt: events[0].startAt }
+        : undefined,
+    };
+  },
+});
+
+// (end of analytics module)

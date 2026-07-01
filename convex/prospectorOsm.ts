@@ -40,8 +40,9 @@ interface NominatimResult {
   lon: string;
   display_name: string;
   name?: string;
-  class?: string;
+  category?: string;                          // v2 API — was `class` in v1
   type?: string;
+  addresstype?: string;
   address?: {
     house_number?: string;
     road?: string;
@@ -52,22 +53,26 @@ interface NominatimResult {
     county?: string;
     country?: string;
     country_code?: string;
+    amenity?: string;
+    shop?: string;
   };
   extratags?: {
     phone?: string;
     website?: string;
     opening_hours?: string;
     email?: string;
-  };
+    "contact:phone"?: string;
+    "contact:website"?: string;
+  } | null;
   importance?: number;
 }
 
-const CATEGORY_TO_OSM: Record<string, string> = {
+const CATEGORY_QUERIES: Record<string, string> = {
   restaurant: "restaurant",
   retail: "shop",
   services: "office",
-  health: "clinic",
-  auto: "car_repair",
+  health: "hospital",
+  auto: "car",
   hotel: "hotel",
   office: "office",
 };
@@ -102,10 +107,15 @@ export const searchNearbyOsm = action({
     }>;
     error?: string;
   }> => {
-    // Rough conversion: 1 degree lat ≈ 111km, so radiusMeters/111000 = deg
-    const degLat = args.radiusMeters / 111_000;
+    // Rough conversion: 1 degree lat ≈ 111km, so radiusMeters/111000 = deg.
+    // Nominatim's tagged POI density is much sparser than Google's — at
+    // small zooms we get zero results. Force a minimum 3km radius so
+    // even a very-zoomed-in browser view still queries a useful area.
+    const effectiveRadius = Math.max(3000, args.radiusMeters);
+    const degLat = effectiveRadius / 111_000;
     const degLng =
-      args.radiusMeters / (111_000 * Math.cos((args.latitude * Math.PI) / 180));
+      effectiveRadius / (111_000 * Math.cos((args.latitude * Math.PI) / 180));
+    // Nominatim viewbox order: left,top,right,bottom (west, north, east, south)
     const viewbox = [
       args.longitude - degLng,
       args.latitude + degLat,
@@ -113,10 +123,11 @@ export const searchNearbyOsm = action({
       args.latitude - degLat,
     ].join(",");
 
-    const osmCategory = args.category ? CATEGORY_TO_OSM[args.category] : "shop";
+    const searchTerm =
+      (args.category && CATEGORY_QUERIES[args.category]) || "shop";
 
     const params = new URLSearchParams({
-      q: `[${osmCategory}]`,
+      q: searchTerm,
       format: "jsonv2",
       viewbox,
       bounded: "1",
@@ -141,24 +152,39 @@ export const searchNearbyOsm = action({
         const city =
           r.address?.city ?? r.address?.town ?? r.address?.village ?? r.address?.county;
         const addr = [r.address?.road, city, r.address?.country].filter(Boolean).join(", ");
+        // Nominatim omits `name` for some entries; fall back to address amenity tag
+        // or the first segment of display_name.
+        const name =
+          r.name ||
+          r.address?.amenity ||
+          r.address?.shop ||
+          r.display_name.split(",")[0] ||
+          "(unnamed)";
+        const phone = r.extratags?.phone ?? r.extratags?.["contact:phone"];
+        const website = r.extratags?.website ?? r.extratags?.["contact:website"];
 
         return {
           googlePlaceId: `osm-${r.osm_type}-${r.osm_id}`,
-          name: r.name ?? r.display_name.split(",")[0] ?? "(unnamed)",
+          name,
           address: addr || r.display_name,
           latitude: parseFloat(r.lat),
           longitude: parseFloat(r.lon),
-          phoneRaw: r.extratags?.phone,
-          website: r.extratags?.website,
+          phoneRaw: phone,
+          website,
           googleMapsUri: `https://www.openstreetmap.org/${r.osm_type}/${r.osm_id}`,
-          types: [r.class, r.type].filter((v): v is string => Boolean(v)),
+          types: [r.category, r.type, r.addresstype].filter(
+            (v): v is string => typeof v === "string" && v.length > 0,
+          ),
           rating: undefined,
           ratingCount: undefined,
           businessStatus: "OPERATIONAL",
         };
       });
 
-      return { places };
+      // Filter out entries where the name is just the display_name (no useful name)
+      const usable = places.filter((p) => p.name && p.name !== "(unnamed)" && p.name.length > 1);
+
+      return { places: usable };
     } catch (err) {
       return { places: [], error: err instanceof Error ? err.message : "Network error" };
     }
