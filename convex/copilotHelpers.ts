@@ -188,22 +188,113 @@ export const searchDeals = internalQuery({
 export const recentConversations = internalQuery({
   args: { workspaceId: v.id("workspaces"), limit: v.number() },
   handler: async (ctx, args) => {
-    const rows = await ctx.db
+    // Return conversations regardless of state — the AI can filter itself.
+    // Sort by lastMessageAt desc.
+    const all = await ctx.db
       .query("conversations")
-      .withIndex("by_workspace_state_time", (q) =>
-        q.eq("workspaceId", args.workspaceId).eq("state", "open"),
-      )
+      .withIndex("by_workspace_channel_time", (q) => q.eq("workspaceId", args.workspaceId))
       .order("desc")
-      .take(args.limit);
+      .take(args.limit * 3);
+    const rows = all
+      .filter((c) => c.archivedAt === undefined)
+      .sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0))
+      .slice(0, args.limit);
     return rows.map((c) => ({
       id: c._id,
       channel: c.channel,
+      state: c.state,
       subject: c.subject,
       participants: c.channel === "email" ? c.participantEmails : c.participantPhones,
       unreadCount: c.unreadCount,
       lastMessageAt: c.lastMessageAt,
+      lastMessageIso: c.lastMessageAt ? new Date(c.lastMessageAt).toISOString() : undefined,
       aiSummary: c.aiSummary,
     }));
+  },
+});
+
+/**
+ * Recent messages across every conversation. Used by "who did I speak to
+ * yesterday?" — walks the messages table sorted by _creationTime desc,
+ * hydrates the conversation subject + contact link if available.
+ */
+export const recentMessages = internalQuery({
+  args: {
+    workspaceId: v.id("workspaces"),
+    limit: v.number(),
+    sinceHoursAgo: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const cutoff =
+      typeof args.sinceHoursAgo === "number"
+        ? now - args.sinceHoursAgo * 60 * 60 * 1000
+        : 0;
+    const msgs = await ctx.db
+      .query("messages")
+      .withIndex("by_workspace_time", (q) => q.eq("workspaceId", args.workspaceId))
+      .order("desc")
+      .take(args.limit);
+    const filtered = msgs.filter((m) => m._creationTime >= cutoff);
+
+    return await Promise.all(
+      filtered.map(async (m) => {
+        const conv = await ctx.db.get(m.conversationId);
+        return {
+          id: m._id,
+          direction: m.direction,
+          channel: conv?.channel ?? "unknown",
+          senderEmail: m.senderEmail,
+          senderPhone: m.senderPhone,
+          subject: m.subject ?? conv?.subject,
+          preview: m.bodyText.slice(0, 200),
+          conversationId: m.conversationId,
+          at: new Date(m._creationTime).toISOString(),
+        };
+      }),
+    );
+  },
+});
+
+/**
+ * Recent timeline events across every subject — powers broader
+ * "what happened yesterday" / "any deals moved last week" queries.
+ */
+export const recentTimelineEvents = internalQuery({
+  args: {
+    workspaceId: v.id("workspaces"),
+    limit: v.number(),
+    sinceHoursAgo: v.optional(v.number()),
+    eventTypes: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const cutoff =
+      typeof args.sinceHoursAgo === "number"
+        ? now - args.sinceHoursAgo * 60 * 60 * 1000
+        : 0;
+    const rows = await ctx.db
+      .query("timelineEvents")
+      .withIndex("by_workspace_occurred", (q) =>
+        q.eq("workspaceId", args.workspaceId).gt("occurredAt", cutoff),
+      )
+      .order("desc")
+      .take(args.limit);
+    return rows
+      .filter(
+        (r) =>
+          !args.eventTypes ||
+          args.eventTypes.length === 0 ||
+          args.eventTypes.includes(r.eventType),
+      )
+      .map((r) => ({
+        id: r._id,
+        eventType: r.eventType,
+        subjectType: r.subjectType,
+        subjectId: r.subjectId,
+        at: new Date(r.occurredAt).toISOString(),
+        payload: r.payload,
+      }));
   },
 });
 

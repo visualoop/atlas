@@ -63,7 +63,10 @@ function buildSystemPrompt(brand: {
   coreValues?: string;
   pricingSummary?: string;
 } | null): string {
-  if (!brand) return BASE_SYSTEM;
+  const now = new Date();
+  const dateLine = `Current UTC time: ${now.toISOString()}. When user says "yesterday" pass sinceHoursAgo=48 to be safe, "last week" pass 168, "today" pass 24.`;
+
+  if (!brand) return `${BASE_SYSTEM}\n\n${dateLine}`;
   const parts: string[] = [BASE_SYSTEM, "", "## About this workspace"];
   if (brand.workspaceName) parts.push(`Name: ${brand.workspaceName}`);
   if (brand.website) parts.push(`Website: ${brand.website}`);
@@ -74,6 +77,7 @@ function buildSystemPrompt(brand: {
   if (brand.pricingSummary) parts.push(`Pricing: ${brand.pricingSummary}`);
   if (brand.coreValues) parts.push(`Values: ${brand.coreValues}`);
   if (brand.brandVoice) parts.push(`Brand voice: ${brand.brandVoice}`);
+  parts.push("", dateLine);
   return parts.join("\n");
 }
 
@@ -127,11 +131,44 @@ const ATLAS_TOOLS = [
     type: "function",
     function: {
       name: "list_recent_conversations",
-      description: "List the most recent unread email + WhatsApp threads in the inbox.",
+      description: "List the most recent email + WhatsApp threads in the inbox, regardless of state (open/snoozed/archived). Sorted by last message time desc.",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: { type: "number", description: "Max results (default 10)" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_recent_messages",
+      description: "Every message (email + WhatsApp, inbound + outbound) in the last N hours, sorted by time desc. Use to answer 'who did I speak to yesterday' — pass sinceHoursAgo: 48. Returns sender, subject, and 200-char preview.",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: { type: "number", description: "Max results (default 20)" },
+          sinceHoursAgo: { type: "number", description: "Only messages from this many hours ago. E.g. 24 for last day, 168 for last week." },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_recent_activity",
+      description: "Recent workspace-wide activity across every entity — deals moved, contacts created, invoices sent, tasks completed, meetings booked. Best for open-ended 'what happened recently' questions.",
       parameters: {
         type: "object",
         properties: {
           limit: { type: "number" },
+          sinceHoursAgo: { type: "number" },
+          eventTypes: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional filter: only these event types (e.g. ['deal_won','email_received']).",
+          },
         },
       },
     },
@@ -449,6 +486,21 @@ async function handleAtlasTool(
         return await ctx.runQuery(internal.copilotHelpers.recentConversations, {
           workspaceId,
           limit: Number(parsed.limit ?? 10),
+        });
+      case "list_recent_messages":
+        return await ctx.runQuery(internal.copilotHelpers.recentMessages, {
+          workspaceId,
+          limit: Number(parsed.limit ?? 20),
+          sinceHoursAgo:
+            typeof parsed.sinceHoursAgo === "number" ? parsed.sinceHoursAgo : undefined,
+        });
+      case "list_recent_activity":
+        return await ctx.runQuery(internal.copilotHelpers.recentTimelineEvents, {
+          workspaceId,
+          limit: Number(parsed.limit ?? 25),
+          sinceHoursAgo:
+            typeof parsed.sinceHoursAgo === "number" ? parsed.sinceHoursAgo : undefined,
+          eventTypes: Array.isArray(parsed.eventTypes) ? (parsed.eventTypes as string[]) : undefined,
         });
       case "workspace_kpis":
         return await ctx.runQuery(internal.copilotHelpers.kpiSummary, {

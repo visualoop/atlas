@@ -68,6 +68,7 @@ const integrationProvider = v.union(
   v.literal("cloudflare_email_routing"),
   // Maps + lead gen
   v.literal("google_maps_places"),
+  v.literal("google_maps_browser"),
   // Payments
   v.literal("paystack"),
   // Documents

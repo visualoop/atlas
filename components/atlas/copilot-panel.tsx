@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useAction, useQuery } from "convex/react";
 import Link from "next/link";
-import { Sparkles, Send, X, Trash2, KeyRound, Loader2 } from "lucide-react";
+import { Sparkles, Send, X, Trash2, KeyRound, Loader2, Plus } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -150,10 +150,21 @@ export function CopilotPanel({ open, onOpenChange }: Props) {
             ⌘J
           </span>
           <button
+            onClick={() => {
+              setMessages([]);
+              setInput("");
+              inputRef.current?.focus();
+            }}
+            title="New chat"
+            className="ml-auto size-8 grid place-items-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
+          >
+            <Plus className="size-3.5" />
+          </button>
+          <button
             onClick={clearThread}
             disabled={messages.length === 0}
             title="Clear thread"
-            className="ml-auto size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
+            className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
           >
             <Trash2 className="size-3.5" />
           </button>
