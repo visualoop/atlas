@@ -1408,4 +1408,190 @@ export default defineSchema({
     .index("by_post_time", ["postId", "receivedAt"])
     .index("by_workspace_time", ["workspaceId", "receivedAt"])
     .index("by_external", ["externalCommentId"]),
+
+  /* ============================================================ */
+  /* Phase 8b — Content & Marketing Hub                             */
+  /* ============================================================ */
+
+  // Newsletter audiences — a saved list of email subscribers with tags.
+  // Different from campaignRecipients: audiences persist across broadcasts.
+  audiences: defineTable({
+    workspaceId: v.id("workspaces"),
+    name: v.string(),                                        // 'Weekly newsletter' | 'Product updates'
+    description: v.optional(v.string()),
+    // Optional external mirror (Resend Audience id) — one-way sync when set
+    resendAudienceId: v.optional(v.string()),
+    memberCount: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_resend", ["workspaceId", "resendAudienceId"]),
+
+  audienceMembers: defineTable({
+    workspaceId: v.id("workspaces"),
+    audienceId: v.id("audiences"),
+    email: v.string(),                                       // normalized lowercase
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    // Source contact if this member is also in the CRM
+    contactId: v.optional(v.id("contacts")),
+    subscribedAt: v.number(),
+    unsubscribedAt: v.optional(v.number()),
+    // For double opt-in
+    confirmedAt: v.optional(v.number()),
+    tags: v.array(v.string()),
+    // Freeform metadata from signup form
+    meta: v.optional(v.any()),
+  })
+    .index("by_audience", ["audienceId"])
+    .index("by_audience_email", ["audienceId", "email"])
+    .index("by_workspace_email", ["workspaceId", "email"])
+    .index("by_workspace_contact", ["workspaceId", "contactId"]),
+
+  // Broadcasts — one-off newsletter sends to an audience (vs. campaigns
+  // which drip through steps).
+  broadcasts: defineTable({
+    workspaceId: v.id("workspaces"),
+    name: v.string(),                                        // internal label
+    audienceId: v.id("audiences"),
+    fromIdentityId: v.optional(v.id("senderIdentities")),
+    subject: v.string(),
+    // React Email JSX rendered to HTML — for MVP we store TipTap JSON
+    // + rendered HTML side by side (like documents).
+    body: v.any(),
+    bodyHtml: v.optional(v.string()),
+    bodyText: v.optional(v.string()),
+    // Preheader text — appears in the inbox preview after the subject
+    preheader: v.optional(v.string()),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("scheduled"),
+      v.literal("sending"),
+      v.literal("sent"),
+      v.literal("failed"),
+      v.literal("cancelled"),
+    ),
+    scheduledFor: v.optional(v.number()),
+    sentAt: v.optional(v.number()),
+    // Aggregate stats
+    recipientCount: v.number(),
+    sentCount: v.number(),
+    openCount: v.number(),
+    clickCount: v.number(),
+    unsubscribeCount: v.number(),
+    // External Resend id
+    resendBroadcastId: v.optional(v.string()),
+    ownerId: v.id("users"),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace_time", ["workspaceId"])
+    .index("by_workspace_status", ["workspaceId", "status"])
+    .index("by_workspace_scheduled", ["workspaceId", "status", "scheduledFor"])
+    .searchIndex("search_subject", {
+      searchField: "subject",
+      filterFields: ["workspaceId", "status", "archivedAt"],
+    }),
+
+  // Landing pages — public, workspace-scoped, slug-addressed.
+  // Rendered at /p/<workspaceSlug>/<pageSlug>. Kinds: product-launch,
+  // waitlist, event, lead-magnet, custom.
+  landingPages: defineTable({
+    workspaceId: v.id("workspaces"),
+    slug: v.string(),                                        // 'omnix-launch' — unique per workspace
+    kind: v.union(
+      v.literal("product_launch"),
+      v.literal("waitlist"),
+      v.literal("event"),
+      v.literal("lead_magnet"),
+      v.literal("custom"),
+    ),
+    title: v.string(),
+    subtitle: v.optional(v.string()),
+    // TipTap JSON for the body
+    body: v.any(),
+    bodyText: v.string(),
+    // Hero image + optional social preview
+    heroFileId: v.optional(v.id("files")),
+    ogImageFileId: v.optional(v.id("files")),
+    // Form config — what fields to capture on signup
+    formFields: v.optional(v.array(v.string())),             // ['email','firstName','lastName','company']
+    // Optional lead-magnet: file to deliver after signup
+    leadMagnetFileId: v.optional(v.id("files")),
+    // Optional linked audience — signups get added here
+    audienceId: v.optional(v.id("audiences")),
+    // Default tags applied to created contacts
+    defaultTags: v.optional(v.array(v.string())),
+    // SEO
+    metaDescription: v.optional(v.string()),
+    // Visitor + signup aggregates
+    viewCount: v.number(),
+    signupCount: v.number(),
+    // Publication
+    status: v.union(
+      v.literal("draft"),
+      v.literal("published"),
+      v.literal("archived"),
+    ),
+    publishedAt: v.optional(v.number()),
+    // Ownership
+    ownerId: v.id("users"),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_slug", ["workspaceId", "slug"])
+    .index("by_workspace_status", ["workspaceId", "status"])
+    .index("by_workspace_kind", ["workspaceId", "kind"]),
+
+  // Signup events — one row per submission on a landing page.
+  // Distinct from audienceMembers so we can debug abuse.
+  landingSignups: defineTable({
+    workspaceId: v.id("workspaces"),
+    pageId: v.id("landingPages"),
+    email: v.string(),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    company: v.optional(v.string()),
+    meta: v.optional(v.any()),
+    ip: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
+    // Was a contact created / found?
+    contactId: v.optional(v.id("contacts")),
+    // Was an audience member row created?
+    audienceMemberId: v.optional(v.id("audienceMembers")),
+    // Did the lead-magnet email fire?
+    leadMagnetDelivered: v.boolean(),
+    receivedAt: v.number(),
+  })
+    .index("by_page_time", ["pageId", "receivedAt"])
+    .index("by_workspace_time", ["workspaceId", "receivedAt"])
+    .index("by_workspace_email", ["workspaceId", "email"]),
+
+  // SEO idea backlog — generated by Groq Compound daily; founder
+  // triages into content pieces.
+  seoIdeas: defineTable({
+    workspaceId: v.id("workspaces"),
+    title: v.string(),                                       // headline candidate
+    angle: v.string(),                                       // 1-line pitch
+    keywords: v.array(v.string()),
+    competitorRefs: v.optional(v.array(v.string())),         // urls that inspired this
+    productId: v.optional(v.string()),                       // 'omnix' | 'blyss_studio' | 'marketplace'
+    priority: v.optional(v.number()),                        // 0-100 AI-assigned
+    status: v.union(
+      v.literal("new"),
+      v.literal("shortlisted"),
+      v.literal("drafting"),
+      v.literal("published"),
+      v.literal("dismissed"),
+    ),
+    source: v.string(),                                       // 'ai_daily' | 'manual'
+    generatedAt: v.number(),
+    // If founder acted on it — link to the resulting doc/broadcast/post
+    linkedDocumentId: v.optional(v.id("documents")),
+    linkedBroadcastId: v.optional(v.id("broadcasts")),
+    linkedSocialPostId: v.optional(v.id("socialPosts")),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace_status", ["workspaceId", "status"])
+    .index("by_workspace_time", ["workspaceId", "generatedAt"])
+    .index("by_workspace_priority", ["workspaceId", "priority"]),
 });

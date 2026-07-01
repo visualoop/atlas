@@ -16,6 +16,7 @@ import {
   Sparkles,
   Megaphone,
   Share2,
+  BookOpen,
   BarChart3,
   Calendar,
   Settings,
@@ -49,6 +50,7 @@ const SIDEBAR_ITEMS = [
   { href: "/vault", icon: Sparkles, label: "Vault", key: "v" },
   { href: "/campaigns", icon: Megaphone, label: "Campaigns", key: "b" },
   { href: "/social", icon: Share2, label: "Social", key: "s" },
+  { href: "/content", icon: BookOpen, label: "Content", key: "n" },
   { href: "/analytics", icon: BarChart3, label: "Analytics", key: "a" },
   { href: "/calendar", icon: Calendar, label: "Calendar", key: "k" },
 ];
