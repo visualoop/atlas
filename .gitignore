@@ -42,4 +42,4 @@ next-env.d.ts
 
 # Convex
 /.convex/local/
-/convex/_generated/
+# convex/_generated/ is committed so Vercel can typecheck without Convex creds.
