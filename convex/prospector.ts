@@ -17,6 +17,7 @@ import { mutation, query, internalMutation } from "./_generated/server";
 import { requireWorkspaceContext } from "./lib/workspaceContext";
 import { recordAudit } from "./lib/authHelpers";
 import { recordTimelineEvent } from "./lib/timeline";
+import { getOrgKey } from "./lib/secretsAccess";
 import type { Doc, Id } from "./_generated/dataModel";
 
 /* ============================================================ */
@@ -434,7 +435,6 @@ export const importMapPlace = internalMutation({
   },
   handler: async (ctx, args) => {
     // Import here (inside handler) to avoid circular imports
-    const { requireWorkspaceContext } = await import("./lib/workspaceContext");
     const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
 
     // Enforce daily cap
@@ -521,7 +521,6 @@ export const importMapPlace = internalMutation({
       ownerId: wsCtx.user._id,
     });
 
-    const { recordTimelineEvent } = await import("./lib/timeline");
     await recordTimelineEvent(ctx, {
       workspaceId: wsCtx.workspace._id,
       eventType: "company_created",
@@ -543,8 +542,6 @@ export const importMapPlace = internalMutation({
 export const getMapsClientKey = query({
   args: {},
   handler: async (ctx): Promise<{ key: string | null }> => {
-    const { requireWorkspaceContext } = await import("./lib/workspaceContext");
-    const { getOrgKey } = await import("./lib/secretsAccess");
     const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
     try {
       const k = await getOrgKey(ctx, {
@@ -573,7 +570,6 @@ export const checkMapPlaces = query({
     imported: string[];              // already in `companies`
     suppressed: string[];            // in `prospectorSuppressions`
   }> => {
-    const { requireWorkspaceContext } = await import("./lib/workspaceContext");
     const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
     const wsId = wsCtx.workspace._id;
 
@@ -617,7 +613,6 @@ export const getImportBudget = query({
     usedToday: number;
     remaining: number;
   }> => {
-    const { requireWorkspaceContext } = await import("./lib/workspaceContext");
     const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
     const wsId = wsCtx.workspace._id;
 
@@ -692,8 +687,6 @@ export const bulkImportMapPlaces = mutation({
     capReached: boolean;
     remainingBudget: number;
   }> => {
-    const { requireWorkspaceContext } = await import("./lib/workspaceContext");
-    const { recordTimelineEvent } = await import("./lib/timeline");
     const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
     const wsId = wsCtx.workspace._id;
 
