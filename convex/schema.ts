@@ -68,6 +68,8 @@ const integrationProvider = v.union(
   v.literal("paystack"),
   // Documents
   v.literal("docuseal"),
+  // Automation hub
+  v.literal("composio"),
 );
 
 /* ------------------------------------------------------------------ */

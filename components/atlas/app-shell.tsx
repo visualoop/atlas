@@ -16,6 +16,7 @@ import {
   Megaphone,
   Share2,
   BookOpen,
+  Zap,
   TrendingUp,
   BarChart3,
   Calendar,
@@ -81,6 +82,7 @@ const WORK_NAV: NavItem[] = [
   { href: "/documents", icon: FileText, label: "Documents", key: "d" },
   { href: "/vault", icon: Sparkles, label: "Vault", key: "v" },
   { href: "/calendar", icon: Calendar, label: "Calendar", key: "k" },
+  { href: "/automations", icon: Zap, label: "Automations", key: "u" },
 ];
 
 const GROWTH_NAV: NavItem[] = [

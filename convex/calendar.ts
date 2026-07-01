@@ -258,6 +258,34 @@ export const createMeetingLink = mutation({
   },
 });
 
+export const updateMeetingLink = mutation({
+  args: {
+    id: v.id("meetingLinks"),
+    patch: v.object({
+      title: v.optional(v.string()),
+      description: v.optional(v.string()),
+      durationMinutes: v.optional(v.number()),
+      availability: v.optional(v.array(v.any())),
+      bufferMinutesBefore: v.optional(v.number()),
+      bufferMinutesAfter: v.optional(v.number()),
+      minLeadHours: v.optional(v.number()),
+      maxLeadDays: v.optional(v.number()),
+      timezone: v.optional(v.string()),
+      location: v.optional(v.string()),
+      conferenceUrl: v.optional(v.string()),
+      active: v.optional(v.boolean()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
+    const link = await ctx.db.get(args.id);
+    if (!link || link.workspaceId !== wsCtx.workspace._id) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Meeting link not found." });
+    }
+    await ctx.db.patch(args.id, args.patch);
+  },
+});
+
 export const deactivateMeetingLink = mutation({
   args: { id: v.id("meetingLinks") },
   handler: async (ctx, { id }) => {

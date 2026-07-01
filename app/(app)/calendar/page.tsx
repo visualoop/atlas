@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   Plus, Loader2, Calendar as CalendarIcon, Clock, MapPin, Video,
   ExternalLink, Copy, Check, X, ChevronLeft, ChevronRight, Key,
+  Settings, Save,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
@@ -346,10 +347,12 @@ function MeetingLinkRow({
   link: l, wsSlug,
 }: { link: Doc<"meetingLinks">; wsSlug: string }) {
   const [copied, setCopied] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const publicUrl = wsSlug
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/book/${wsSlug}/${l.slug}`
     : "";
   return (
+    <>
     <li className="px-4 py-3 flex items-start gap-4">
       <div className="flex-1 min-w-0 space-y-1">
         <p className="text-sm font-medium">{l.title}</p>
@@ -360,10 +363,19 @@ function MeetingLinkRow({
           <span>{l.durationMinutes}min</span>
           <span>{l.timezone}</span>
           <span>Buffer +{l.bufferMinutesAfter}min</span>
+          <span>{Array.isArray(l.availability) ? l.availability.length : 0} rules</span>
         </div>
       </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          onClick={() => setEditOpen(true)}
+          title="Edit availability"
+          className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        >
+          <Settings className="size-3.5" />
+        </button>
       {wsSlug && (
-        <div className="flex items-center gap-1 shrink-0">
+        <>
           <button
             onClick={() => {
               navigator.clipboard.writeText(publicUrl);
@@ -385,9 +397,12 @@ function MeetingLinkRow({
           >
             <ExternalLink className="size-3.5" />
           </a>
-        </div>
+        </>
       )}
+      </div>
     </li>
+    {editOpen && <AvailabilityEditSheet link={l} onClose={() => setEditOpen(false)} />}
+    </>
   );
 }
 
@@ -687,4 +702,256 @@ function defaultDatetimeLocal(ms: number): string {
   d.setSeconds(0, 0);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+
+/* ================================================================== */
+/* Availability rule editor                                             */
+/* ================================================================== */
+
+interface AvailabilityRule {
+  weekday: number;   // 0=Sunday, 6=Saturday
+  startMin: number;  // 0-1440
+  endMin: number;
+}
+
+const WEEKDAYS = [
+  { n: 1, label: "Mon" },
+  { n: 2, label: "Tue" },
+  { n: 3, label: "Wed" },
+  { n: 4, label: "Thu" },
+  { n: 5, label: "Fri" },
+  { n: 6, label: "Sat" },
+  { n: 0, label: "Sun" },
+];
+
+function AvailabilityEditSheet({
+  link, onClose,
+}: { link: Doc<"meetingLinks">; onClose: () => void }) {
+  const update = useMutation(api.calendar.updateMeetingLink);
+  const [rules, setRules] = useState<AvailabilityRule[]>(
+    () =>
+      (Array.isArray(link.availability) ? link.availability : []).map(
+        (r) => r as AvailabilityRule,
+      ),
+  );
+  const [duration, setDuration] = useState(link.durationMinutes);
+  const [bufferAfter, setBufferAfter] = useState(link.bufferMinutesAfter);
+  const [minLeadHours, setMinLeadHours] = useState(link.minLeadHours);
+  const [maxLeadDays, setMaxLeadDays] = useState(link.maxLeadDays);
+  const [saving, setSaving] = useState(false);
+
+  function addRule(weekday: number) {
+    setRules((r) => [
+      ...r,
+      { weekday, startMin: 9 * 60, endMin: 17 * 60 },
+    ]);
+  }
+
+  function removeRule(index: number) {
+    setRules((r) => r.filter((_, i) => i !== index));
+  }
+
+  function updateRule(index: number, patch: Partial<AvailabilityRule>) {
+    setRules((r) => r.map((rule, i) => (i === index ? { ...rule, ...patch } : rule)));
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      await update({
+        id: link._id,
+        patch: {
+          durationMinutes: duration,
+          bufferMinutesAfter: bufferAfter,
+          minLeadHours,
+          maxLeadDays,
+          availability: rules.sort((a, b) => a.weekday - b.weekday || a.startMin - b.startMin),
+        },
+      });
+      toast.success("Availability saved.");
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Group rules by weekday
+  const rulesByDay = new Map<number, Array<{ rule: AvailabilityRule; index: number }>>();
+  rules.forEach((rule, index) => {
+    const list = rulesByDay.get(rule.weekday) ?? [];
+    list.push({ rule, index });
+    rulesByDay.set(rule.weekday, list);
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end pointer-events-none">
+      <div
+        onClick={() => !saving && onClose()}
+        className="absolute inset-0 bg-background/60 backdrop-blur-sm pointer-events-auto"
+      />
+      <aside
+        role="dialog"
+        aria-label="Availability rules"
+        className="relative pointer-events-auto bg-background border-l border-border w-full max-w-lg h-full flex flex-col shadow-2xl"
+      >
+        <header className="h-14 border-b border-border flex items-center px-4 gap-3 shrink-0">
+          <div className="min-w-0 flex-1">
+            <p className="eyebrow font-mono">Meeting link</p>
+            <p className="text-sm font-medium truncate">/{link.slug}</p>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            aria-label="Close"
+          >
+            <X className="size-4" />
+          </button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          {/* Duration + buffer + booking window */}
+          <div className="grid grid-cols-2 gap-3">
+            <label className="space-y-1">
+              <span className="eyebrow">Duration (min)</span>
+              <input
+                type="number"
+                min={5}
+                step={5}
+                value={duration}
+                onChange={(e) => setDuration(Math.max(5, Number(e.target.value)))}
+                className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="eyebrow">Buffer after (min)</span>
+              <input
+                type="number"
+                min={0}
+                step={5}
+                value={bufferAfter}
+                onChange={(e) => setBufferAfter(Math.max(0, Number(e.target.value)))}
+                className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="eyebrow">Min lead (hours)</span>
+              <input
+                type="number"
+                min={0}
+                value={minLeadHours}
+                onChange={(e) => setMinLeadHours(Math.max(0, Number(e.target.value)))}
+                className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="eyebrow">Max lead (days)</span>
+              <input
+                type="number"
+                min={1}
+                value={maxLeadDays}
+                onChange={(e) => setMaxLeadDays(Math.max(1, Number(e.target.value)))}
+                className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+              />
+            </label>
+          </div>
+
+          {/* Rules per weekday */}
+          <div className="space-y-2">
+            <p className="eyebrow">Available hours per weekday</p>
+            <p className="text-xs text-muted-foreground">
+              Time is local to <code className="font-mono">{link.timezone}</code>.
+            </p>
+            <div className="border border-border divide-y divide-border">
+              {WEEKDAYS.map((day) => {
+                const dayRules = rulesByDay.get(day.n) ?? [];
+                return (
+                  <div key={day.n} className="px-4 py-3 flex items-start gap-3">
+                    <div className="w-14 pt-1">
+                      <p className="text-sm font-medium">{day.label}</p>
+                    </div>
+                    <div className="flex-1 space-y-2">
+                      {dayRules.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic pt-1">
+                          Unavailable
+                        </p>
+                      ) : (
+                        dayRules.map(({ rule, index }) => (
+                          <div key={index} className="flex items-center gap-2">
+                            <TimeInput
+                              value={rule.startMin}
+                              onChange={(v) => updateRule(index, { startMin: v })}
+                            />
+                            <span className="text-xs text-muted-foreground">→</span>
+                            <TimeInput
+                              value={rule.endMin}
+                              onChange={(v) => updateRule(index, { endMin: v })}
+                            />
+                            <button
+                              onClick={() => removeRule(index)}
+                              className="size-7 grid place-items-center text-muted-foreground hover:text-[var(--destructive)] hover:bg-muted transition-colors"
+                              aria-label="Remove"
+                            >
+                              <X className="size-3.5" />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <button
+                      onClick={() => addRule(day.n)}
+                      className="size-7 grid place-items-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors mt-1"
+                      title="Add hours"
+                    >
+                      <Plus className="size-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <footer className="border-t border-border h-14 px-4 flex items-center gap-2 shrink-0">
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="ml-auto text-xs font-mono uppercase tracking-[0.12em] h-9 px-4 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={save}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 h-9 px-5 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] disabled:opacity-50 active:scale-[0.97] transition-transform"
+          >
+            {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+            Save
+          </button>
+        </footer>
+      </aside>
+    </div>
+  );
+}
+
+function TimeInput({
+  value, onChange,
+}: { value: number; onChange: (v: number) => void }) {
+  const h = Math.floor(value / 60);
+  const m = value % 60;
+  const str = `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+  return (
+    <input
+      type="time"
+      value={str}
+      onChange={(e) => {
+        const [hh, mm] = e.target.value.split(":");
+        onChange(Number(hh) * 60 + Number(mm));
+      }}
+      className="h-8 px-2 text-xs bg-transparent border border-border focus:border-foreground focus:outline-none font-mono num"
+    />
+  );
 }

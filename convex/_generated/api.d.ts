@@ -18,6 +18,8 @@ import type * as analytics from "../analytics.js";
 import type * as analyticsActions from "../analyticsActions.js";
 import type * as analyticsActionsHelpers from "../analyticsActionsHelpers.js";
 import type * as auth from "../auth.js";
+import type * as automationEngine from "../automationEngine.js";
+import type * as automationEngineHelpers from "../automationEngineHelpers.js";
 import type * as broadcasts from "../broadcasts.js";
 import type * as broadcastsDispatch from "../broadcastsDispatch.js";
 import type * as calendar from "../calendar.js";
@@ -27,11 +29,16 @@ import type * as campaignRunner from "../campaignRunner.js";
 import type * as campaignRunnerHelpers from "../campaignRunnerHelpers.js";
 import type * as campaigns from "../campaigns.js";
 import type * as companies from "../companies.js";
+import type * as composio from "../composio.js";
+import type * as composioActions from "../composioActions.js";
+import type * as composioHelpers from "../composioHelpers.js";
 import type * as contacts from "../contacts.js";
 import type * as content from "../content.js";
 import type * as copilot from "../copilot.js";
 import type * as copilotHelpers from "../copilotHelpers.js";
 import type * as crons from "../crons.js";
+import type * as demoRecordings from "../demoRecordings.js";
+import type * as demoRecordingsHelpers from "../demoRecordingsHelpers.js";
 import type * as documents from "../documents.js";
 import type * as documentsActions from "../documentsActions.js";
 import type * as documentsActionsHelpers from "../documentsActionsHelpers.js";
@@ -83,6 +90,7 @@ import type * as whatsapp from "../whatsapp.js";
 import type * as whatsappInbound from "../whatsappInbound.js";
 import type * as whatsappOut from "../whatsappOut.js";
 import type * as whatsappOutHelpers from "../whatsappOutHelpers.js";
+import type * as whatsappTemplatesActions from "../whatsappTemplatesActions.js";
 
 import type {
   ApiFromModules,
@@ -101,6 +109,8 @@ declare const fullApi: ApiFromModules<{
   analyticsActions: typeof analyticsActions;
   analyticsActionsHelpers: typeof analyticsActionsHelpers;
   auth: typeof auth;
+  automationEngine: typeof automationEngine;
+  automationEngineHelpers: typeof automationEngineHelpers;
   broadcasts: typeof broadcasts;
   broadcastsDispatch: typeof broadcastsDispatch;
   calendar: typeof calendar;
@@ -110,11 +120,16 @@ declare const fullApi: ApiFromModules<{
   campaignRunnerHelpers: typeof campaignRunnerHelpers;
   campaigns: typeof campaigns;
   companies: typeof companies;
+  composio: typeof composio;
+  composioActions: typeof composioActions;
+  composioHelpers: typeof composioHelpers;
   contacts: typeof contacts;
   content: typeof content;
   copilot: typeof copilot;
   copilotHelpers: typeof copilotHelpers;
   crons: typeof crons;
+  demoRecordings: typeof demoRecordings;
+  demoRecordingsHelpers: typeof demoRecordingsHelpers;
   documents: typeof documents;
   documentsActions: typeof documentsActions;
   documentsActionsHelpers: typeof documentsActionsHelpers;
@@ -166,6 +181,7 @@ declare const fullApi: ApiFromModules<{
   whatsappInbound: typeof whatsappInbound;
   whatsappOut: typeof whatsappOut;
   whatsappOutHelpers: typeof whatsappOutHelpers;
+  whatsappTemplatesActions: typeof whatsappTemplatesActions;
 }>;
 
 /**

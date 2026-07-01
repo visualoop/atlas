@@ -5,7 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import Link from "next/link";
 import {
   Send, Users as UsersIcon, FileText, Globe, Sparkles, Plus, Loader2,
-  ExternalLink, Copy, Check, TrendingUp, X,
+  ExternalLink, Copy, Check, TrendingUp, X, Edit,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNowStrict } from "date-fns";
+import { LandingPageEditSheet } from "./landing-edit-sheet";
 
 type Tab = "newsletter" | "landing" | "seo";
 
@@ -339,8 +340,10 @@ function LandingPageRow({
   const wsSlug = bootstrap?.activeWorkspace?.slug ?? "";
   const publicUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/p/${wsSlug}/${p.slug}`;
   const [copied, setCopied] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   return (
-    <li className="px-4 py-3 flex items-start gap-4">
+    <>
+      <li className="px-4 py-3 flex items-start gap-4">
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-baseline gap-2">
           <p className="text-sm font-medium">{p.title}</p>
@@ -363,6 +366,13 @@ function LandingPageRow({
         </div>
       </div>
       <div className="flex items-center gap-1 shrink-0">
+        <button
+          onClick={() => setEditOpen(true)}
+          title="Edit body"
+          className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        >
+          <Edit className="size-3.5" />
+        </button>
         {p.status === "published" && wsSlug && (
           <>
             <button
@@ -398,6 +408,8 @@ function LandingPageRow({
         )}
       </div>
     </li>
+    {editOpen && <LandingPageEditSheet page={p} onClose={() => setEditOpen(false)} />}
+    </>
   );
 }
 

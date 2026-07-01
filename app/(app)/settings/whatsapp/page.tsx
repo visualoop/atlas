@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
-import { Plus, MessageSquare, Copy, Check, Loader2, X, ExternalLink } from "lucide-react";
+import { useQuery, useMutation, useAction } from "convex/react";
+import { Plus, MessageSquare, Copy, Check, Loader2, X, ExternalLink, Send } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
@@ -63,6 +63,8 @@ export default function WhatsAppSettingsPage() {
             </div>
           )}
         </section>
+
+        <TemplatesSection />
       </div>
 
       {addOpen && <AddConnectionDialog onClose={() => setAddOpen(false)} />}
@@ -271,4 +273,292 @@ function randomToken(): string {
   let out = "";
   for (let i = 0; i < 32; i++) out += chars.charAt(Math.floor(Math.random() * chars.length));
   return out;
+}
+
+
+/* ================================================================== */
+/* Templates section                                                    */
+/* ================================================================== */
+
+import { RefreshCw, FileText as FileTextIcon } from "lucide-react";
+
+function TemplatesSection() {
+  const templates = useQuery(api.whatsapp.listTemplates, {});
+  const syncFromMeta = useAction(api.whatsappTemplatesActions.syncFromMeta);
+  const submit = useAction(api.whatsappTemplatesActions.submitForApproval);
+  const [syncing, setSyncing] = useState(false);
+  const [creatOpen, setCreatOpen] = useState(false);
+
+  async function sync() {
+    setSyncing(true);
+    try {
+      const r = await syncFromMeta({});
+      toast.success(`Synced ${r.synced} templates.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  const grouped = {
+    APPROVED: [] as Doc<"whatsappTemplates">[],
+    PENDING: [] as Doc<"whatsappTemplates">[],
+    REJECTED: [] as Doc<"whatsappTemplates">[],
+    OTHER: [] as Doc<"whatsappTemplates">[],
+  };
+  for (const t of templates ?? []) {
+    if (t.status === "APPROVED") grouped.APPROVED.push(t);
+    else if (t.status === "PENDING") grouped.PENDING.push(t);
+    else if (t.status === "REJECTED") grouped.REJECTED.push(t);
+    else grouped.OTHER.push(t);
+  }
+
+  return (
+    <>
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="eyebrow">Message templates</p>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={sync}
+              disabled={syncing}
+              className="font-mono uppercase tracking-[0.12em] text-xs px-3 py-1.5 border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors inline-flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {syncing ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
+              Sync from Meta
+            </button>
+            <button
+              onClick={() => setCreatOpen(true)}
+              className="font-mono uppercase tracking-[0.12em] text-xs px-3 py-1.5 bg-primary text-primary-foreground active:scale-[0.97] transition-transform inline-flex items-center gap-1.5"
+            >
+              <Plus className="size-3" /> Submit
+            </button>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground max-w-prose">
+          Templates are pre-approved messages you can send outside the 24-hour
+          reply window. Submit for approval and Meta reviews within ~24h. Sync
+          pulls the current list + status from Meta.
+        </p>
+
+        {templates === undefined ? (
+          <div className="border border-border p-6 text-sm text-muted-foreground">Loading…</div>
+        ) : templates.length === 0 ? (
+          <div className="border border-dashed border-border p-8 text-center space-y-3">
+            <FileTextIcon className="size-8 text-muted-foreground mx-auto" />
+            <p className="font-display italic text-xl text-muted-foreground">
+              No templates yet.
+            </p>
+            <p className="text-sm text-muted-foreground max-w-prose mx-auto">
+              Submit your first template for Meta approval. Try{" "}
+              <code className="font-mono">order_shipped</code> or{" "}
+              <code className="font-mono">appointment_reminder</code>.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {(["APPROVED", "PENDING", "REJECTED", "OTHER"] as const).map((k) =>
+              grouped[k].length > 0 ? (
+                <div key={k}>
+                  <p className="eyebrow text-[10px] mb-2">
+                    {k} · {grouped[k].length}
+                  </p>
+                  <div className="border border-border divide-y divide-border">
+                    {grouped[k].map((t) => (
+                      <TemplateRow key={t._id} template={t} />
+                    ))}
+                  </div>
+                </div>
+              ) : null,
+            )}
+          </div>
+        )}
+      </section>
+
+      {creatOpen && (
+        <SubmitTemplateDialog
+          onClose={() => setCreatOpen(false)}
+          onSubmit={async (args) => {
+            await submit(args);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function TemplateRow({ template: t }: { template: Doc<"whatsappTemplates"> }) {
+  return (
+    <div className="px-4 py-3 flex items-start gap-4">
+      <div className="flex-1 min-w-0 space-y-1">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <p className="text-sm font-medium font-mono">{t.name}</p>
+          <span className="eyebrow text-[10px]">{t.language}</span>
+          <span className="eyebrow text-[10px] text-muted-foreground">
+            {t.category}
+          </span>
+        </div>
+        {Array.isArray(t.components) && (
+          <p className="text-xs text-muted-foreground line-clamp-2">
+            {t.components
+              .find((c: { type?: string; text?: string }) => c.type === "BODY")
+              ?.text ?? "—"}
+          </p>
+        )}
+      </div>
+      <TemplateStatusPill status={t.status} />
+    </div>
+  );
+}
+
+function TemplateStatusPill({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    APPROVED: "text-[var(--success)] border-[var(--success)]",
+    PENDING: "text-[var(--warning)] border-[var(--warning)]",
+    REJECTED: "text-[var(--destructive)] border-[var(--destructive)]",
+    DISABLED: "text-muted-foreground border-muted-foreground",
+  };
+  return (
+    <span
+      className={cn(
+        "text-[10px] font-mono uppercase tracking-[0.12em] border px-1.5 py-[1px] shrink-0",
+        styles[status] ?? "border-border text-muted-foreground",
+      )}
+    >
+      {status.toLowerCase()}
+    </span>
+  );
+}
+
+function SubmitTemplateDialog({
+  onClose,
+  onSubmit,
+}: {
+  onClose: () => void;
+  onSubmit: (args: {
+    name: string;
+    language: string;
+    category: "MARKETING" | "UTILITY" | "AUTHENTICATION";
+    bodyText: string;
+  }) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [language, setLanguage] = useState("en");
+  const [category, setCategory] = useState<
+    "MARKETING" | "UTILITY" | "AUTHENTICATION"
+  >("UTILITY");
+  const [bodyText, setBodyText] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function go() {
+    if (!/^[a-z0-9_]{2,}$/.test(name)) {
+      toast.error("Name must be lowercase, digits, underscores only.");
+      return;
+    }
+    if (bodyText.trim().length < 8) {
+      toast.error("Body is too short.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await onSubmit({ name, language, category, bodyText: bodyText.trim() });
+      toast.success("Submitted to Meta.");
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center pointer-events-none">
+      <div
+        onClick={() => !busy && onClose()}
+        className="absolute inset-0 bg-background/60 backdrop-blur-sm pointer-events-auto"
+      />
+      <div
+        role="dialog"
+        className="relative pointer-events-auto bg-background border border-border w-full max-w-lg shadow-2xl"
+      >
+        <header className="px-6 py-4 border-b border-border">
+          <p className="eyebrow font-mono">Submit template</p>
+          <h2 className="font-display italic text-2xl mt-1">Meta approval.</h2>
+        </header>
+        <div className="px-6 py-4 space-y-4">
+          <label className="block space-y-1">
+            <span className="eyebrow">Name (lowercase + underscore)</span>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value.toLowerCase())}
+              placeholder="e.g. order_shipped"
+              className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block space-y-1">
+              <span className="eyebrow">Language</span>
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                className="w-full h-9 px-3 text-sm bg-transparent border border-border"
+              >
+                <option value="en">English</option>
+                <option value="en_US">English (US)</option>
+                <option value="sw">Kiswahili</option>
+              </select>
+            </label>
+            <label className="block space-y-1">
+              <span className="eyebrow">Category</span>
+              <select
+                value={category}
+                onChange={(e) =>
+                  setCategory(
+                    e.target.value as "MARKETING" | "UTILITY" | "AUTHENTICATION",
+                  )
+                }
+                className="w-full h-9 px-3 text-sm bg-transparent border border-border"
+              >
+                <option value="UTILITY">Utility</option>
+                <option value="MARKETING">Marketing</option>
+                <option value="AUTHENTICATION">Authentication</option>
+              </select>
+            </label>
+          </div>
+          <label className="block space-y-1">
+            <span className="eyebrow">Body text</span>
+            <textarea
+              value={bodyText}
+              onChange={(e) => setBodyText(e.target.value)}
+              placeholder="Hi {{1}}, your order {{2}} has shipped."
+              rows={4}
+              className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Use <code className="font-mono">{"{{1}}"}</code>,{" "}
+              <code className="font-mono">{"{{2}}"}</code>, etc. for placeholders.
+            </p>
+          </label>
+        </div>
+        <footer className="px-6 py-3 border-t border-border flex items-center gap-2">
+          <button
+            onClick={onClose}
+            disabled={busy}
+            className="ml-auto text-xs font-mono uppercase tracking-[0.12em] h-8 px-4 text-muted-foreground hover:text-foreground"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={go}
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 h-8 px-5 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+            Submit
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
 }
