@@ -680,4 +680,87 @@ function timingSafeEqualStrings(a: string, b: string): boolean {
   return diff === 0;
 }
 
+/* ============================================================ */
+/* iCal feed (task #16) — workspace calendar in .ics format      */
+/* ============================================================ */
+
+http.route({
+  path: "/ical",
+  method: "GET",
+  handler: httpAction(async (ctx, req) => {
+    const url = new URL(req.url);
+    const slug = url.searchParams.get("workspace");
+    const token = url.searchParams.get("token");
+    if (!slug) return new Response("Missing workspace param", { status: 400 });
+    if (!token) return new Response("Missing token param", { status: 401 });
+
+    // Verify token against publicApiKeys (workspace-scoped)
+    const events = await ctx.runQuery(internal.calendarActionsHelpers.icalFeed, {
+      workspaceSlug: slug,
+      token,
+    });
+    if (events === null) return new Response("Unauthorized", { status: 401 });
+
+    const ics = buildIcs(events);
+    return new Response(ics, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/calendar; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${slug}.ics"`,
+        "Cache-Control": "private, max-age=60",
+      },
+    });
+  }),
+});
+
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : `${n}`;
+}
+function toIcsDate(ms: number): string {
+  const d = new Date(ms);
+  return (
+    d.getUTCFullYear().toString() +
+    pad2(d.getUTCMonth() + 1) +
+    pad2(d.getUTCDate()) +
+    "T" +
+    pad2(d.getUTCHours()) +
+    pad2(d.getUTCMinutes()) +
+    pad2(d.getUTCSeconds()) +
+    "Z"
+  );
+}
+function escIcs(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
+}
+
+function buildIcs(events: Array<{
+  id: string;
+  title: string;
+  description?: string;
+  location?: string;
+  startAt: number;
+  endAt: number;
+}>): string {
+  const lines: string[] = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Atlas by Blyss//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+  ];
+  for (const e of events) {
+    lines.push("BEGIN:VEVENT");
+    lines.push(`UID:${e.id}@atlas.blyss.co.ke`);
+    lines.push(`DTSTAMP:${toIcsDate(Date.now())}`);
+    lines.push(`DTSTART:${toIcsDate(e.startAt)}`);
+    lines.push(`DTEND:${toIcsDate(e.endAt)}`);
+    lines.push(`SUMMARY:${escIcs(e.title)}`);
+    if (e.description) lines.push(`DESCRIPTION:${escIcs(e.description)}`);
+    if (e.location) lines.push(`LOCATION:${escIcs(e.location)}`);
+    lines.push("END:VEVENT");
+  }
+  lines.push("END:VCALENDAR");
+  return lines.join("\r\n");
+}
+
 export default http;

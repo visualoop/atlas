@@ -363,3 +363,241 @@ export const setActiveOrganization = mutation({
     }
   },
 });
+
+
+/* ============================================================ */
+/* Team invitations (task #25)                                    */
+/* ============================================================ */
+
+import { internal } from "./_generated/api";
+
+/**
+ * Invite a teammate to the current org. Owner-only.
+ *   - Creates or refreshes an `invitations` row keyed by (org, email).
+ *   - Generates a URL-safe token, 14-day expiry.
+ *   - Schedules an invitation email via mailer.sendInvitationEmail.
+ */
+export const createInvitation = mutation({
+  args: {
+    organizationId: v.id("organizations"),
+    email: v.string(),
+    role: v.union(v.literal("owner"), v.literal("admin"), v.literal("member")),
+    workspaceAssignments: v.optional(
+      v.array(
+        v.object({
+          workspaceId: v.id("workspaces"),
+          role: v.union(v.literal("owner"), v.literal("admin"), v.literal("member")),
+        }),
+      ),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    await requireOrgRole(ctx, args.organizationId, "admin");
+
+    const emailLc = args.email.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailLc)) {
+      throw new ConvexError({ code: "INVALID_INPUT", message: "Email looks invalid." });
+    }
+
+    // Do not invite existing member
+    const existingMember = await ctx.db
+      .query("members")
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .collect();
+    for (const m of existingMember) {
+      const u = await ctx.db.get(m.userId);
+      if (u?.email?.toLowerCase() === emailLc) {
+        throw new ConvexError({
+          code: "ALREADY_MEMBER",
+          message: "This email is already a member of the organisation.",
+        });
+      }
+    }
+
+    // Upsert invitation row
+    const existing = await ctx.db
+      .query("invitations")
+      .withIndex("by_org_email", (q) =>
+        q.eq("organizationId", args.organizationId).eq("email", emailLc),
+      )
+      .first();
+
+    const token = generateInviteToken();
+    const now = Date.now();
+    const expiresAt = now + 14 * 24 * 60 * 60 * 1000;
+
+    let invitationId: Id<"invitations">;
+    if (existing && existing.status === "pending") {
+      await ctx.db.patch(existing._id, {
+        role: args.role,
+        workspaceAssignments: args.workspaceAssignments,
+        token,
+        expiresAt,
+        inviterId: user._id,
+      });
+      invitationId = existing._id;
+    } else {
+      invitationId = await ctx.db.insert("invitations", {
+        organizationId: args.organizationId,
+        email: emailLc,
+        role: args.role,
+        workspaceAssignments: args.workspaceAssignments,
+        inviterId: user._id,
+        token,
+        status: "pending",
+        expiresAt,
+      });
+    }
+
+    const org = await ctx.db.get(args.organizationId);
+    const inviter = user;
+    const acceptUrl = `${process.env.SITE_URL ?? "https://atlas.blyss.co.ke"}/invite/${token}`;
+
+    // Fire-and-forget email
+    await ctx.scheduler.runAfter(0, internal.mailer.sendInvitationEmail, {
+      to: emailLc,
+      inviterName: inviter.name ?? inviter.email ?? "Someone at Atlas",
+      organizationName: org?.name ?? "the team",
+      role: args.role,
+      acceptUrl,
+    });
+
+    await recordAudit(ctx, {
+      organizationId: args.organizationId,
+      actorId: user._id,
+      action: "invited_member",
+      resourceType: "invitation",
+      resourceId: invitationId,
+      after: { email: emailLc, role: args.role },
+    });
+
+    return { invitationId, acceptUrl };
+  },
+});
+
+/**
+ * Accept an invitation (called from /invite/:token page). Creates a
+ * `members` row + optional `workspaceMembers` per assignment, marks
+ * invitation `accepted`.
+ *
+ * Called by an already-signed-in user whose email matches the invite.
+ */
+export const acceptInvitation = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const inv = await ctx.db
+      .query("invitations")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+    if (!inv) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Invitation not found." });
+    }
+    if (inv.status !== "pending") {
+      throw new ConvexError({ code: "INVALID_STATE", message: `Invitation is ${inv.status}.` });
+    }
+    if (inv.expiresAt < Date.now()) {
+      await ctx.db.patch(inv._id, { status: "expired" });
+      throw new ConvexError({ code: "EXPIRED", message: "Invitation has expired." });
+    }
+    // Email match check
+    if (!user.email || user.email.toLowerCase() !== inv.email) {
+      throw new ConvexError({
+        code: "EMAIL_MISMATCH",
+        message: `Sign in as ${inv.email} to accept this invitation.`,
+      });
+    }
+
+    // Create membership
+    const alreadyMember = await ctx.db
+      .query("members")
+      .withIndex("by_org_user", (q) =>
+        q.eq("organizationId", inv.organizationId).eq("userId", user._id),
+      )
+      .first();
+    if (!alreadyMember) {
+      await ctx.db.insert("members", {
+        organizationId: inv.organizationId,
+        userId: user._id,
+        role: inv.role,
+        invitedBy: inv.inviterId,
+        joinedAt: Date.now(),
+      });
+    }
+
+    // Workspace memberships
+    if (inv.workspaceAssignments) {
+      for (const a of inv.workspaceAssignments) {
+        const existing = await ctx.db
+          .query("workspaceMembers")
+          .withIndex("by_workspace", (q) => q.eq("workspaceId", a.workspaceId))
+          .filter((q) => q.eq(q.field("userId"), user._id))
+          .first();
+        if (!existing) {
+          await ctx.db.insert("workspaceMembers", {
+            workspaceId: a.workspaceId,
+            userId: user._id,
+            role: a.role,
+            invitedBy: inv.inviterId,
+            joinedAt: Date.now(),
+          });
+        }
+      }
+    }
+
+    await ctx.db.patch(inv._id, { status: "accepted" });
+
+    await recordAudit(ctx, {
+      organizationId: inv.organizationId,
+      actorId: user._id,
+      action: "accepted_invitation",
+      resourceType: "invitation",
+      resourceId: inv._id,
+      after: { email: inv.email },
+    });
+
+    return { organizationId: inv.organizationId };
+  },
+});
+
+export const listInvitations = query({
+  args: { organizationId: v.id("organizations") },
+  handler: async (ctx, args) => {
+    await requireOrgRole(ctx, args.organizationId, "admin");
+    const rows = await ctx.db
+      .query("invitations")
+      .withIndex("by_org_email", (q) => q.eq("organizationId", args.organizationId))
+      .collect();
+    return rows;
+  },
+});
+
+export const revokeInvitation = mutation({
+  args: { invitationId: v.id("invitations") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const inv = await ctx.db.get(args.invitationId);
+    if (!inv) throw new ConvexError({ code: "NOT_FOUND", message: "Not found." });
+    await requireOrgRole(ctx, inv.organizationId, "admin");
+    await ctx.db.patch(args.invitationId, { status: "revoked" });
+    await recordAudit(ctx, {
+      organizationId: inv.organizationId,
+      actorId: user._id,
+      action: "revoked_invitation",
+      resourceType: "invitation",
+      resourceId: args.invitationId,
+    });
+  },
+});
+
+/* ------------------------------------------------------------------ */
+/* URL-safe token — no external RNG dep                                */
+/* ------------------------------------------------------------------ */
+
+function generateInviteToken(): string {
+  const alpha = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let out = "";
+  for (let i = 0; i < 32; i++) out += alpha[Math.floor(Math.random() * alpha.length)];
+  return out;
+}

@@ -178,3 +178,99 @@ export const updateSignatureStatus = internalMutation({
     });
   },
 });
+
+
+/* ------------------------------------------------------------------ */
+/* PDF renderer context                                                 */
+/* ------------------------------------------------------------------ */
+
+export const gatherPdfContext = internalQuery({
+  args: { documentId: v.id("documents") },
+  handler: async (ctx, args) => {
+    const doc = await ctx.db.get(args.documentId);
+    if (!doc) throw new Error("Document not found.");
+    const ws = await ctx.db.get(doc.workspaceId);
+    if (!ws) throw new Error("Workspace not found.");
+
+    const lineItems = await ctx.db
+      .query("documentLineItems")
+      .withIndex("by_document_order", (q) => q.eq("documentId", args.documentId))
+      .collect();
+
+    let recipient: {
+      name: string;
+      email?: string;
+      phone?: string;
+      address?: string;
+      companyName?: string;
+    } | undefined;
+
+    if (doc.contactId) {
+      const c = await ctx.db.get(doc.contactId);
+      if (c) {
+        recipient = {
+          name: `${c.firstName}${c.lastName ? " " + c.lastName : ""}`,
+          email: c.email,
+          phone: c.phone,
+        };
+        if (c.companyId) {
+          const co = await ctx.db.get(c.companyId);
+          if (co) recipient.companyName = co.name;
+        }
+      }
+    }
+    if (!recipient && doc.companyId) {
+      const co = await ctx.db.get(doc.companyId);
+      if (co) {
+        recipient = { name: co.name, companyName: co.name };
+      }
+    }
+
+    return {
+      workspaceName: ws.name,
+      workspaceLogoUrl: undefined,
+      document: {
+        kind: doc.kind,
+        number: doc.number,
+        title: doc.title,
+        issueDate: doc.issueDate,
+        dueDate: doc.dueDate,
+        validUntil: doc.validUntil,
+        currency: doc.currency,
+        subtotalCents: doc.subtotalCents.toString(),
+        taxCents: doc.taxCents.toString(),
+        discountCents: doc.discountCents.toString(),
+        totalCents: doc.totalCents.toString(),
+        taxRate: doc.taxRate,
+        taxLabel: doc.taxLabel,
+        etimsReference: doc.etimsReference,
+        mpesaPaybill: doc.mpesaPaybill,
+        mpesaTill: doc.mpesaTill,
+        mpesaAccountRef: doc.mpesaAccountRef,
+        bodyText: doc.bodyText,
+        footerNote: doc.footerNote,
+      },
+      lineItems: lineItems.map((li) => ({
+        label: li.description,
+        description: li.unit ?? undefined,
+        quantity: li.quantity,
+        unitPriceCents: li.unitPriceCents.toString(),
+        lineTotalCents: li.lineTotalCents.toString(),
+      })),
+      recipient,
+    };
+  },
+});
+
+export const savePdfRef = internalMutation({
+  args: {
+    documentId: v.id("documents"),
+    storageId: v.id("_storage"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.documentId, {
+      pdfStorageId: args.storageId,
+      pdfRenderedAt: Date.now(),
+    });
+  },
+});

@@ -167,3 +167,66 @@ export const saveBrief = internalMutation({
     });
   },
 });
+
+
+/* ------------------------------------------------------------------ */
+/* iCal feed — bearer-token access via publicApiKeys                    */
+/* ------------------------------------------------------------------ */
+
+export const icalFeed = internalQuery({
+  args: {
+    workspaceSlug: v.string(),
+    token: v.string(),
+  },
+  handler: async (ctx, args): Promise<Array<{
+    id: string;
+    title: string;
+    description?: string;
+    location?: string;
+    startAt: number;
+    endAt: number;
+  }> | null> => {
+    // Look up workspace by slug (must scan orgs)
+    const workspaces = await ctx.db
+      .query("workspaces")
+      .filter((q) => q.eq(q.field("slug"), args.workspaceSlug))
+      .collect();
+    // Since slug is unique per org but not globally, pick the first
+    const workspace = workspaces[0];
+    if (!workspace) return null;
+
+    // Verify token via SHA-256 hash lookup in publicApiKeys
+    const tokenHash = await sha256Hex(args.token);
+    const key = await ctx.db
+      .query("publicApiKeys")
+      .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
+      .first();
+    if (!key || key.workspaceId !== workspace._id || key.revokedAt !== undefined) return null;
+    if (key.expiresAt && key.expiresAt < Date.now()) return null;
+    if (!key.scopes.includes("calendar:read") && !key.scopes.includes("*")) return null;
+
+    // Load events
+    const events = await ctx.db
+      .query("calendarEvents")
+      .withIndex("by_workspace_start", (q) => q.eq("workspaceId", workspace._id))
+      .filter((q) => q.eq(q.field("archivedAt"), undefined))
+      .take(500);
+
+    return events.map((e) => ({
+      id: e._id,
+      title: e.title,
+      description: e.description,
+      location: e.location ?? e.conferenceUrl,
+      startAt: e.startAt,
+      endAt: e.endAt,
+    }));
+  },
+});
+
+async function sha256Hex(s: string): Promise<string> {
+  const enc = new TextEncoder().encode(s);
+  const hash = await crypto.subtle.digest("SHA-256", enc);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}

@@ -27,6 +27,7 @@
     "@hookform/resolvers": "^3.10.0",
     "@react-email/components": "^1.0.12",
     "@react-email/render": "^2.0.9",
+    "@react-pdf/renderer": "^4.5.1",
     "@tiptap/extension-link": "^3.27.1",
     "@tiptap/extension-placeholder": "^3.27.1",
     "@tiptap/react": "^3.27.1",
