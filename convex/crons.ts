@@ -3,13 +3,6 @@
  *
  * Convex guideline: ONLY `crons.interval` and `crons.cron`.
  * Never `crons.daily` / `crons.weekly` — they don't exist.
- *
- * Phases populate this file as they need scheduled work:
- *   - Phase 2: unwind snoozed conversations every 5 minutes.
- *   - Phase 5: AI digest at 7am Africa/Nairobi
- *   - Phase 7b: payment reminder loop for M-PESA renewals
- *   - Phase 8: campaign step scheduler
- *   - Phase 9: meeting prep brief (1h before)
  */
 
 import { cronJobs } from "convex/server";
@@ -17,16 +10,94 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
+/* ============================================================ */
+/* Inbox                                                          */
+/* ============================================================ */
+
 crons.interval(
   "unwind snoozed conversations",
   { minutes: 5 },
   internal.emails.unwindSnoozed,
 );
 
+/* ============================================================ */
+/* Campaigns                                                      */
+/* ============================================================ */
+
 crons.interval(
   "process due campaign recipients",
   { minutes: 1 },
   internal.campaignRunner.processDueRecipients,
+);
+
+/* ============================================================ */
+/* Broadcasts                                                     */
+/* ============================================================ */
+
+crons.interval(
+  "trigger scheduled broadcasts",
+  { minutes: 1 },
+  internal.broadcastsDispatch.scanScheduled,
+);
+
+/* ============================================================ */
+/* Trend intelligence                                             */
+/* ============================================================ */
+
+crons.interval(
+  "scan brand watches for mentions",
+  { hours: 6 },
+  internal.trendsActions.scanDueBrandWatches,
+);
+
+/* ============================================================ */
+/* Pipelines — rotting-deal health check                          */
+/* ============================================================ */
+
+crons.cron(
+  "weekly deal health check",
+  "0 6 * * 1", // Monday 06:00 UTC = 09:00 Africa/Nairobi
+  internal.pipelinesActions.classifyRottingDeals,
+);
+
+/* ============================================================ */
+/* Calendar — meeting reminders + pre-meeting AI brief             */
+/* ============================================================ */
+
+crons.interval(
+  "send meeting reminders + AI briefs",
+  { minutes: 5 },
+  internal.calendarActions.sendMeetingReminders,
+);
+
+/* ============================================================ */
+/* Analytics — nightly snapshot                                    */
+/* ============================================================ */
+
+crons.cron(
+  "nightly analytics snapshot",
+  "15 21 * * *", // 21:15 UTC = 00:15 Africa/Nairobi
+  internal.analyticsActions.rollupDailySnapshots,
+);
+
+/* ============================================================ */
+/* Webhooks — deliver timeline event fan-out                       */
+/* ============================================================ */
+
+crons.interval(
+  "deliver pending webhook events",
+  { minutes: 1 },
+  internal.webhookDelivery.deliverPending,
+);
+
+/* ============================================================ */
+/* DocuSeal — poll signature status                                */
+/* ============================================================ */
+
+crons.interval(
+  "poll DocuSeal signature status",
+  { minutes: 10 },
+  internal.documentsActions.pollSignatureStatus,
 );
 
 export default crons;

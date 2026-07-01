@@ -17,6 +17,7 @@ import { internal } from "./_generated/api";
 import { requireWorkspaceContext } from "./lib/workspaceContext";
 import { recordAudit } from "./lib/authHelpers";
 import { recordTimelineEvent } from "./lib/timeline";
+import { recordAttribution } from "./lib/attribution";
 import type { Doc, Id } from "./_generated/dataModel";
 
 /* ============================================================ */
@@ -464,6 +465,16 @@ export const submitLandingSignup = mutation({
     // Bump signup counter
     await ctx.db.patch(page._id, { signupCount: page.signupCount + 1 });
 
+    // Attribution touch — always logged (with sessionId if no contact yet)
+    await recordAttribution(ctx, {
+      workspaceId: ws._id,
+      contactId: contact?._id,
+      touchType: "landing_signup",
+      source: `landing:${page.slug}`,
+      medium: "landing",
+      landingPageId: page._id,
+    });
+
     // Emit timeline event on the contact
     if (contact) {
       await recordTimelineEvent(ctx, {
@@ -480,6 +491,21 @@ export const submitLandingSignup = mutation({
       });
     }
 
+    // Resolve lead magnet URL if present. Convex's storage.getUrl returns
+    // a time-limited public URL; good enough for a lead magnet drop.
+    let leadMagnetUrl: string | undefined;
+    let leadMagnetLabel: string | undefined;
+    if (page.leadMagnetFileId) {
+      const f = await ctx.db.get(page.leadMagnetFileId);
+      if (f) {
+        const url = await ctx.storage.getUrl(f.storageId);
+        if (url) {
+          leadMagnetUrl = url;
+          leadMagnetLabel = f.filename;
+        }
+      }
+    }
+
     // Fire-and-forget welcome email
     await ctx.scheduler.runAfter(0, internal.mailer.sendLandingWelcomeEmail, {
       to: email,
@@ -487,9 +513,8 @@ export const submitLandingSignup = mutation({
       pageTitle: page.title,
       pageKind: page.kind,
       firstName: args.firstName,
-      // Lead-magnet URL wiring — needs a signed download link. For MVP,
-      // if the page has a leadMagnetFileId we surface it as the accept
-      // page URL; a proper signed-URL flow lands in follow-up.
+      leadMagnetUrl,
+      leadMagnetLabel,
     });
 
     return {

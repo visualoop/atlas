@@ -17,6 +17,7 @@ import { mutation, query } from "./_generated/server";
 import { requireWorkspaceContext } from "./lib/workspaceContext";
 import { recordAudit } from "./lib/authHelpers";
 import { recordTimelineEvent } from "./lib/timeline";
+import { recordAttribution } from "./lib/attribution";
 import type { Doc, Id } from "./_generated/dataModel";
 
 /* ============================================================ */
@@ -328,6 +329,12 @@ export const createDeal = mutation({
       },
       payload: { name: args.name, amountCents: args.amountCents.toString(), currency: args.currency },
     });
+    await recordAttribution(ctx, {
+      workspaceId: wsCtx.workspace._id,
+      contactId: args.contactId,
+      touchType: "deal_created",
+      source: args.source ?? "manual",
+    });
     return id;
   },
 });
@@ -520,6 +527,83 @@ export const setWinLoss = mutation({
       subjectId: args.id,
       relatedRefs: { pipelineId: deal.pipelineId, stageId: terminal._id },
       payload: { reason: args.reason, amountCents: deal.amountCents.toString(), currency: deal.currency },
+    });
+    if (args.outcome === "won") {
+      await recordAttribution(ctx, {
+        workspaceId: wsCtx.workspace._id,
+        contactId: deal.contactId,
+        touchType: "deal_won",
+        source: deal.source ?? "manual",
+      });
+    }
+  },
+});
+
+
+/* ============================================================ */
+/* Internal — cron helpers                                        */
+/* ============================================================ */
+
+import { internalQuery, internalMutation } from "./_generated/server";
+
+export const listRottingDeals = internalQuery({
+  args: { limit: v.number() },
+  handler: async (ctx, { limit }) => {
+    const now = Date.now();
+    const oneDay = 24 * 60 * 60 * 1000;
+    // Scan a bounded set of open, non-archived deals.
+    const deals = await ctx.db
+      .query("deals")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("archivedAt"), undefined),
+          q.eq(q.field("wonAt"), undefined),
+          q.eq(q.field("lostAt"), undefined),
+        ),
+      )
+      .take(300);
+
+    const stages = new Map<string, { name: string; rotDays?: number }>();
+    for (const s of await ctx.db.query("pipelineStages").take(200)) {
+      stages.set(s._id, { name: s.name, rotDays: s.rotDays });
+    }
+
+    const rotting = deals
+      .map((d) => {
+        const stage = stages.get(d.stageId);
+        const rotDays = stage?.rotDays ?? 14;
+        const daysSinceActivity = Math.floor((now - d.lastActivityAt) / oneDay);
+        if (daysSinceActivity < rotDays) return null;
+        return {
+          _id: d._id,
+          workspaceId: d.workspaceId,
+          name: d.name,
+          stageName: stage?.name ?? "unknown",
+          amountCents: d.amountCents.toString(),
+          currency: d.currency,
+          daysSinceActivity,
+          ageDays: Math.floor((now - d._creationTime) / oneDay),
+          notes: undefined as string | undefined,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+      .slice(0, limit);
+
+    return rotting;
+  },
+});
+
+export const updateDealHealth = internalMutation({
+  args: {
+    dealId: v.id("deals"),
+    healthScore: v.number(),
+    healthNotes: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.dealId, {
+      healthScore: args.healthScore,
+      healthNotes: args.healthNotes,
+      healthCheckedAt: Date.now(),
     });
   },
 });

@@ -1865,6 +1865,7 @@ export default defineSchema({
     lastSyncedAt: v.optional(v.number()),
     // Reminders
     reminderMinutesBefore: v.optional(v.array(v.number())),
+    reminderSentAt: v.optional(v.number()),                  // cron marker so we don't re-send
     // AI-generated pre-meeting brief
     aiBriefText: v.optional(v.string()),
     aiBriefAt: v.optional(v.number()),
@@ -2139,6 +2140,7 @@ export default defineSchema({
     active: v.boolean(),
     lastSuccessAt: v.optional(v.number()),
     lastFailureAt: v.optional(v.number()),
+    lastDeliveredEventOccurredAt: v.optional(v.number()),    // watermark for cron scan
     consecutiveFailures: v.number(),
     createdBy: v.id("users"),
     archivedAt: v.optional(v.number()),
