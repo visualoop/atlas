@@ -23,9 +23,6 @@ import {
   Settings,
   LogOut,
   ChevronDown,
-  PanelLeft,
-  Menu,
-  X,
   User as UserIcon,
 } from "lucide-react";
 import {
@@ -36,6 +33,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,41 +64,39 @@ type NavItem = {
   key: string;
 };
 
-const SIDEBAR_ITEMS: NavItem[] = [
+const PRIMARY_NAV: NavItem[] = [
   { href: "/today", icon: Home, label: "Today", key: "t" },
   { href: "/inbox", icon: Inbox, label: "Inbox", key: "i" },
+];
+
+const CRM_NAV: NavItem[] = [
   { href: "/contacts", icon: Users, label: "Contacts", key: "c" },
   { href: "/companies", icon: Building2, label: "Companies", key: "o" },
   { href: "/pipelines", icon: Workflow, label: "Pipelines", key: "p" },
   { href: "/prospector", icon: Search, label: "Prospector", key: "g" },
+];
+
+const WORK_NAV: NavItem[] = [
   { href: "/documents", icon: FileText, label: "Documents", key: "d" },
   { href: "/vault", icon: Sparkles, label: "Vault", key: "v" },
+  { href: "/calendar", icon: Calendar, label: "Calendar", key: "k" },
+];
+
+const GROWTH_NAV: NavItem[] = [
   { href: "/campaigns", icon: Megaphone, label: "Campaigns", key: "b" },
   { href: "/social", icon: Share2, label: "Social", key: "s" },
   { href: "/content", icon: BookOpen, label: "Content", key: "n" },
   { href: "/trends", icon: TrendingUp, label: "Trends", key: "r" },
   { href: "/analytics", icon: BarChart3, label: "Analytics", key: "a" },
-  { href: "/calendar", icon: Calendar, label: "Calendar", key: "k" },
 ];
-
-const SIDEBAR_STATE_KEY = "atlas_sidebar_expanded";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const bootstrap = useQuery(api.organizations.currentBootstrap);
   const bootstrapProfile = useMutation(api.referrals.bootstrapMyProfile);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [sidebarExpanded, setSidebarExpanded] = useState(false);
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const { signOut } = useAuthActions();
-
-  // Load persisted sidebar state on mount
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const stored = window.localStorage.getItem(SIDEBAR_STATE_KEY);
-    if (stored === "true") setSidebarExpanded(true);
-  }, []);
 
   // Bootstrap profile + claim any pending referral code
   useEffect(() => {
@@ -102,37 +114,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bootstrap === undefined ? undefined : bootstrap === null ? null : bootstrap.user?._id]);
 
-  // Keyboard shortcuts: ⌘K palette, ⌘\ toggle sidebar
+  // ⌘K / Ctrl+K opens command palette
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setPaletteOpen((v) => !v);
       }
-      if ((e.metaKey || e.ctrlKey) && e.key === "\\") {
-        e.preventDefault();
-        toggleSidebar();
-      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Close mobile drawer on route change
-  useEffect(() => {
-    setMobileSidebarOpen(false);
-  }, [pathname]);
-
-  function toggleSidebar() {
-    setSidebarExpanded((v) => {
-      const next = !v;
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(SIDEBAR_STATE_KEY, String(next));
-      }
-      return next;
-    });
-  }
 
   if (bootstrap === undefined) {
     return (
@@ -167,157 +159,107 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground">
-      {/* Fixed top bar */}
-      <header className="h-12 border-b border-border flex items-center px-2 md:px-3 gap-1 md:gap-2 sticky top-0 bg-background/95 backdrop-blur z-50">
-        {/* Mobile: hamburger */}
-        <button
-          onClick={() => setMobileSidebarOpen(true)}
-          className="md:hidden size-9 grid place-items-center hover:bg-muted"
-          aria-label="Open menu"
-        >
-          <Menu className="size-4" />
-        </button>
+    <TooltipProvider>
+      <SidebarProvider defaultOpen={true}>
+        <AtlasSidebar
+          pathname={pathname ?? ""}
+          activeOrg={activeOrg}
+          organizations={organizations}
+          onNewOrg={() => router.push("/onboarding/new-org")}
+        />
 
-        {/* Desktop: sidebar toggle */}
-        <button
-          onClick={toggleSidebar}
-          className="hidden md:grid size-9 place-items-center hover:bg-muted text-muted-foreground"
-          aria-label={sidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
-          title={`${sidebarExpanded ? "Collapse" : "Expand"} sidebar (⌘\\)`}
-        >
-          <PanelLeft className="size-4" />
-        </button>
+        <SidebarInset className="min-w-0">
+          <header className="sticky top-0 z-40 h-12 border-b border-border flex items-center px-2 md:px-3 gap-2 bg-background/95 backdrop-blur">
+            <SidebarTrigger className="size-9" />
 
-        {/* Org picker */}
-        <DropdownMenu>
-          <DropdownMenuTrigger className="font-mono uppercase tracking-[0.12em] text-[11px] md:text-xs px-2 py-1 hover:bg-muted transition-colors inline-flex items-center gap-1.5 max-w-[35vw] truncate">
-            <span className="truncate">{activeOrg.name}</span>
-            <ChevronDown className="size-3 shrink-0" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="rounded-none min-w-[220px]">
-            <DropdownMenuLabel className="eyebrow">Organizations</DropdownMenuLabel>
-            {organizations.map((o) => (
-              <DropdownMenuItem key={o._id}>{o.name}</DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => router.push("/onboarding/new-org")}>
-              + Create organization
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            {activeWorkspace && (
+              <>
+                <div className="w-px h-4 bg-border" />
+                <DropdownMenu>
+                  <DropdownMenuTrigger className="font-mono uppercase tracking-[0.12em] text-xs px-2 py-1 hover:bg-muted transition-colors inline-flex items-center gap-1.5 max-w-[35vw] truncate rounded-none">
+                    <span className="truncate">{activeWorkspace.name}</span>
+                    <ChevronDown className="size-3 shrink-0" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="rounded-none min-w-[220px]">
+                    <DropdownMenuLabel className="eyebrow">Workspaces</DropdownMenuLabel>
+                    {workspaces.map((w, i) => (
+                      <DropdownMenuItem key={w._id}>
+                        <span className="flex-1 truncate">{w.name}</span>
+                        {i < 9 && (
+                          <span className="ml-2 eyebrow text-muted-foreground">⌘{i + 1}</span>
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => router.push("/onboarding/new-workspace")}>
+                      + New workspace
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
 
-        {activeWorkspace && (
-          <>
-            <div className="hidden md:block w-px h-4 bg-border" />
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="hidden md:flex mx-auto items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors min-w-[240px] max-w-[420px] py-1.5 px-3 border border-border hover:border-[var(--border-strong)]"
+            >
+              <Search className="size-3.5 shrink-0" />
+              <span className="truncate">Search or run a command…</span>
+              <span className="ml-auto font-mono text-[10px] bg-muted px-1.5 py-0.5 shrink-0">⌘K</span>
+            </button>
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="md:hidden ml-auto size-9 grid place-items-center hover:bg-muted"
+              aria-label="Search"
+            >
+              <Search className="size-4" />
+            </button>
+
             <DropdownMenu>
-              <DropdownMenuTrigger className="hidden md:inline-flex font-mono uppercase tracking-[0.12em] text-xs px-2 py-1 hover:bg-muted transition-colors items-center gap-1.5 max-w-[25vw] truncate">
-                <span className="truncate">{activeWorkspace.name}</span>
-                <ChevronDown className="size-3 shrink-0" />
+              <DropdownMenuTrigger
+                className="ml-1 md:ml-auto size-8 grid place-items-center hover:bg-muted transition-colors text-xs font-mono border border-border rounded-none"
+                aria-label="Account menu"
+              >
+                <span aria-hidden="true">{initials}</span>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="rounded-none min-w-[220px]">
-                <DropdownMenuLabel className="eyebrow">Workspaces</DropdownMenuLabel>
-                {workspaces.map((w, i) => (
-                  <DropdownMenuItem key={w._id}>
-                    <span className="flex-1 truncate">{w.name}</span>
-                    {i < 9 && (
-                      <span className="ml-2 eyebrow text-muted-foreground">⌘{i + 1}</span>
-                    )}
-                  </DropdownMenuItem>
-                ))}
+              <DropdownMenuContent align="end" className="rounded-none w-56">
+                <DropdownMenuLabel className="flex flex-col gap-0.5">
+                  <span className="text-sm truncate">{displayName}</span>
+                  {user.email && (
+                    <span className="text-xs text-muted-foreground font-normal truncate">
+                      {user.email}
+                    </span>
+                  )}
+                </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => router.push("/onboarding/new-workspace")}>
-                  + New workspace
+                <DropdownMenuItem onSelect={() => router.push("/settings/profile")}>
+                  <UserIcon className="size-3.5 mr-2" />
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => router.push("/settings/security")}>
+                  Security
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => router.push("/settings/integrations")}>
+                  Integrations
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => router.push("/settings/referrals")}>
+                  Referrals
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={handleSignOut} className="text-[var(--danger)]">
+                  <LogOut className="size-3.5 mr-2" />
+                  Sign out
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          </>
-        )}
+          </header>
 
-        {/* Search / command palette */}
-        <button
-          onClick={() => setPaletteOpen(true)}
-          className="hidden md:flex mx-auto items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors min-w-[240px] max-w-[420px] py-1.5 px-3 border border-border hover:border-[var(--border-strong)]"
-        >
-          <Search className="size-3.5 shrink-0" />
-          <span className="truncate">Search or run a command…</span>
-          <span className="ml-auto font-mono text-[10px] bg-muted px-1.5 py-0.5 shrink-0">⌘K</span>
-        </button>
-        <button
-          onClick={() => setPaletteOpen(true)}
-          className="md:hidden ml-auto size-9 grid place-items-center hover:bg-muted"
-          aria-label="Search"
-        >
-          <Search className="size-4" />
-        </button>
+          <div className="flex-1 min-w-0">{children}</div>
+        </SidebarInset>
 
-        {/* Account menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className="ml-1 md:ml-auto size-8 grid place-items-center hover:bg-muted transition-colors text-xs font-mono border border-border"
-            aria-label="Account menu"
-          >
-            <span aria-hidden="true">{initials}</span>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="rounded-none w-56">
-            <DropdownMenuLabel className="flex flex-col gap-0.5">
-              <span className="text-sm truncate">{displayName}</span>
-              {user.email && (
-                <span className="text-xs text-muted-foreground font-normal truncate">
-                  {user.email}
-                </span>
-              )}
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => router.push("/settings/profile")}>
-              <UserIcon className="size-3.5 mr-2" />
-              Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => router.push("/settings/security")}>
-              Security
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => router.push("/settings/integrations")}>
-              Integrations
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => router.push("/settings/referrals")}>
-              Referrals
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={handleSignOut} className="text-[var(--danger)]">
-              <LogOut className="size-3.5 mr-2" />
-              Sign out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </header>
-
-      <div className="flex-1 flex min-h-0">
-        {/* Desktop sidebar — fixed, own scroll, expandable */}
-        <SidebarNav
-          items={SIDEBAR_ITEMS}
-          pathname={pathname ?? ""}
-          expanded={sidebarExpanded}
-          className="hidden md:flex"
-        />
-
-        {/* Mobile sidebar — drawer */}
-        {mobileSidebarOpen && (
-          <MobileDrawer onClose={() => setMobileSidebarOpen(false)}>
-            <SidebarNav
-              items={SIDEBAR_ITEMS}
-              pathname={pathname ?? ""}
-              expanded={true}
-              className="flex w-full"
-              onNavigate={() => setMobileSidebarOpen(false)}
-            />
-          </MobileDrawer>
-        )}
-
-        <main className="flex-1 min-w-0 overflow-x-hidden">{children}</main>
-      </div>
-
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
-    </div>
+        <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      </SidebarProvider>
+    </TooltipProvider>
   );
 }
 
@@ -325,130 +267,121 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 /* Sidebar                                                              */
 /* ------------------------------------------------------------------ */
 
-function SidebarNav({
+function AtlasSidebar({
+  pathname,
+  activeOrg,
+  organizations,
+  onNewOrg,
+}: {
+  pathname: string;
+  activeOrg: { _id: string; name: string; slug: string };
+  organizations: Array<{ _id: string; name: string }>;
+  onNewOrg: () => void;
+}) {
+  return (
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="border-b border-sidebar-border">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="w-full flex items-center gap-2 p-2 hover:bg-sidebar-accent transition-colors text-left group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-1.5"
+          >
+            <div className="flex aspect-square size-8 items-center justify-center bg-primary text-primary-foreground shrink-0">
+              <span className="font-display italic text-lg leading-none">
+                {activeOrg.name[0].toUpperCase()}
+              </span>
+            </div>
+            <div className="grid flex-1 text-left leading-tight min-w-0 group-data-[collapsible=icon]:hidden">
+              <span className="truncate text-sm font-medium">{activeOrg.name}</span>
+              <span className="truncate text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
+                {activeOrg.slug}
+              </span>
+            </div>
+            <ChevronDown className="ml-auto size-3.5 shrink-0 group-data-[collapsible=icon]:hidden" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            className="rounded-none min-w-[220px]"
+            align="start"
+            side="right"
+          >
+            <DropdownMenuLabel className="eyebrow">Organizations</DropdownMenuLabel>
+            {organizations.map((o) => (
+              <DropdownMenuItem key={o._id}>{o.name}</DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={onNewOrg}>+ Create organization</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <NavGroup label="" items={PRIMARY_NAV} pathname={pathname} />
+        <NavGroup label="CRM" items={CRM_NAV} pathname={pathname} />
+        <NavGroup label="Work" items={WORK_NAV} pathname={pathname} />
+        <NavGroup label="Growth" items={GROWTH_NAV} pathname={pathname} />
+      </SidebarContent>
+
+      <SidebarFooter className="border-t border-sidebar-border">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              render={<Link href="/settings" />}
+              tooltip="Settings"
+              isActive={pathname.startsWith("/settings")}
+              className="rounded-none"
+            >
+              <Settings className="size-4" />
+              <span>Settings</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+
+      <SidebarRail />
+    </Sidebar>
+  );
+}
+
+function NavGroup({
+  label,
   items,
   pathname,
-  expanded,
-  className,
-  onNavigate,
 }: {
+  label: string;
   items: NavItem[];
   pathname: string;
-  expanded: boolean;
-  className?: string;
-  onNavigate?: () => void;
 }) {
-  const width = expanded ? "w-56" : "w-14";
   return (
-    <nav
-      className={cn(
-        "border-r border-border flex-col shrink-0 sticky top-12 h-[calc(100vh-3rem)] overflow-y-auto py-3 transition-all duration-150",
-        width,
-        className,
+    <SidebarGroup>
+      {label && (
+        <SidebarGroupLabel className="font-mono uppercase tracking-[0.12em] text-[10px]">
+          {label}
+        </SidebarGroupLabel>
       )}
-    >
-      <div className="flex-1 flex flex-col gap-0.5 px-1.5">
-        {items.map((item) => (
-          <SidebarItem
-            key={item.href}
-            item={item}
-            active={pathname.startsWith(item.href)}
-            expanded={expanded}
-            onNavigate={onNavigate}
-          />
-        ))}
-      </div>
-      <div className="px-1.5 pt-3 mt-3 border-t border-border">
-        <SidebarItem
-          item={{ href: "/settings", icon: Settings, label: "Settings", key: "," }}
-          active={pathname.startsWith("/settings")}
-          expanded={expanded}
-          onNavigate={onNavigate}
-        />
-      </div>
-    </nav>
-  );
-}
-
-function SidebarItem({
-  item,
-  active,
-  expanded,
-  onNavigate,
-}: {
-  item: NavItem;
-  active: boolean;
-  expanded: boolean;
-  onNavigate?: () => void;
-}) {
-  const Icon = item.icon;
-  return (
-    <Link
-      href={item.href}
-      title={expanded ? undefined : `${item.label} (${item.key})`}
-      onClick={onNavigate}
-      className={cn(
-        "flex items-center gap-3 h-10 transition-colors hover:bg-muted text-sm relative",
-        expanded ? "px-3" : "px-0 justify-center",
-        active
-          ? "text-foreground bg-muted/50"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {active && (
-        <span
-          aria-hidden="true"
-          className="absolute left-0 top-2 bottom-2 w-0.5 bg-primary"
-        />
-      )}
-      <Icon className="size-4 shrink-0" />
-      {expanded && (
-        <>
-          <span className="truncate flex-1">{item.label}</span>
-          <span className="font-mono uppercase text-[10px] text-muted-foreground/60 tracking-[0.12em]">
-            {item.key}
-          </span>
-        </>
-      )}
-    </Link>
-  );
-}
-
-function MobileDrawer({
-  onClose,
-  children,
-}: {
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  useEffect(() => {
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = originalOverflow;
-    };
-  }, []);
-  return (
-    <div className="fixed inset-0 z-50 md:hidden">
-      <button
-        onClick={onClose}
-        className="absolute inset-0 bg-background/70 backdrop-blur-sm"
-        aria-label="Close menu"
-      />
-      <div className="relative w-64 max-w-[85vw] h-full bg-background border-r border-border flex flex-col">
-        <div className="h-12 border-b border-border flex items-center justify-between px-3">
-          <p className="eyebrow">Menu</p>
-          <button
-            onClick={onClose}
-            className="size-8 grid place-items-center hover:bg-muted"
-            aria-label="Close"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto">{children}</div>
-      </div>
-    </div>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {items.map((item) => {
+            const Icon = item.icon;
+            const active = pathname.startsWith(item.href);
+            return (
+              <SidebarMenuItem key={item.href}>
+                <SidebarMenuButton
+                  render={<Link href={item.href} />}
+                  tooltip={item.label}
+                  isActive={active}
+                  className="rounded-none"
+                >
+                  <Icon className="size-4" />
+                  <span>{item.label}</span>
+                  <span className="ml-auto font-mono uppercase text-[10px] text-muted-foreground/60 tracking-[0.12em] group-data-[collapsible=icon]:hidden">
+                    {item.key}
+                  </span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
   );
 }
 
