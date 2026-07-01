@@ -813,4 +813,80 @@ export default defineSchema({
     .index("by_workspace_feature_time", ["workspaceId", "featureId"])
     .index("by_org_time", ["organizationId"])
     .index("by_resource", ["resourceType", "resourceId"]),
+
+  /* ============================================================ */
+  /* Phase 6 — Pipelines + deals                                    */
+  /* ============================================================ */
+
+  pipelines: defineTable({
+    workspaceId: v.id("workspaces"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    kind: v.string(),                                          // 'omnix_license' | 'studio_project' | 'marketplace_creator' | 'custom'
+    order: v.number(),
+    defaultCurrency: v.string(),                               // 'KES' default
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_order", ["workspaceId", "order"]),
+
+  pipelineStages: defineTable({
+    workspaceId: v.id("workspaces"),
+    pipelineId: v.id("pipelines"),
+    name: v.string(),
+    order: v.number(),
+    // Terminal states — a deal in a won stage counts toward revenue,
+    // a lost stage counts toward win-rate denominator.
+    isWon: v.boolean(),
+    isLost: v.boolean(),
+    // Rotting detection — flag deals in this stage older than N days
+    rotDays: v.optional(v.number()),
+    color: v.optional(v.string()),                              // hex/oklch for the column header
+  })
+    .index("by_pipeline_order", ["pipelineId", "order"])
+    .index("by_workspace", ["workspaceId"]),
+
+  deals: defineTable({
+    workspaceId: v.id("workspaces"),
+    pipelineId: v.id("pipelines"),
+    stageId: v.id("pipelineStages"),
+    name: v.string(),
+    amountCents: v.int64(),                                     // always in cents (never floats)
+    currency: v.string(),                                        // 'KES' | 'USD'
+    contactId: v.optional(v.id("contacts")),
+    companyId: v.optional(v.id("companies")),
+    ownerId: v.optional(v.id("users")),
+    // Where this deal came from — keeps attribution honest for Phase 9.
+    source: v.optional(v.string()),                              // 'prospector' | 'inbound_email' | 'whatsapp' | 'manual' | …
+    sourceRefType: v.optional(v.string()),
+    sourceRefId: v.optional(v.string()),
+    expectedCloseDate: v.optional(v.number()),
+    actualCloseDate: v.optional(v.number()),
+    wonAt: v.optional(v.number()),
+    lostAt: v.optional(v.number()),
+    winReason: v.optional(v.string()),
+    lossReason: v.optional(v.string()),
+    // AI health tracking (Phase 5 feature classify_deal_health, wired lazily)
+    healthScore: v.optional(v.number()),                        // 0-100
+    healthNotes: v.optional(v.string()),
+    healthCheckedAt: v.optional(v.number()),
+    lastActivityAt: v.number(),                                  // touched on any related timeline event
+    tags: v.array(v.string()),
+    customFields: v.optional(v.any()),
+    // Ordering within a stage — allows manual reorder without
+    // recomputing all others. New deals get max+1.
+    stageOrder: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_pipeline", ["workspaceId", "pipelineId"])
+    .index("by_pipeline_stage_order", ["pipelineId", "stageId", "stageOrder"])
+    .index("by_workspace_stage", ["workspaceId", "stageId"])
+    .index("by_workspace_owner", ["workspaceId", "ownerId"])
+    .index("by_workspace_contact", ["workspaceId", "contactId"])
+    .index("by_workspace_company", ["workspaceId", "companyId"])
+    .searchIndex("search_name", {
+      searchField: "name",
+      filterFields: ["workspaceId", "archivedAt"],
+    }),
 });
