@@ -33,6 +33,16 @@ export default function GlobalError({
               Digest: {error.digest}
             </p>
           )}
+          {error.stack && (
+            <details className="pt-2">
+              <summary className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground cursor-pointer">
+                Stack trace
+              </summary>
+              <pre className="text-[10px] font-mono text-muted-foreground whitespace-pre-wrap overflow-x-auto pt-2 max-h-64">
+                {error.stack}
+              </pre>
+            </details>
+          )}
         </div>
 
         <div className="flex items-center gap-2">

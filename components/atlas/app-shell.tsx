@@ -288,7 +288,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </SidebarInset>
 
         <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
-        <CopilotPanel open={copilotOpen} onOpenChange={setCopilotOpen} />
+        {copilotOpen && <CopilotPanel open={copilotOpen} onOpenChange={setCopilotOpen} />}
       </SidebarProvider>
     </TooltipProvider>
   );
