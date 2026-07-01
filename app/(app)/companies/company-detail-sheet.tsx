@@ -184,11 +184,5 @@ function Meta({ label, value, mono }: { label: string; value: string; mono?: boo
   );
 }
 
-function PlaceholderTab({ name, phase }: { name: string; phase: string }) {
-  return (
-    <div className="text-sm text-muted-foreground py-8">
-      <p className="font-display italic text-xl mb-2">{name}.</p>
-      <p>Lands in {phase}.</p>
-    </div>
-  );
-}
+// PlaceholderTab removed — DealsTab replaces its only use.
+
