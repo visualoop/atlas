@@ -30,6 +30,7 @@ export default function WorkspacePage() {
     brandVoice: "",
     coreValues: "",
     pricingSummary: "",
+    prospectorDailyCap: 100,
   });
   const [saving, setSaving] = useState(false);
 
@@ -46,6 +47,7 @@ export default function WorkspacePage() {
       brandVoice: ws.brandVoice ?? "",
       coreValues: ws.coreValues ?? "",
       pricingSummary: ws.pricingSummary ?? "",
+      prospectorDailyCap: ws.prospectorDailyCap ?? 100,
     });
   }, [ws]);
 
@@ -66,6 +68,7 @@ export default function WorkspacePage() {
           brandVoice: values.brandVoice.trim() || undefined,
           coreValues: values.coreValues.trim() || undefined,
           pricingSummary: values.pricingSummary.trim() || undefined,
+          prospectorDailyCap: values.prospectorDailyCap,
         },
       });
       toast.success("Workspace saved. AI features will use this from the next turn.");
@@ -194,6 +197,29 @@ export default function WorkspacePage() {
             onChange={(e) => setValues({ ...values, coreValues: e.target.value })}
             placeholder="- Ship weekly. If it's not in prod it doesn't count.\n- Serve founders, not enterprises.\n- Kenya-first, not Kenya-only."
             className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none font-mono"
+          />
+        </Field>
+      </section>
+
+      <section className="space-y-5 border border-border p-6">
+        <p className="eyebrow">Prospector guardrails</p>
+
+        <Field
+          label="Daily import cap"
+          hint="Max Places imports per day. Stops the AI (and yourself) from burning through Google credits by accident."
+        >
+          <input
+            type="number"
+            min={1}
+            max={5000}
+            value={values.prospectorDailyCap}
+            onChange={(e) =>
+              setValues({
+                ...values,
+                prospectorDailyCap: Math.max(1, Math.min(5000, Number(e.target.value) || 100)),
+              })
+            }
+            className="w-32 h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono num"
           />
         </Field>
       </section>

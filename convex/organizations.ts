@@ -269,6 +269,7 @@ export const updateWorkspace = mutation({
       brandVoice: v.optional(v.string()),
       coreValues: v.optional(v.string()),
       pricingSummary: v.optional(v.string()),
+      prospectorDailyCap: v.optional(v.number()),
       timezone: v.optional(v.string()),
       currency: v.optional(v.string()),
       brandColor: v.optional(v.string()),

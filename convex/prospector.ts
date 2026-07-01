@@ -437,6 +437,31 @@ export const importMapPlace = internalMutation({
     const { requireWorkspaceContext } = await import("./lib/workspaceContext");
     const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
 
+    // Enforce daily cap
+    const cap = wsCtx.workspace.prospectorDailyCap ?? 100;
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayStartMs = dayStart.getTime();
+    const todaysImports = await ctx.db
+      .query("companies")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", wsCtx.workspace._id))
+      .filter((q) =>
+        q.and(
+          q.gte(q.field("_creationTime"), dayStartMs),
+          q.or(
+            q.eq(q.field("source"), "prospector_map"),
+            q.eq(q.field("source"), "prospector"),
+          ),
+        ),
+      )
+      .collect();
+    if (todaysImports.length >= cap) {
+      throw new ConvexError({
+        code: "IMPORT_CAP_REACHED",
+        message: `You've hit today's import cap (${cap}). Bump it in Settings → Workspace, or wait until tomorrow.`,
+      });
+    }
+
     // Dedupe by (workspace, googlePlaceId)
     const existing = await ctx.db
       .query("companies")
@@ -446,6 +471,20 @@ export const importMapPlace = internalMutation({
       .first();
     if (existing) {
       return { companyId: existing._id, duplicated: true };
+    }
+
+    // Also respect the suppression list
+    const suppressed = await ctx.db
+      .query("prospectorSuppressions")
+      .withIndex("by_workspace_place", (q) =>
+        q.eq("workspaceId", wsCtx.workspace._id).eq("googlePlaceId", args.googlePlaceId),
+      )
+      .first();
+    if (suppressed) {
+      throw new ConvexError({
+        code: "SUPPRESSED",
+        message: "You've previously rejected this business — un-suppress it in Prospector to re-import.",
+      });
     }
 
     // Extract domain from website
@@ -518,5 +557,250 @@ export const getMapsClientKey = query({
     } catch {
       return { key: null };
     }
+  },
+});
+
+
+/* ============================================================ */
+/* Map-browse dedup — check which Places are already known         */
+/* ============================================================ */
+
+export const checkMapPlaces = query({
+  args: {
+    googlePlaceIds: v.array(v.string()),
+  },
+  handler: async (ctx, args): Promise<{
+    imported: string[];              // already in `companies`
+    suppressed: string[];            // in `prospectorSuppressions`
+  }> => {
+    const { requireWorkspaceContext } = await import("./lib/workspaceContext");
+    const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
+    const wsId = wsCtx.workspace._id;
+
+    const imported: string[] = [];
+    const suppressed: string[] = [];
+
+    // Look up each id in parallel using the by_workspace_place indexes
+    await Promise.all(
+      args.googlePlaceIds.map(async (placeId) => {
+        const [company, suppression] = await Promise.all([
+          ctx.db
+            .query("companies")
+            .withIndex("by_workspace_place", (q) =>
+              q.eq("workspaceId", wsId).eq("googlePlaceId", placeId),
+            )
+            .first(),
+          ctx.db
+            .query("prospectorSuppressions")
+            .withIndex("by_workspace_place", (q) =>
+              q.eq("workspaceId", wsId).eq("googlePlaceId", placeId),
+            )
+            .first(),
+        ]);
+        if (company) imported.push(placeId);
+        if (suppression) suppressed.push(placeId);
+      }),
+    );
+
+    return { imported, suppressed };
+  },
+});
+
+/* ============================================================ */
+/* Daily import cap                                                */
+/* ============================================================ */
+
+export const getImportBudget = query({
+  args: {},
+  handler: async (ctx): Promise<{
+    dailyCap: number;
+    usedToday: number;
+    remaining: number;
+  }> => {
+    const { requireWorkspaceContext } = await import("./lib/workspaceContext");
+    const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
+    const wsId = wsCtx.workspace._id;
+
+    const cap = wsCtx.workspace.prospectorDailyCap ?? 100;
+
+    // Start of today in workspace timezone. For simplicity we use UTC
+    // midnight — Africa/Nairobi is UTC+3, so this rolls over at 03:00
+    // Africa/Nairobi. Close enough for a soft cap.
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayStartMs = dayStart.getTime();
+
+    const rows = await ctx.db
+      .query("companies")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", wsId))
+      .filter((q) =>
+        q.and(
+          q.gte(q.field("_creationTime"), dayStartMs),
+          q.eq(q.field("source"), "prospector_map"),
+        ),
+      )
+      .collect();
+
+    // Also count text-search imports (source=prospector or manual bulk import)
+    const searchImports = await ctx.db
+      .query("companies")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", wsId))
+      .filter((q) =>
+        q.and(
+          q.gte(q.field("_creationTime"), dayStartMs),
+          q.eq(q.field("source"), "prospector"),
+        ),
+      )
+      .collect();
+
+    const usedToday = rows.length + searchImports.length;
+    return {
+      dailyCap: cap,
+      usedToday,
+      remaining: Math.max(0, cap - usedToday),
+    };
+  },
+});
+
+
+/* ============================================================ */
+/* Bulk import from map — 'Import top N' one-shot                  */
+/* ============================================================ */
+
+export const bulkImportMapPlaces = mutation({
+  args: {
+    places: v.array(
+      v.object({
+        googlePlaceId: v.string(),
+        name: v.string(),
+        address: v.optional(v.string()),
+        latitude: v.optional(v.number()),
+        longitude: v.optional(v.number()),
+        phoneRaw: v.optional(v.string()),
+        website: v.optional(v.string()),
+        googleMapsUri: v.optional(v.string()),
+        types: v.optional(v.array(v.string())),
+        rating: v.optional(v.number()),
+        ratingCount: v.optional(v.number()),
+      }),
+    ),
+  },
+  handler: async (ctx, args): Promise<{
+    imported: number;
+    skippedDuplicate: number;
+    skippedSuppressed: number;
+    capReached: boolean;
+    remainingBudget: number;
+  }> => {
+    const { requireWorkspaceContext } = await import("./lib/workspaceContext");
+    const { recordTimelineEvent } = await import("./lib/timeline");
+    const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
+    const wsId = wsCtx.workspace._id;
+
+    const cap = wsCtx.workspace.prospectorDailyCap ?? 100;
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayStartMs = dayStart.getTime();
+    const todaysImports = await ctx.db
+      .query("companies")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", wsId))
+      .filter((q) =>
+        q.and(
+          q.gte(q.field("_creationTime"), dayStartMs),
+          q.or(
+            q.eq(q.field("source"), "prospector_map"),
+            q.eq(q.field("source"), "prospector"),
+          ),
+        ),
+      )
+      .collect();
+    let budget = Math.max(0, cap - todaysImports.length);
+
+    let imported = 0;
+    let skippedDuplicate = 0;
+    let skippedSuppressed = 0;
+    let capReached = false;
+
+    for (const p of args.places) {
+      if (budget <= 0) {
+        capReached = true;
+        break;
+      }
+
+      const existing = await ctx.db
+        .query("companies")
+        .withIndex("by_workspace_place", (q) =>
+          q.eq("workspaceId", wsId).eq("googlePlaceId", p.googlePlaceId),
+        )
+        .first();
+      if (existing) {
+        skippedDuplicate++;
+        continue;
+      }
+
+      const suppressed = await ctx.db
+        .query("prospectorSuppressions")
+        .withIndex("by_workspace_place", (q) =>
+          q.eq("workspaceId", wsId).eq("googlePlaceId", p.googlePlaceId),
+        )
+        .first();
+      if (suppressed) {
+        skippedSuppressed++;
+        continue;
+      }
+
+      let domain: string | undefined;
+      if (p.website) {
+        try {
+          const u = new URL(p.website);
+          domain = u.hostname.replace(/^www\./, "").toLowerCase();
+        } catch {}
+      }
+
+      const companyId = await ctx.db.insert("companies", {
+        workspaceId: wsId,
+        name: p.name,
+        domain,
+        country: "KE",
+        city: undefined,
+        address: p.address,
+        phone: p.phoneRaw,
+        website: p.website,
+        googlePlaceId: p.googlePlaceId,
+        lifecycleStage: "lead",
+        tags: ["prospector"],
+        source: "prospector_map",
+        enrichmentData: {
+          googleMapsUri: p.googleMapsUri,
+          types: p.types,
+          rating: p.rating,
+          ratingCount: p.ratingCount,
+          latitude: p.latitude,
+          longitude: p.longitude,
+        },
+        enrichedAt: Date.now(),
+        ownerId: wsCtx.user._id,
+      });
+
+      await recordTimelineEvent(ctx, {
+        workspaceId: wsId,
+        eventType: "company_created",
+        actorId: wsCtx.user._id,
+        subjectType: "company",
+        subjectId: companyId,
+        payload: { source: "prospector_map_bulk", googlePlaceId: p.googlePlaceId },
+      });
+
+      imported++;
+      budget--;
+    }
+
+    return {
+      imported,
+      skippedDuplicate,
+      skippedSuppressed,
+      capReached,
+      remainingBudget: budget,
+    };
   },
 });

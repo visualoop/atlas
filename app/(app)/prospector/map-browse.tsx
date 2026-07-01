@@ -46,6 +46,7 @@ export function MapBrowse() {
   const mapsKey = useQuery(api.prospector.getMapsClientKey, {});
   const searchNearby = useAction(api.prospectorActions.searchNearby);
   const importOne = useAction(api.prospectorActions.importOneFromMap);
+  const bulkImport = useMutation(api.prospector.bulkImportMapPlaces);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
@@ -56,6 +57,25 @@ export function MapBrowse() {
   const [places, setPlaces] = useState<Place[]>([]);
   const [selected, setSelected] = useState<Place | null>(null);
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set());
+  const [suppressedIds, setSuppressedIds] = useState<Set<string>>(new Set());
+  const [importN, setImportN] = useState(10);
+
+  // Preflight check: how many can we still import today?
+  const budget = useQuery(api.prospector.getImportBudget, {});
+  // Preflight check: which of the currently-visible places are already
+  // imported or suppressed in this workspace?
+  const dedup = useQuery(
+    api.prospector.checkMapPlaces,
+    places.length > 0
+      ? { googlePlaceIds: places.map((p) => p.googlePlaceId) }
+      : "skip",
+  );
+
+  useEffect(() => {
+    if (!dedup) return;
+    setImportedIds((prev) => new Set([...prev, ...dedup.imported]));
+    setSuppressedIds(new Set(dedup.suppressed));
+  }, [dedup]);
 
   // Load the Maps JS SDK once we have a key
   useEffect(() => {
@@ -104,7 +124,14 @@ export function MapBrowse() {
       for (const p of places) {
         if (typeof p.latitude !== "number" || typeof p.longitude !== "number") continue;
         const isImported = importedIds.has(p.googlePlaceId);
-        const pinBg = isImported ? "#78716C" : selected?.googlePlaceId === p.googlePlaceId ? "#059669" : "#0A0A0B";
+        const isSuppressed = suppressedIds.has(p.googlePlaceId);
+        const pinBg = isSuppressed
+          ? "#B45309" // amber-800 for suppressed
+          : isImported
+          ? "#78716C" // stone-500 for already imported
+          : selected?.googlePlaceId === p.googlePlaceId
+          ? "#059669" // emerald primary
+          : "#0A0A0B"; // ink for candidates
         const pin = new PinElement({
           background: pinBg,
           borderColor: "#F4F2EE",
@@ -121,7 +148,7 @@ export function MapBrowse() {
         markersRef.current.push(marker);
       }
     })();
-  }, [ready, places, selected, importedIds]);
+  }, [ready, places, selected, importedIds, suppressedIds]);
 
   async function searchThisArea() {
     if (!ready || !mapInstanceRef.current) return;
@@ -188,6 +215,44 @@ export function MapBrowse() {
       toast.success(r.duplicated ? "Already in your CRM." : "Imported into Companies.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Import failed.");
+    }
+  }
+
+  // Places that haven't been imported/suppressed yet, sorted by rating desc
+  const candidates = useMemo(
+    () =>
+      places
+        .filter(
+          (p) => !importedIds.has(p.googlePlaceId) && !suppressedIds.has(p.googlePlaceId),
+        )
+        .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)),
+    [places, importedIds, suppressedIds],
+  );
+
+  async function bulkImportTopN() {
+    if (candidates.length === 0) {
+      toast.info("Nothing new to import in this view.");
+      return;
+    }
+    const remaining = budget?.remaining ?? 100;
+    const n = Math.min(importN, candidates.length, remaining);
+    if (n === 0) {
+      toast.error("Daily import cap reached. Bump it in Settings → Workspace.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const picks = candidates.slice(0, n);
+      const res = await bulkImport({ places: picks });
+      // Reflect in local state
+      setImportedIds((s) => new Set([...s, ...picks.slice(0, res.imported).map((p) => p.googlePlaceId)]));
+      toast.success(
+        `Imported ${res.imported}${res.skippedDuplicate ? ` · ${res.skippedDuplicate} already there` : ""}${res.capReached ? ` · daily cap hit` : ""}`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Bulk import failed.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -267,14 +332,58 @@ export function MapBrowse() {
             <p className="text-xs text-muted-foreground">
               Pins appear for every business in view. Click one to import.
             </p>
+            {budget && (
+              <p className="text-[11px] font-mono text-muted-foreground pt-2">
+                {budget.remaining} / {budget.dailyCap} imports left today
+              </p>
+            )}
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto divide-y divide-border">
-            <div className="px-4 py-2 border-b border-border">
-              <p className="eyebrow">
-                {places.length} result{places.length === 1 ? "" : "s"}
-              </p>
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-4 py-3 border-b border-border space-y-2 sticky top-0 bg-background z-10">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="eyebrow">
+                  {places.length} result{places.length === 1 ? "" : "s"}
+                  {importedIds.size > 0 && (
+                    <span className="text-muted-foreground">
+                      {" "}· {places.filter((p) => importedIds.has(p.googlePlaceId)).length} already yours
+                    </span>
+                  )}
+                </p>
+                {budget && (
+                  <p className="text-[10px] font-mono text-muted-foreground">
+                    {budget.remaining}/{budget.dailyCap} left today
+                  </p>
+                )}
+              </div>
+              {candidates.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground">Import top</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={Math.min(candidates.length, budget?.remaining ?? 100)}
+                    value={importN}
+                    onChange={(e) =>
+                      setImportN(Math.max(1, Math.min(candidates.length, Number(e.target.value) || 1)))
+                    }
+                    className="w-14 h-7 px-2 text-xs bg-transparent border border-border focus:border-foreground focus:outline-none font-mono num"
+                  />
+                  <span className="text-[11px] text-muted-foreground">
+                    by rating
+                  </span>
+                  <button
+                    onClick={bulkImportTopN}
+                    disabled={busy}
+                    className="ml-auto inline-flex items-center gap-1 h-7 px-2 text-[10px] font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground disabled:opacity-50 active:scale-[0.97]"
+                  >
+                    {busy ? <Loader2 className="size-3 animate-spin" /> : <Building2 className="size-3" />}
+                    Import
+                  </button>
+                </div>
+              )}
             </div>
+            <div className="divide-y divide-border">
             {places.map((p) => (
               <button
                 key={p.googlePlaceId}
@@ -282,12 +391,16 @@ export function MapBrowse() {
                 className={cn(
                   "w-full text-left px-4 py-3 hover:bg-muted/40 transition-colors",
                   importedIds.has(p.googlePlaceId) && "opacity-60",
+                  suppressedIds.has(p.googlePlaceId) && "opacity-40",
                 )}
               >
                 <div className="flex items-baseline justify-between gap-2">
                   <p className="text-sm font-medium truncate">{p.name}</p>
                   {importedIds.has(p.googlePlaceId) && (
                     <Check className="size-3.5 text-[var(--success)] shrink-0" />
+                  )}
+                  {suppressedIds.has(p.googlePlaceId) && (
+                    <X className="size-3.5 text-[var(--warning)] shrink-0" />
                   )}
                 </div>
                 {p.address && (
@@ -306,6 +419,7 @@ export function MapBrowse() {
                 </div>
               </button>
             ))}
+            </div>
           </div>
         )}
       </aside>

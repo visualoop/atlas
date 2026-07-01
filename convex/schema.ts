@@ -219,6 +219,9 @@ export default defineSchema({
     brandVoice: v.optional(v.string()),      // 'confident + direct, Kenyan English, no marketing fluff'
     coreValues: v.optional(v.string()),
     pricingSummary: v.optional(v.string()),
+    // Prospector guardrails — max Places imports per day per workspace,
+    // stops the AI from blowing through credits. Default 100.
+    prospectorDailyCap: v.optional(v.number()),
     archivedAt: v.optional(v.number()),
   })
     .index("by_org", ["organizationId"])
