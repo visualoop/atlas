@@ -402,3 +402,67 @@ export const bulkArchive = mutation({
     return ids.length;
   },
 });
+
+
+/* ------------------------------------------------------------------ */
+/* listPaginated — cursor-based, for the /contacts page's usePaginated  */
+/* ------------------------------------------------------------------ */
+
+import { paginationOptsValidator } from "convex/server";
+
+export const listPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    lifecycleStage: v.optional(v.string()),
+    companyId: v.optional(v.id("companies")),
+    ownerId: v.optional(v.id("users")),
+    search: v.optional(v.string()),
+    includeArchived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "viewer" });
+    const wsId = wsCtx.workspace._id;
+
+    // If searching, we can't paginate cleanly through a search index.
+    // Return the first page as-is + isDone=true (no additional pages).
+    if (args.search && args.search.trim().length > 0) {
+      const contacts = await ctx.db
+        .query("contacts")
+        .withSearchIndex("search_name", (q) => {
+          const base = q.search("firstName", args.search!).eq("workspaceId", wsId);
+          if (args.lifecycleStage) return base.eq("lifecycleStage", args.lifecycleStage);
+          return base;
+        })
+        .take(args.paginationOpts.numItems);
+      return {
+        page: args.includeArchived ? contacts : contacts.filter((c) => c.archivedAt === undefined),
+        isDone: true,
+        continueCursor: "",
+      };
+    }
+
+    let cursorQuery;
+    if (args.companyId) {
+      cursorQuery = ctx.db
+        .query("contacts")
+        .withIndex("by_workspace_company", (q) => q.eq("workspaceId", wsId).eq("companyId", args.companyId))
+        .order("desc");
+    } else if (args.ownerId) {
+      cursorQuery = ctx.db
+        .query("contacts")
+        .withIndex("by_workspace_owner", (q) => q.eq("workspaceId", wsId).eq("ownerId", args.ownerId))
+        .order("desc");
+    } else {
+      cursorQuery = ctx.db
+        .query("contacts")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", wsId))
+        .order("desc");
+    }
+
+    const result = await cursorQuery.paginate(args.paginationOpts);
+    return {
+      ...result,
+      page: args.includeArchived ? result.page : result.page.filter((c) => c.archivedAt === undefined),
+    };
+  },
+});

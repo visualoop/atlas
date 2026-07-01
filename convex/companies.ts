@@ -412,3 +412,64 @@ export const bulkArchive = mutation({
     return ids.length;
   },
 });
+
+
+/* ------------------------------------------------------------------ */
+/* listPaginated — for /companies page usePaginatedQuery                */
+/* ------------------------------------------------------------------ */
+
+import { paginationOptsValidator } from "convex/server";
+
+export const listPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    lifecycleStage: v.optional(v.string()),
+    ownerId: v.optional(v.id("users")),
+    search: v.optional(v.string()),
+    includeArchived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "viewer" });
+    const wsId = wsCtx.workspace._id;
+
+    if (args.search && args.search.trim().length > 0) {
+      const rows = await ctx.db
+        .query("companies")
+        .withSearchIndex("search_name", (q) =>
+          q.search("name", args.search!).eq("workspaceId", wsId),
+        )
+        .take(args.paginationOpts.numItems);
+      return {
+        page: args.includeArchived ? rows : rows.filter((c) => c.archivedAt === undefined),
+        isDone: true,
+        continueCursor: "",
+      };
+    }
+
+    let cursorQuery;
+    if (args.lifecycleStage) {
+      cursorQuery = ctx.db
+        .query("companies")
+        .withIndex("by_workspace_lifecycle", (q) =>
+          q.eq("workspaceId", wsId).eq("lifecycleStage", args.lifecycleStage!),
+        )
+        .order("desc");
+    } else if (args.ownerId) {
+      cursorQuery = ctx.db
+        .query("companies")
+        .withIndex("by_workspace_owner", (q) => q.eq("workspaceId", wsId).eq("ownerId", args.ownerId))
+        .order("desc");
+    } else {
+      cursorQuery = ctx.db
+        .query("companies")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", wsId))
+        .order("desc");
+    }
+
+    const result = await cursorQuery.paginate(args.paginationOpts);
+    return {
+      ...result,
+      page: args.includeArchived ? result.page : result.page.filter((c) => c.archivedAt === undefined),
+    };
+  },
+});

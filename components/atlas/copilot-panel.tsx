@@ -168,9 +168,10 @@ export function CopilotPanel({ open, onOpenChange }: Props) {
               <span className="size-6 grid place-items-center bg-primary/10 text-primary rounded-none shrink-0">
                 <Sparkles className="size-3.5" />
               </span>
-              <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                <Loader2 className="size-3.5 animate-spin" />
-                <span>Thinking...</span>
+              <div className="flex-1 space-y-2 pt-1">
+                <div className="h-2.5 bg-muted rounded-none animate-pulse w-3/4" />
+                <div className="h-2.5 bg-muted rounded-none animate-pulse w-1/2" />
+                <div className="h-2.5 bg-muted rounded-none animate-pulse w-2/3" />
               </div>
             </div>
           )}

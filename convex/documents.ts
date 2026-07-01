@@ -686,3 +686,55 @@ function randomToken(len: number): string {
   }
   return out;
 }
+
+
+/* ------------------------------------------------------------------ */
+/* listDocumentsPaginated                                                */
+/* ------------------------------------------------------------------ */
+
+import { paginationOptsValidator } from "convex/server";
+
+const DOC_KIND_UNION = v.union(
+  v.literal("proposal"),
+  v.literal("quote"),
+  v.literal("invoice"),
+  v.literal("contract"),
+  v.literal("brief"),
+  v.literal("statement_of_work"),
+);
+
+export const listDocumentsPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    kind: v.optional(DOC_KIND_UNION),
+    status: v.optional(v.string()),
+    includeArchived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "viewer" });
+    const wsId = wsCtx.workspace._id;
+
+    let cursorQuery;
+    if (args.kind) {
+      cursorQuery = ctx.db
+        .query("documents")
+        .withIndex("by_workspace_kind", (q) => q.eq("workspaceId", wsId).eq("kind", args.kind!))
+        .order("desc");
+    } else {
+      cursorQuery = ctx.db
+        .query("documents")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", wsId))
+        .order("desc");
+    }
+
+    const result = await cursorQuery.paginate(args.paginationOpts);
+    return {
+      ...result,
+      page: result.page.filter(
+        (d) =>
+          (args.includeArchived || d.archivedAt === undefined) &&
+          (!args.status || d.status === args.status),
+      ),
+    };
+  },
+});

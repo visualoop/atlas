@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { useQuery, useMutation } from "convex/react";
-import { Globe, MapPin } from "lucide-react";
+import { useQuery, useMutation, usePaginatedQuery } from "convex/react";
+import { Globe, MapPin, Loader2 } from "lucide-react";
 import { ListLayout } from "@/components/atlas/list-layout";
 import { FilterChips } from "@/components/atlas/filter-chips";
 import { BulkActionBar } from "@/components/atlas/bulk-action-bar";
@@ -13,6 +13,7 @@ import { CompanyDetailSheet } from "./company-detail-sheet";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TableSkeleton as SharedTableSkeleton } from "@/components/atlas/skeletons";
 import { toast } from "sonner";
 
 const LIFECYCLE_FILTERS = [
@@ -42,13 +43,24 @@ export default function CompaniesPage() {
     router.replace(`${pathname}${params.toString() ? "?" + params.toString() : ""}`);
   }
 
-  const companies = useQuery(api.companies.list, {
-    search: search.trim() || undefined,
-    lifecycleStage: lifecycle ?? undefined,
-    limit: 200,
-  });
+  const {
+    results: companies,
+    status: pageStatus,
+    loadMore,
+  } = usePaginatedQuery(
+    api.companies.listPaginated,
+    {
+      search: search.trim() || undefined,
+      lifecycleStage: lifecycle ?? undefined,
+    },
+    { initialNumItems: 50 },
+  );
   const bulkUpdate = useMutation(api.companies.bulkUpdate);
   const bulkArchive = useMutation(api.companies.bulkArchive);
+
+  const isInitialLoad = pageStatus === "LoadingFirstPage";
+  const canLoadMore = pageStatus === "CanLoadMore";
+  const isLoadingMore = pageStatus === "LoadingMore";
 
   const toggleSelected = (id: Id<"companies">) => {
     setSelected((prev) => {
@@ -73,7 +85,7 @@ export default function CompaniesPage() {
         searchValue={search}
         onSearch={setSearch}
         primaryAction={{ label: "New company", onClick: () => setNewOpen(true) }}
-        count={companies?.length}
+        count={companies.length}
         filterStrip={
           <FilterChips<LifecycleStage>
             options={LIFECYCLE_FILTERS as unknown as { value: LifecycleStage; label: string }[]}
@@ -82,18 +94,32 @@ export default function CompaniesPage() {
           />
         }
       >
-        {companies === undefined ? (
-          <TableSkeleton />
+        {isInitialLoad ? (
+          <SharedTableSkeleton rows={10} columns={4} />
         ) : companies.length === 0 ? (
           <EmptyState onCreate={() => setNewOpen(true)} />
         ) : (
-          <CompaniesTable
-            companies={companies}
-            onOpen={setActiveId}
-            selected={selected}
-            onToggle={toggleSelected}
-            onToggleAll={toggleAll}
-          />
+          <>
+            <CompaniesTable
+              companies={companies}
+              onOpen={setActiveId}
+              selected={selected}
+              onToggle={toggleSelected}
+              onToggleAll={toggleAll}
+            />
+            {(canLoadMore || isLoadingMore) && (
+              <div className="pt-4 flex justify-center">
+                <button
+                  onClick={() => loadMore(50)}
+                  disabled={isLoadingMore}
+                  className="inline-flex items-center gap-1.5 h-9 px-6 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                >
+                  {isLoadingMore ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                  Load more
+                </button>
+              </div>
+            )}
+          </>
         )}
       </ListLayout>
 
