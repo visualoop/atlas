@@ -58,6 +58,10 @@ const integrationProvider = v.union(
   v.literal("openai"),
   v.literal("anthropic"),
   v.literal("together"),
+  v.literal("deepseek"),
+  v.literal("xai"),
+  v.literal("perplexity"),
+  v.literal("google_vertex"),
   // Communications
   v.literal("resend"),
   v.literal("meta_whatsapp"),
@@ -92,6 +96,7 @@ const auditAction = v.union(
   v.literal("sent_email"),
   v.literal("sent_whatsapp"),
   v.literal("ai_call"),
+  v.literal("revoked_session"),
 );
 
 export default defineSchema({
@@ -121,6 +126,18 @@ export default defineSchema({
   })
     .index("by_userId", ["userId"])
     .index("by_referral_code", ["referralCode"]),
+
+  // TOTP-based 2FA for user accounts. The secret is AES-GCM encrypted
+  // with the platform CONFIG_ENCRYPTION_KEY before storage.
+  userTwoFactor: defineTable({
+    userId: v.id("users"),
+    encryptedSecret: v.string(),
+    enabledAt: v.number(),
+    lastVerifiedAt: v.optional(v.number()),
+    // Recovery — 8 one-shot codes if the user loses their device
+    recoveryCodesHash: v.optional(v.array(v.string())),
+  })
+    .index("by_userId", ["userId"]),
 
   // One row per successful referral. Idempotent by (referredUserId).
   referralClaims: defineTable({
@@ -192,6 +209,16 @@ export default defineSchema({
     currency: v.string(),                    // 'KES' default
     timezone: v.string(),                    // 'Africa/Nairobi'
     brandColor: v.optional(v.string()),      // override accent (rare)
+    // Brand + context for every AI feature. If populated, threaded into
+    // every prompt (Copilot, campaign runner, meeting brief, trends, etc).
+    website: v.optional(v.string()),
+    oneLiner: v.optional(v.string()),        // 'M-PESA POS for salons + spas'
+    elevatorPitch: v.optional(v.string()),   // 2-3 sentence value prop
+    offerings: v.optional(v.string()),       // markdown list of products / services
+    targetMarket: v.optional(v.string()),    // ICP description
+    brandVoice: v.optional(v.string()),      // 'confident + direct, Kenyan English, no marketing fluff'
+    coreValues: v.optional(v.string()),
+    pricingSummary: v.optional(v.string()),
     archivedAt: v.optional(v.number()),
   })
     .index("by_org", ["organizationId"])

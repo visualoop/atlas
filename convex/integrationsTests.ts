@@ -23,6 +23,10 @@ const PROVIDER = v.union(
   v.literal("openai"),
   v.literal("anthropic"),
   v.literal("together"),
+  v.literal("deepseek"),
+  v.literal("xai"),
+  v.literal("perplexity"),
+  v.literal("google_vertex"),
   v.literal("resend"),
   v.literal("meta_whatsapp"),
   v.literal("cloudflare_email_routing"),
@@ -55,7 +59,10 @@ export const testProvider = action({
         case "openai":
         case "openrouter":
         case "mistral":
-        case "together": {
+        case "together":
+        case "deepseek":
+        case "xai":
+        case "perplexity": {
           const endpoints: Record<string, string> = {
             groq: "https://api.groq.com/openai/v1/models",
             cerebras: "https://api.cerebras.ai/v1/models",
@@ -63,6 +70,9 @@ export const testProvider = action({
             openrouter: "https://openrouter.ai/api/v1/models",
             mistral: "https://api.mistral.ai/v1/models",
             together: "https://api.together.xyz/v1/models",
+            deepseek: "https://api.deepseek.com/models",
+            xai: "https://api.x.ai/v1/models",
+            perplexity: "https://api.perplexity.ai/models",
           };
           const res = await fetch(endpoints[args.provider], {
             headers: { Authorization: `Bearer ${key}` },

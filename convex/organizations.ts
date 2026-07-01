@@ -255,6 +255,44 @@ export const createWorkspace = mutation({
 /* setActiveWorkspace — switch active workspace for the current user   */
 /* ------------------------------------------------------------------ */
 
+export const updateWorkspace = mutation({
+  args: {
+    id: v.id("workspaces"),
+    patch: v.object({
+      name: v.optional(v.string()),
+      description: v.optional(v.string()),
+      website: v.optional(v.string()),
+      oneLiner: v.optional(v.string()),
+      elevatorPitch: v.optional(v.string()),
+      offerings: v.optional(v.string()),
+      targetMarket: v.optional(v.string()),
+      brandVoice: v.optional(v.string()),
+      coreValues: v.optional(v.string()),
+      pricingSummary: v.optional(v.string()),
+      timezone: v.optional(v.string()),
+      currency: v.optional(v.string()),
+      brandColor: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const ws = await ctx.db.get(args.id);
+    if (!ws) throw new ConvexError({ code: "NOT_FOUND", message: "Workspace not found." });
+    // Verify user is org admin or higher
+    await requireOrgRole(ctx, ws.organizationId, "member");
+    await ctx.db.patch(args.id, args.patch);
+    await recordAudit(ctx, {
+      organizationId: ws.organizationId,
+      workspaceId: args.id,
+      actorId: user._id,
+      action: "updated",
+      resourceType: "workspace",
+      resourceId: args.id,
+      after: args.patch,
+    });
+  },
+});
+
 export const setActiveWorkspace = mutation({
   args: { workspaceId: v.id("workspaces") },
   handler: async (ctx, args) => {

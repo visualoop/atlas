@@ -21,6 +21,17 @@ export const prepare = internalQuery({
       groq?: string;
       openrouter?: string;
     };
+    brand: {
+      workspaceName?: string;
+      website?: string;
+      oneLiner?: string;
+      elevatorPitch?: string;
+      offerings?: string;
+      targetMarket?: string;
+      brandVoice?: string;
+      coreValues?: string;
+      pricingSummary?: string;
+    } | null;
   } | null> => {
     const user = await requireUser(ctx);
     const profile = await ctx.db
@@ -45,11 +56,28 @@ export const prepare = internalQuery({
       }
     }
 
+    // Workspace brand context
+    const ws = await ctx.db.get(profile.lastActiveWorkspaceId);
+    const brand = ws
+      ? {
+          workspaceName: ws.name,
+          website: ws.website,
+          oneLiner: ws.oneLiner,
+          elevatorPitch: ws.elevatorPitch,
+          offerings: ws.offerings,
+          targetMarket: ws.targetMarket,
+          brandVoice: ws.brandVoice,
+          coreValues: ws.coreValues,
+          pricingSummary: ws.pricingSummary,
+        }
+      : null;
+
     return {
       workspaceId: profile.lastActiveWorkspaceId,
       organizationId: profile.lastActiveOrgId,
       userId: user._id,
       keys,
+      brand,
     };
   },
 });

@@ -57,6 +57,7 @@ import { Label } from "@/components/ui/label";
 import { CommandPalette } from "@/components/atlas/command-palette";
 import { CopilotPanel } from "@/components/atlas/copilot-panel";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -96,6 +97,8 @@ const GROWTH_NAV: NavItem[] = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const bootstrap = useQuery(api.organizations.currentBootstrap);
   const bootstrapProfile = useMutation(api.referrals.bootstrapMyProfile);
+  const setActiveWorkspace = useMutation(api.organizations.setActiveWorkspace);
+  const setActiveOrganization = useMutation(api.organizations.setActiveOrganization);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const router = useRouter();
@@ -175,6 +178,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           organizations={organizations}
           onNewOrg={() => router.push("/onboarding/new-org")}
           onNavigate={(href) => router.push(href)}
+          onSwitchOrg={async (id) => {
+            try {
+              await setActiveOrganization({ organizationId: id as Id<"organizations"> });
+              router.refresh();
+            } catch {}
+          }}
         />
 
         <SidebarInset className="min-w-0">
@@ -193,7 +202,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <DropdownMenuGroup>
                       <DropdownMenuLabel className="eyebrow">Workspaces</DropdownMenuLabel>
                       {workspaces.map((w, i) => (
-                        <DropdownMenuItem key={w._id}>
+                        <DropdownMenuItem
+                          key={w._id}
+                          onClick={async () => {
+                            try {
+                              await setActiveWorkspace({ workspaceId: w._id as Id<"workspaces"> });
+                              router.refresh();
+                            } catch {}
+                          }}
+                        >
                           <span className="flex-1 truncate">{w.name}</span>
                           {i < 9 && (
                             <span className="ml-2 eyebrow text-muted-foreground">⌘{i + 1}</span>
@@ -202,7 +219,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       ))}
                     </DropdownMenuGroup>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onSelect={() => router.push("/onboarding/new-workspace")}>
+                    <DropdownMenuItem onClick={() => router.push("/onboarding/new-workspace")}>
                       + New workspace
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -262,21 +279,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </DropdownMenuLabel>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => router.push("/settings/profile")}>
+                <DropdownMenuItem onClick={() => router.push("/settings/profile")}>
                   <UserIcon className="size-3.5 mr-2" />
                   Profile
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => router.push("/settings/security")}>
+                <DropdownMenuItem onClick={() => router.push("/settings/security")}>
                   Security
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => router.push("/settings/integrations")}>
+                <DropdownMenuItem onClick={() => router.push("/settings/integrations")}>
                   Integrations
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => router.push("/settings/referrals")}>
+                <DropdownMenuItem onClick={() => router.push("/settings/referrals")}>
                   Referrals
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={handleSignOut} className="text-[var(--danger)]">
+                <DropdownMenuItem onClick={handleSignOut} className="text-[var(--danger)]">
                   <LogOut className="size-3.5 mr-2" />
                   Sign out
                 </DropdownMenuItem>
@@ -304,12 +321,14 @@ function AtlasSidebar({
   organizations,
   onNewOrg,
   onNavigate,
+  onSwitchOrg,
 }: {
   pathname: string;
   activeOrg: { _id: string; name: string; slug: string };
   organizations: Array<{ _id: string; name: string }>;
   onNewOrg: () => void;
   onNavigate: (href: string) => void;
+  onSwitchOrg: (id: string) => void;
 }) {
   return (
     <Sidebar collapsible="icon">
@@ -339,11 +358,16 @@ function AtlasSidebar({
             <DropdownMenuGroup>
               <DropdownMenuLabel className="eyebrow">Organizations</DropdownMenuLabel>
               {organizations.map((o) => (
-                <DropdownMenuItem key={o._id}>{o.name}</DropdownMenuItem>
+                <DropdownMenuItem
+                  key={o._id}
+                  onClick={() => onSwitchOrg(o._id)}
+                >
+                  {o.name}
+                </DropdownMenuItem>
               ))}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={onNewOrg}>+ Create organization</DropdownMenuItem>
+            <DropdownMenuItem onClick={onNewOrg}>+ Create organization</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarHeader>

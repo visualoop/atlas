@@ -37,7 +37,7 @@ const CHAT_MSG = v.object({
   tool_calls: v.optional(v.any()),
 });
 
-const SYSTEM_PROMPT = `You are Atlas Copilot, an agentic assistant for a founder.
+const BASE_SYSTEM = `You are Atlas Copilot, an agentic assistant for a founder.
 
 You have access to the founder's workspace via tools. Use them:
 - To look up any record they mention (contact, company, deal, conversation)
@@ -51,6 +51,31 @@ Rules of engagement:
 - When you cite a workspace record, include its ID so the founder can click through: [contact:jd7...].
 - Don't invent facts. If you're unsure, say so.
 - Do exactly what's asked, not more.`;
+
+function buildSystemPrompt(brand: {
+  workspaceName?: string;
+  website?: string;
+  oneLiner?: string;
+  elevatorPitch?: string;
+  offerings?: string;
+  targetMarket?: string;
+  brandVoice?: string;
+  coreValues?: string;
+  pricingSummary?: string;
+} | null): string {
+  if (!brand) return BASE_SYSTEM;
+  const parts: string[] = [BASE_SYSTEM, "", "## About this workspace"];
+  if (brand.workspaceName) parts.push(`Name: ${brand.workspaceName}`);
+  if (brand.website) parts.push(`Website: ${brand.website}`);
+  if (brand.oneLiner) parts.push(`One-liner: ${brand.oneLiner}`);
+  if (brand.elevatorPitch) parts.push(`Pitch: ${brand.elevatorPitch}`);
+  if (brand.offerings) parts.push(`Offerings:\n${brand.offerings}`);
+  if (brand.targetMarket) parts.push(`Ideal customer: ${brand.targetMarket}`);
+  if (brand.pricingSummary) parts.push(`Pricing: ${brand.pricingSummary}`);
+  if (brand.coreValues) parts.push(`Values: ${brand.coreValues}`);
+  if (brand.brandVoice) parts.push(`Brand voice: ${brand.brandVoice}`);
+  return parts.join("\n");
+}
 
 const ATLAS_TOOLS = [
   {
@@ -163,7 +188,7 @@ export const chat = action({
 
     // Prepend system prompt if the caller didn't already include one
     const messages: ChatMessage[] = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: buildSystemPrompt(setup.brand) },
       ...args.messages.filter((m) => m.role !== "system"),
     ];
 

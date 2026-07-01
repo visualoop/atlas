@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 type Provider =
   | "gemini" | "groq" | "openrouter" | "mistral" | "cohere" | "cerebras"
   | "github_models" | "openai" | "anthropic" | "together"
+  | "deepseek" | "xai" | "perplexity" | "google_vertex"
   | "resend" | "meta_whatsapp" | "cloudflare_email_routing"
   | "google_maps_places" | "paystack" | "docuseal";
 
@@ -44,6 +45,10 @@ const PROVIDERS: ProviderInfo[] = [
   { id: "openai", name: "OpenAI", category: "AI", description: "Paid; add when you need GPT-5 or o-series reasoning", signupUrl: "https://platform.openai.com/api-keys", docsUrl: "https://platform.openai.com/docs", keyFormatHint: "starts with sk-…", icon: Sparkles, tier: "paid" },
   { id: "anthropic", name: "Anthropic", category: "AI", description: "Paid; add for Claude when tasks need long-form reasoning", signupUrl: "https://console.anthropic.com/settings/keys", docsUrl: "https://docs.anthropic.com", keyFormatHint: "starts with sk-ant-…", icon: Sparkles, tier: "paid" },
   { id: "together", name: "Together AI", category: "AI", description: "Paid; extra fallback tier", signupUrl: "https://api.together.xyz/settings/api-keys", docsUrl: "https://docs.together.ai", icon: Sparkles, tier: "paid" },
+  { id: "deepseek", name: "DeepSeek", category: "AI", description: "DeepSeek-V3 + DeepSeek-Reasoner — deep reasoning on affordable pricing", signupUrl: "https://platform.deepseek.com/api_keys", docsUrl: "https://platform.deepseek.com/docs", keyFormatHint: "starts with sk-…", icon: Sparkles, tier: "paid" },
+  { id: "xai", name: "xAI (Grok)", category: "AI", description: "Grok-4 with real-time X data + web browsing", signupUrl: "https://console.x.ai", docsUrl: "https://docs.x.ai", keyFormatHint: "starts with xai-…", icon: Sparkles, tier: "paid" },
+  { id: "perplexity", name: "Perplexity", category: "AI", description: "Sonar API — web search + citations built into every response", signupUrl: "https://www.perplexity.ai/settings/api", docsUrl: "https://docs.perplexity.ai", keyFormatHint: "starts with pplx-…", icon: Sparkles, tier: "paid" },
+  { id: "google_vertex", name: "Google Vertex AI", category: "AI", description: "GCP-hosted Gemini + Model Optimizer for enterprise", signupUrl: "https://console.cloud.google.com/vertex-ai", docsUrl: "https://cloud.google.com/vertex-ai/docs", keyFormatHint: "Service account JSON or access token", icon: Sparkles, tier: "paid" },
 
   // Email
   { id: "resend", name: "Resend", category: "Email", description: "Workspace outbound email + inbound webhook. System auth OTP uses a separate env-level key.", signupUrl: "https://resend.com/api-keys", docsUrl: "https://resend.com/docs", keyFormatHint: "starts with re_…", deepLink: "/settings/senders", icon: Mail, tier: "freemium" },
