@@ -1594,4 +1594,68 @@ export default defineSchema({
     .index("by_workspace_status", ["workspaceId", "status"])
     .index("by_workspace_time", ["workspaceId", "generatedAt"])
     .index("by_workspace_priority", ["workspaceId", "priority"]),
+
+  /* ============================================================ */
+  /* Phase 8c — Trend & Brand Intelligence                          */
+  /* ============================================================ */
+
+  brandWatches: defineTable({
+    workspaceId: v.id("workspaces"),
+    label: v.string(),                                       // 'Omnix POS' | 'Blyss' | 'competitor: Kwesibook'
+    kind: v.union(
+      v.literal("brand"),                                     // your own name/product
+      v.literal("competitor"),
+      v.literal("topic"),                                     // industry keyword like 'Kenya retail tech'
+    ),
+    // Multi-string query — matched with OR
+    queries: v.array(v.string()),
+    // Optional constraints
+    languageHint: v.optional(v.string()),                    // 'en' | 'sw'
+    regionHint: v.optional(v.string()),                      // 'KE' | 'EA' | 'global'
+    // Cron controls
+    active: v.boolean(),
+    lastScanAt: v.optional(v.number()),
+    // Aggregate — how many mentions so far
+    mentionCount: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_active", ["workspaceId", "active"])
+    .index("by_workspace_kind", ["workspaceId", "kind"]),
+
+  trendMentions: defineTable({
+    workspaceId: v.id("workspaces"),
+    watchId: v.id("brandWatches"),
+    // Source
+    sourceType: v.string(),                                   // 'web' | 'twitter' | 'reddit' | 'news' | 'review'
+    url: v.string(),                                          // canonical link, unique per workspace
+    title: v.string(),
+    excerpt: v.string(),                                      // AI-summarized snippet
+    authorName: v.optional(v.string()),
+    authorHandle: v.optional(v.string()),
+    // AI classifications
+    sentiment: v.optional(v.string()),                        // 'positive' | 'neutral' | 'negative'
+    relevanceScore: v.optional(v.number()),                  // 0-100
+    topics: v.optional(v.array(v.string())),
+    // Actionable state
+    status: v.union(
+      v.literal("new"),
+      v.literal("triaged"),
+      v.literal("responded"),
+      v.literal("posted"),
+      v.literal("dismissed"),
+    ),
+    // Where it points if founder acted
+    linkedConversationId: v.optional(v.id("conversations")),
+    linkedSocialPostId: v.optional(v.id("socialPosts")),
+    linkedSeoIdeaId: v.optional(v.id("seoIdeas")),
+    publishedAt: v.optional(v.number()),                     // when the source was published
+    discoveredAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace_status", ["workspaceId", "status"])
+    .index("by_workspace_watch_time", ["workspaceId", "watchId", "discoveredAt"])
+    .index("by_workspace_url", ["workspaceId", "url"])
+    .index("by_workspace_time", ["workspaceId", "discoveredAt"])
+    .index("by_workspace_relevance", ["workspaceId", "relevanceScore"]),
 });
