@@ -18,7 +18,7 @@ type Provider =
   | "github_models" | "openai" | "anthropic" | "together"
   | "deepseek" | "xai" | "perplexity" | "google_vertex"
   | "resend" | "meta_whatsapp" | "cloudflare_email_routing"
-  | "google_maps_places" | "paystack" | "docuseal";
+  | "google_maps_places" | "paystack" | "docuseal" | "composio";
 
 interface ProviderInfo {
   id: Provider;
@@ -65,9 +65,12 @@ const PROVIDERS: ProviderInfo[] = [
 
   // Docs
   { id: "docuseal", name: "DocuSeal", category: "Documents", description: "Self-hosted or cloud e-signature; wire once for contract signing", signupUrl: "https://www.docuseal.com/console", docsUrl: "https://www.docuseal.com/docs/api", icon: FileSignature, tier: "freemium" },
+
+  // Automation hub — Composio (1000+ apps via one API key)
+  { id: "composio", name: "Composio", category: "Automation", description: "Slack, Notion, GitHub, HubSpot, Airtable, X, TikTok, YouTube — 1000+ apps via one API key. Powers /automations composio nodes.", signupUrl: "https://app.composio.dev/developers", docsUrl: "https://docs.composio.dev", keyFormatHint: "starts with comp_…", deepLink: "/automations", icon: Zap, tier: "freemium" },
 ];
 
-const CATEGORIES = ["AI", "Email", "Messaging", "Lead gen", "Payments", "Documents"];
+const CATEGORIES = ["AI", "Email", "Messaging", "Lead gen", "Payments", "Documents", "Automation"];
 
 interface KeyRow {
   _id: Id<"orgIntegrationKeys">;
@@ -201,37 +204,6 @@ export default function IntegrationsPage() {
             </section>
           );
         })}
-
-        {/* Composio + Automation (Phase 12 stubs, but visible as roadmap) */}
-        <section className="space-y-3">
-          <p className="eyebrow">Composio (1000+ apps via a single connector)</p>
-          <div className="border border-border p-4 space-y-2">
-            <div className="flex items-center gap-3">
-              <div className="size-9 border border-border grid place-items-center text-muted-foreground">
-                <Zap className="size-4" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">Composio</p>
-                <p className="text-xs text-muted-foreground">
-                  Slack, Notion, GitHub, HubSpot, Airtable, X, TikTok, YouTube + 1000 more
-                  via one API key. Manage per-user connections via /settings/composio (coming).
-                </p>
-              </div>
-              <a
-                href="https://app.composio.dev/developers"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs eyebrow text-primary hover:underline"
-              >
-                Get key ↗
-              </a>
-            </div>
-            <p className="text-[11px] text-muted-foreground italic">
-              Convex env key wiring: set <code className="font-mono">COMPOSIO_API_KEY</code> in the
-              Convex admin dashboard. Per-user OAuth flow lands in the Automation Builder next.
-            </p>
-          </div>
-        </section>
 
         {/* System-level env vars notice */}
         <section className="border border-dashed border-border p-5 space-y-2">

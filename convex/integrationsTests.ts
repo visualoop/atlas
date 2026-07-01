@@ -33,6 +33,7 @@ const PROVIDER = v.union(
   v.literal("google_maps_places"),
   v.literal("paystack"),
   v.literal("docuseal"),
+  v.literal("composio"),
 );
 
 export const testProvider = action({
@@ -160,6 +161,25 @@ export const testProvider = action({
           if (!res.ok) return { ok: false, detail: `HTTP ${res.status}` };
           const j = (await res.json()) as { success: boolean };
           return { ok: !!j.success, detail: j.success ? "token active" : "invalid" };
+        }
+        case "google_vertex": {
+          // Vertex accepts either OAuth access tokens or (rarely) service
+          // account JSON. Bearer token flow: hit the discovery endpoint.
+          const res = await fetch(
+            "https://us-central1-aiplatform.googleapis.com/v1/publishers/google/models",
+            { headers: { Authorization: `Bearer ${key}` } },
+          );
+          if (!res.ok) return { ok: false, detail: `HTTP ${res.status}` };
+          return { ok: true, detail: "authenticated" };
+        }
+        case "composio": {
+          const res = await fetch("https://backend.composio.dev/api/v1/apps?limit=1", {
+            headers: { "x-api-key": key },
+          });
+          if (!res.ok) return { ok: false, detail: `HTTP ${res.status}` };
+          const j = (await res.json()) as { items?: unknown[]; data?: unknown[] };
+          const count = j.items?.length ?? j.data?.length ?? 0;
+          return { ok: true, detail: `authenticated, ${count} apps visible` };
         }
         default:
           return { ok: false, detail: "no_test_for_provider" };

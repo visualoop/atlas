@@ -29,6 +29,7 @@ const PROVIDER = v.union(
   v.literal("google_maps_places"),
   v.literal("paystack"),
   v.literal("docuseal"),
+  v.literal("composio"),
 );
 
 export const fetchKey = internalQuery({

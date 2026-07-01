@@ -30,17 +30,31 @@ let cachedKey: CryptoKey | null = null;
 
 async function getKey(): Promise<CryptoKey> {
   if (cachedKey) return cachedKey;
-  const b64 = process.env[KEY_ENV];
-  if (!b64) {
+  const rawEnv = process.env[KEY_ENV];
+  if (!rawEnv) {
     throw new Error(
       `${KEY_ENV} is not set. Run \`npx convex env set ${KEY_ENV} <base64>\` ` +
         `with a 32-byte (256-bit) random key. Generate one with: ` +
         `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`,
     );
   }
-  const raw = base64ToBytes(b64);
+
+  // The workflow historically generated hex via `openssl rand -hex 32`, but
+  // the code was expecting base64. Support both so old deployments keep
+  // working: try hex first if it looks like hex (64 chars, /^[0-9a-f]+$/i),
+  // otherwise fall back to base64.
+  const trimmed = rawEnv.trim();
+  let raw: Uint8Array;
+  if (/^[0-9a-f]{64}$/i.test(trimmed)) {
+    raw = hexToBytes(trimmed);
+  } else {
+    raw = base64ToBytes(trimmed);
+  }
   if (raw.byteLength !== 32) {
-    throw new Error(`${KEY_ENV} must decode to 32 bytes (got ${raw.byteLength}).`);
+    throw new Error(
+      `${KEY_ENV} must decode to 32 bytes (got ${raw.byteLength}). ` +
+        `Accepts either 64-char hex or 44-char base64 of 32 random bytes.`,
+    );
   }
   cachedKey = await crypto.subtle.importKey(
     "raw",
@@ -50,6 +64,14 @@ async function getKey(): Promise<CryptoKey> {
     ["encrypt", "decrypt"],
   );
   return cachedKey;
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
 }
 
 /**
