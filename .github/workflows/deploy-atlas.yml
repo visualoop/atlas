@@ -172,3 +172,74 @@ jobs:
             sleep 12
           done
           npx convex deploy -y
+
+      - name: Seed Convex env vars (idempotent)
+        env:
+          CONVEX_SELF_HOSTED_URL: https://api.atlas.blyss.co.ke
+          CONVEX_SELF_HOSTED_ADMIN_KEY: ${{ steps.gen_key.outputs.key }}
+          SITE_URL: https://atlas.blyss.co.ke
+          CONFIG_ENCRYPTION_KEY: ${{ secrets.CONFIG_ENCRYPTION_KEY }}
+          JWT_PRIVATE_KEY_ENV: ${{ secrets.JWT_PRIVATE_KEY }}
+          JWKS_ENV: ${{ secrets.JWKS }}
+        run: |
+          set -e
+          # SITE_URL — always set
+          npx convex env set SITE_URL "$SITE_URL"
+
+          # CONFIG_ENCRYPTION_KEY — generate on first run if not provided
+          if [ -z "$CONFIG_ENCRYPTION_KEY" ]; then
+            CURRENT=$(npx convex env get CONFIG_ENCRYPTION_KEY 2>/dev/null || echo "")
+            if [ -z "$CURRENT" ]; then
+              NEW=$(openssl rand -hex 32)
+              npx convex env set CONFIG_ENCRYPTION_KEY "$NEW"
+              echo "::add-mask::$NEW"
+              echo "Generated new CONFIG_ENCRYPTION_KEY. Save this value if you ever need to migrate:"
+              echo "  $NEW"
+              echo "(Also saving as workflow secret CONFIG_ENCRYPTION_KEY_SAVE for audit.)"
+            fi
+          else
+            npx convex env set CONFIG_ENCRYPTION_KEY "$CONFIG_ENCRYPTION_KEY"
+          fi
+
+          # JWT_PRIVATE_KEY + JWKS — generate deterministic pair on first
+          # run if not provided.
+          if [ -z "$JWT_PRIVATE_KEY_ENV" ] || [ -z "$JWKS_ENV" ]; then
+            HAS_JWT=$(npx convex env get JWT_PRIVATE_KEY 2>/dev/null || echo "")
+            HAS_JWKS=$(npx convex env get JWKS 2>/dev/null || echo "")
+            if [ -z "$HAS_JWT" ] || [ -z "$HAS_JWKS" ]; then
+              echo "==> Generating JWT keypair"
+              node <<'NODE'
+              const { generateKeyPair, exportPKCS8, exportJWK } = require("jose");
+              (async () => {
+                const { privateKey, publicKey } = await generateKeyPair("RS256", { extractable: true });
+                const priv = (await exportPKCS8(privateKey)).replace(/\n/g, " ");
+                const pubJwk = { ...(await exportJWK(publicKey)), use: "sig", alg: "RS256" };
+                const jwks = JSON.stringify({ keys: [pubJwk] });
+                console.log("PRIV::" + priv);
+                console.log("JWKS::" + jwks);
+              })();
+              NODE
+              # Node output was captured via /dev/stdout; parse it back
+              # (using a subshell to avoid tangling with the workflow).
+              KEYS=$(node -e "
+                const { generateKeyPair, exportPKCS8, exportJWK } = require('jose');
+                (async () => {
+                  const { privateKey, publicKey } = await generateKeyPair('RS256', { extractable: true });
+                  const priv = (await exportPKCS8(privateKey)).replace(/\n/g, ' ').trim();
+                  const pubJwk = { ...(await exportJWK(publicKey)), use: 'sig', alg: 'RS256' };
+                  const jwks = JSON.stringify({ keys: [pubJwk] });
+                  process.stdout.write(priv + '\\n---\\n' + jwks);
+                })();
+              ")
+              PRIV=$(echo "$KEYS" | awk 'BEGIN{f=1} /^---$/{f=0; next} f')
+              JWKS_VAL=$(echo "$KEYS" | awk 'BEGIN{f=0} /^---$/{f=1; next} f')
+              npx convex env set JWT_PRIVATE_KEY "$PRIV"
+              npx convex env set JWKS "$JWKS_VAL"
+            fi
+          else
+            npx convex env set JWT_PRIVATE_KEY "$JWT_PRIVATE_KEY_ENV"
+            npx convex env set JWKS "$JWKS_ENV"
+          fi
+
+          echo "==> Env vars now set:"
+          npx convex env list | grep -E "SITE_URL|CONFIG_ENCRYPTION_KEY|JWT_PRIVATE_KEY|JWKS" || true
