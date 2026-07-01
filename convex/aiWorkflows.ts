@@ -320,10 +320,6 @@ export const enrichWebsite = action({
   },
 });
 
-/* ------------------------------------------------------------------ */
-/* Helpers                                                               */
-/* ------------------------------------------------------------------ */
-
 function tryParseJSON(text: string): Record<string, unknown> | null {
   // The model sometimes wraps JSON in markdown fences
   const cleaned = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
@@ -348,3 +344,172 @@ function clampScore(v: unknown): number {
   if (!Number.isFinite(n)) return 50;
   return Math.max(0, Math.min(100, Math.round(n)));
 }
+
+/* ------------------------------------------------------------------ */
+/* Generate document body                                                */
+/* ------------------------------------------------------------------ */
+
+const GENERATE_DOC_SYSTEM = `You draft business documents for Blyss.
+
+Style rules — non-negotiable:
+- Kenyan English spelling.
+- No AI-slop: no "I hope this finds you well", no "delve into",
+  no em-dashes as filler, no "That's a great question", no
+  "in today's fast-paced world".
+- Concrete over abstract. Specific numbers where you have them.
+- One idea per paragraph. Short sentences.
+- Match the document kind: proposals persuade, quotes list, invoices
+  are neutral, contracts are precise.
+
+Return Markdown — headings with ##, lists with -, bold with **. No
+front-matter, no meta commentary, no "here is the document" preamble.`;
+
+export const generateDocumentBody = action({
+  args: {
+    documentId: v.id("documents"),
+    brief: v.string(),                                       // what to draft
+  },
+  handler: async (ctx, args): Promise<{ markdown: string; provider: string; model: string }> => {
+    const context = await ctx.runQuery(internal.aiWorkflowHelpers.loadDocumentContext, {
+      documentId: args.documentId,
+    });
+    if (!context) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Document not found." });
+    }
+    const { doc, workspace, userId, company, contact, deal } = context;
+
+    const contextLines: string[] = [
+      `Document kind: ${doc.kind}`,
+      `Title: ${doc.title}`,
+      `Currency: ${doc.currency}`,
+    ];
+    if (company) contextLines.push(`Company: ${company.name}${company.industry ? " (" + company.industry + ")" : ""}`);
+    if (contact) contextLines.push(`Contact: ${contact.firstName}${contact.lastName ? " " + contact.lastName : ""}${contact.title ? " — " + contact.title : ""}`);
+    if (deal) contextLines.push(`Deal: ${deal.name}, currently at ${Number(deal.amountCents) / 100} ${deal.currency}`);
+
+    const userPrompt = [
+      "Context:",
+      contextLines.join("\n"),
+      "",
+      "Brief from Justine:",
+      args.brief,
+      "",
+      "Write the document body in Markdown.",
+    ].join("\n");
+
+    const result = await ctx.runAction(internal.ai.runFeature, {
+      workspaceId: workspace._id,
+      organizationId: workspace.organizationId,
+      actorId: userId,
+      featureId: "generate_document",
+      messages: [
+        { role: "system", content: GENERATE_DOC_SYSTEM },
+        { role: "user", content: userPrompt },
+      ],
+      resourceType: "document",
+      resourceId: args.documentId,
+    });
+    return { markdown: result.text, provider: result.provider, model: result.model };
+  },
+});
+
+/* ------------------------------------------------------------------ */
+/* Critique document — anti-slop review                                  */
+/* ------------------------------------------------------------------ */
+
+const CRITIQUE_DOC_SYSTEM = `You review business documents for tone and clarity.
+
+Flag any of these AI-slop tells:
+- "I hope this email finds you well"
+- "delve into", "elevate", "leverage", "seamless", "robust"
+- em-dashes used as filler rather than punctuation
+- "in today's fast-paced world"
+- "That's a great question"
+- excessive hedging: "somewhat", "essentially", "arguably"
+- passive voice where active would be clearer
+- vague phrases like "unlock potential" or "drive growth"
+
+Also flag:
+- unclear commitments (dates, numbers, deliverables missing)
+- inconsistent tone (formal vs casual within one doc)
+- missing critical fields for the document kind
+
+Return JSON:
+{
+  "score": 0-100 (100 = ready to send),
+  "issues": [{"quote": "verbatim text", "issue": "why", "suggestion": "replacement"}],
+  "summary": "1-sentence overall verdict"
+}`;
+
+export const critiqueDocument = action({
+  args: { documentId: v.id("documents") },
+  handler: async (ctx, args): Promise<{
+    score: number;
+    issues: Array<{ quote: string; issue: string; suggestion: string }>;
+    summary: string;
+    provider: string;
+    model: string;
+  }> => {
+    const context = await ctx.runQuery(internal.aiWorkflowHelpers.loadDocumentContext, {
+      documentId: args.documentId,
+    });
+    if (!context) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Document not found." });
+    }
+    const { doc, workspace, userId } = context;
+
+    if (!doc.bodyText.trim()) {
+      return {
+        score: 0,
+        issues: [],
+        summary: "Document body is empty.",
+        provider: "internal",
+        model: "internal",
+      };
+    }
+
+    const userPrompt = [
+      `Kind: ${doc.kind}`,
+      `Title: ${doc.title}`,
+      "",
+      "Body:",
+      doc.bodyText,
+    ].join("\n");
+
+    const aiResult = await ctx.runAction(internal.ai.runFeature, {
+      workspaceId: workspace._id,
+      organizationId: workspace.organizationId,
+      actorId: userId,
+      featureId: "critique_document",
+      messages: [
+        { role: "system", content: CRITIQUE_DOC_SYSTEM },
+        { role: "user", content: userPrompt },
+      ],
+      resourceType: "document",
+      resourceId: args.documentId,
+    });
+
+    const parsed = tryParseJSON(aiResult.text) ?? {};
+    const score = clampScore(parsed.score);
+    const rawIssues = Array.isArray(parsed.issues) ? parsed.issues : [];
+    const issues = rawIssues
+      .filter((i): i is Record<string, unknown> => typeof i === "object" && i !== null)
+      .map((i) => ({
+        quote: typeof i.quote === "string" ? i.quote : "",
+        issue: typeof i.issue === "string" ? i.issue : "",
+        suggestion: typeof i.suggestion === "string" ? i.suggestion : "",
+      }))
+      .filter((i) => i.quote && i.issue);
+    const summary = typeof parsed.summary === "string"
+      ? parsed.summary
+      : aiResult.text.slice(0, 300);
+
+    return {
+      score,
+      issues,
+      summary,
+      provider: aiResult.provider,
+      model: aiResult.model,
+    };
+  },
+});

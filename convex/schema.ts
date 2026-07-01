@@ -889,4 +889,197 @@ export default defineSchema({
       searchField: "name",
       filterFields: ["workspaceId", "archivedAt"],
     }),
+
+  /* ============================================================ */
+  /* Phase 7a — Documents (proposals, quotes, invoices, contracts)  */
+  /* ============================================================ */
+
+  documents: defineTable({
+    workspaceId: v.id("workspaces"),
+    kind: v.union(
+      v.literal("proposal"),
+      v.literal("quote"),
+      v.literal("invoice"),
+      v.literal("contract"),
+      v.literal("brief"),
+      v.literal("statement_of_work"),
+    ),
+    // Human-readable serial per workspace + kind, e.g. INV-2026-0042.
+    number: v.optional(v.string()),
+    title: v.string(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("sent"),
+      v.literal("viewed"),
+      v.literal("accepted"),
+      v.literal("rejected"),
+      v.literal("paid"),
+      v.literal("partially_paid"),
+      v.literal("overdue"),
+      v.literal("cancelled"),
+      v.literal("void"),
+    ),
+    // TipTap JSON body — content between locked sections.
+    body: v.any(),
+    bodyText: v.string(),                                   // plaintext extract for FTS
+    // Money — always cents. Line items sum to subtotalCents.
+    currency: v.string(),                                   // 'KES' default
+    subtotalCents: v.int64(),
+    taxCents: v.int64(),                                    // VAT etc.
+    discountCents: v.int64(),
+    totalCents: v.int64(),
+    // Tax config
+    taxRate: v.optional(v.number()),                        // e.g. 0.16 for 16% VAT
+    taxLabel: v.optional(v.string()),                        // 'VAT' | 'GST' | ''
+    // eTIMS + M-PESA for Kenyan invoices
+    etimsReference: v.optional(v.string()),                 // KRA eTIMS control code
+    mpesaPaybill: v.optional(v.string()),
+    mpesaTill: v.optional(v.string()),
+    mpesaAccountRef: v.optional(v.string()),                // e.g. deal id or invoice number
+    // Links
+    dealId: v.optional(v.id("deals")),
+    contactId: v.optional(v.id("contacts")),
+    companyId: v.optional(v.id("companies")),
+    templateId: v.optional(v.id("documentTemplates")),
+    ownerId: v.optional(v.id("users")),
+    // Dates
+    issueDate: v.optional(v.number()),
+    dueDate: v.optional(v.number()),                        // invoice due
+    validUntil: v.optional(v.number()),                     // quote expiry
+    sentAt: v.optional(v.number()),
+    viewedAt: v.optional(v.number()),
+    acceptedAt: v.optional(v.number()),
+    // Rendered PDF cache
+    pdfStorageId: v.optional(v.id("_storage")),
+    pdfRenderedAt: v.optional(v.number()),
+    // Notes visible to recipient
+    footerNote: v.optional(v.string()),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_kind", ["workspaceId", "kind"])
+    .index("by_workspace_status", ["workspaceId", "status"])
+    .index("by_workspace_deal", ["workspaceId", "dealId"])
+    .index("by_workspace_company", ["workspaceId", "companyId"])
+    .index("by_workspace_contact", ["workspaceId", "contactId"])
+    .index("by_workspace_number", ["workspaceId", "kind", "number"])
+    .searchIndex("search_body", {
+      searchField: "bodyText",
+      filterFields: ["workspaceId", "kind", "archivedAt"],
+    }),
+
+  documentLineItems: defineTable({
+    workspaceId: v.id("workspaces"),
+    documentId: v.id("documents"),
+    order: v.number(),
+    description: v.string(),
+    quantity: v.number(),                                   // 1, 1.5, etc.
+    unit: v.optional(v.string()),                            // 'hour' | 'day' | 'item' | 'month'
+    unitPriceCents: v.int64(),
+    discountCents: v.int64(),
+    taxable: v.boolean(),
+    lineTotalCents: v.int64(),                              // qty * unit - discount
+  })
+    .index("by_document_order", ["documentId", "order"]),
+
+  documentTemplates: defineTable({
+    workspaceId: v.id("workspaces"),
+    kind: v.string(),                                        // matches documents.kind
+    name: v.string(),
+    description: v.optional(v.string()),
+    // TipTap JSON with special "locked" nodes for pricing / terms
+    body: v.any(),
+    // Default fields to seed a doc created from this template
+    defaults: v.optional(v.any()),                           // { validityDays, taxRate, footerNote, … }
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_kind", ["workspaceId", "kind"]),
+
+  // Public shareable link for a document — recipient views without login.
+  documentShares: defineTable({
+    workspaceId: v.id("workspaces"),
+    documentId: v.id("documents"),
+    token: v.string(),                                       // random 32-char, url-safe
+    createdBy: v.id("users"),
+    accessCount: v.number(),
+    lastAccessedAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+    // Track recipient actions taken via the share link
+    acceptedAt: v.optional(v.number()),
+    acceptedByEmail: v.optional(v.string()),
+    acceptedByName: v.optional(v.string()),
+    acceptedSignatureData: v.optional(v.string()),          // base64 PNG for click-signature
+  })
+    .index("by_token", ["token"])
+    .index("by_document", ["documentId"])
+    .index("by_workspace", ["workspaceId"]),
+
+  // DocuSeal integration — one row per submitted signature request
+  documentSignatures: defineTable({
+    workspaceId: v.id("workspaces"),
+    documentId: v.id("documents"),
+    provider: v.union(v.literal("docuseal"), v.literal("internal")),
+    externalId: v.optional(v.string()),                     // DocuSeal submission id
+    signerEmail: v.string(),
+    signerName: v.optional(v.string()),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("sent"),
+      v.literal("viewed"),
+      v.literal("signed"),
+      v.literal("declined"),
+      v.literal("expired"),
+    ),
+    signedAt: v.optional(v.number()),
+    signedPdfStorageId: v.optional(v.id("_storage")),
+    auditTrail: v.optional(v.any()),                        // provider audit log
+  })
+    .index("by_document", ["documentId"])
+    .index("by_external", ["externalId"])
+    .index("by_workspace", ["workspaceId"]),
+
+  /* ============================================================ */
+  /* Phase 7a — Sales Enablement Vault                              */
+  /* ============================================================ */
+
+  salesAssets: defineTable({
+    workspaceId: v.id("workspaces"),
+    kind: v.union(
+      v.literal("playbook"),
+      v.literal("battlecard"),
+      v.literal("testimonial"),
+      v.literal("case_study"),
+      v.literal("one_pager"),
+      v.literal("demo_script"),
+      v.literal("objection"),
+    ),
+    title: v.string(),
+    // TipTap JSON body
+    body: v.any(),
+    bodyText: v.string(),
+    // Metadata for filtering / retrieval
+    tags: v.array(v.string()),
+    productId: v.optional(v.string()),                       // 'omnix' | 'blyss_studio' | 'marketplace'
+    persona: v.optional(v.string()),                         // 'retailer' | 'agency' | 'creator'
+    stage: v.optional(v.string()),                           // 'discovery' | 'demo' | 'proposal' | …
+    // For testimonials/case studies — the source contact/company
+    contactId: v.optional(v.id("contacts")),
+    companyId: v.optional(v.id("companies")),
+    // Optional attached file (case-study PDF)
+    fileId: v.optional(v.id("files")),
+    // Usage stats — how often was this pulled into a conversation
+    usageCount: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    authorId: v.id("users"),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_kind", ["workspaceId", "kind"])
+    .index("by_workspace_product", ["workspaceId", "productId"])
+    .searchIndex("search_body", {
+      searchField: "bodyText",
+      filterFields: ["workspaceId", "kind", "productId", "archivedAt"],
+    }),
 });

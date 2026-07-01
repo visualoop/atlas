@@ -118,6 +118,30 @@ export const AI_FEATURES: Record<string, AIFeature> = {
       FREE_ROUTER_SAFETY,
     ],
   },
+
+  /* Document generation — proposals, quotes, contracts */
+  generate_document: {
+    id: "generate_document",
+    label: "Generate document body",
+    description: "Given deal + contact context + a brief, produce structured document body.",
+    defaultChain: [
+      { provider: "gemini", model: "gemini-2.0-flash-exp", temperature: 0.3, maxTokens: 3000 },
+      { provider: "groq", model: "llama-3.3-70b-versatile", temperature: 0.3, maxTokens: 3000 },
+      FREE_ROUTER_SAFETY,
+    ],
+  },
+
+  /* Critique document — anti-slop review before send */
+  critique_document: {
+    id: "critique_document",
+    label: "Critique a document",
+    description: "Review for tone, clarity, and slop patterns. Return issues list.",
+    defaultChain: [
+      { provider: "gemini", model: "gemini-2.0-flash-exp", temperature: 0.1, maxTokens: 1500 },
+      { provider: "groq", model: "llama-3.3-70b-versatile", temperature: 0.1, maxTokens: 1500 },
+      FREE_ROUTER_SAFETY,
+    ],
+  },
 };
 
 export function getDefaultChain(featureId: string): ChainStep[] {

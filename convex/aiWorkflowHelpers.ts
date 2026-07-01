@@ -54,6 +54,32 @@ export const loadProspectorResult = internalQuery({
 });
 
 /* ------------------------------------------------------------------ */
+/* Document → self, workspace, user, company, contact, deal              */
+/* ------------------------------------------------------------------ */
+
+export const loadDocumentContext = internalQuery({
+  args: { documentId: v.id("documents") },
+  handler: async (ctx, args) => {
+    const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
+    const doc = await ctx.db.get(args.documentId);
+    if (!doc || doc.workspaceId !== wsCtx.workspace._id) return null;
+    const [company, contact, deal] = await Promise.all([
+      doc.companyId ? ctx.db.get(doc.companyId) : Promise.resolve(null),
+      doc.contactId ? ctx.db.get(doc.contactId) : Promise.resolve(null),
+      doc.dealId ? ctx.db.get(doc.dealId) : Promise.resolve(null),
+    ]);
+    return {
+      doc,
+      workspace: wsCtx.workspace,
+      userId: wsCtx.user._id,
+      company,
+      contact,
+      deal,
+    };
+  },
+});
+
+/* ------------------------------------------------------------------ */
 /* Persist fit score                                                     */
 /* ------------------------------------------------------------------ */
 
