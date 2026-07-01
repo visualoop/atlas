@@ -185,6 +185,80 @@ export const searchDeals = internalQuery({
   },
 });
 
+/**
+ * List deals by state — the proper way to answer "top 3 open deals".
+ * search_deals is only for name-based lookup.
+ */
+export const listDeals = internalQuery({
+  args: {
+    workspaceId: v.id("workspaces"),
+    state: v.string(),           // 'open' | 'won' | 'lost' | 'any'
+    sortBy: v.string(),          // 'amount' | 'activity' | 'recent'
+    limit: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("deals")
+      .withIndex("by_workspace", (b) => b.eq("workspaceId", args.workspaceId))
+      .collect();
+    const stages = await ctx.db
+      .query("pipelineStages")
+      .withIndex("by_workspace", (b) => b.eq("workspaceId", args.workspaceId))
+      .collect();
+    const stageById = new Map(stages.map((s) => [s._id, s]));
+
+    const filtered = rows.filter((d) => {
+      if (d.archivedAt !== undefined) return false;
+      switch (args.state) {
+        case "won":
+          return !!d.wonAt;
+        case "lost":
+          return !!d.lostAt;
+        case "open":
+          return !d.wonAt && !d.lostAt;
+        case "any":
+        default:
+          return true;
+      }
+    });
+
+    const sorted = filtered.sort((a, b) => {
+      switch (args.sortBy) {
+        case "activity":
+          return (b.lastActivityAt ?? 0) - (a.lastActivityAt ?? 0);
+        case "recent":
+          return b._creationTime - a._creationTime;
+        case "amount":
+        default:
+          return Number(b.amountCents - a.amountCents);
+      }
+    });
+
+    const total = filtered.length;
+    return {
+      total,
+      state: args.state,
+      deals: sorted.slice(0, args.limit).map((d) => ({
+        id: d._id,
+        name: d.name,
+        amountCents: d.amountCents.toString(),
+        currency: d.currency,
+        stage: stageById.get(d.stageId)?.name ?? "unknown",
+        won: !!d.wonAt,
+        lost: !!d.lostAt,
+        wonAt: d.wonAt,
+        lostAt: d.lostAt,
+        contactId: d.contactId,
+        companyId: d.companyId,
+        healthScore: d.healthScore,
+        lastActivityAt: d.lastActivityAt,
+        lastActivityIso: d.lastActivityAt ? new Date(d.lastActivityAt).toISOString() : undefined,
+        createdAt: new Date(d._creationTime).toISOString(),
+      })),
+    };
+  },
+});
+
 export const recentConversations = internalQuery({
   args: { workspaceId: v.id("workspaces"), limit: v.number() },
   handler: async (ctx, args) => {

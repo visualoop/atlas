@@ -116,7 +116,7 @@ const ATLAS_TOOLS = [
     type: "function",
     function: {
       name: "search_deals",
-      description: "Search open deals by name. Returns amount + stage + linked contact/company.",
+      description: "Search deals by name substring. Returns amount + stage + linked contact/company. If you want to LIST deals by state (open / won / lost), use `list_deals` instead.",
       parameters: {
         type: "object",
         properties: {
@@ -124,6 +124,29 @@ const ATLAS_TOOLS = [
           limit: { type: "number" },
         },
         required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_deals",
+      description: "List deals filtered by state — 'open' (not yet won or lost), 'won', or 'lost'. Sortable by amount desc (default), lastActivityAt desc, or recentlyCreated. Best for questions like 'my top 3 open deals', 'biggest win last month', 'what's stuck in the pipeline'.",
+      parameters: {
+        type: "object",
+        properties: {
+          state: {
+            type: "string",
+            enum: ["open", "won", "lost", "any"],
+            description: "Deal state. Default 'open'.",
+          },
+          sortBy: {
+            type: "string",
+            enum: ["amount", "activity", "recent"],
+            description: "amount = highest value first (default), activity = most recently touched, recent = newest first.",
+          },
+          limit: { type: "number", description: "Max results (default 10)" },
+        },
       },
     },
   },
@@ -480,6 +503,13 @@ async function handleAtlasTool(
         return await ctx.runQuery(internal.copilotHelpers.searchDeals, {
           workspaceId,
           query: String(parsed.query ?? ""),
+          limit: Number(parsed.limit ?? 10),
+        });
+      case "list_deals":
+        return await ctx.runQuery(internal.copilotHelpers.listDeals, {
+          workspaceId,
+          state: (parsed.state as string) ?? "open",
+          sortBy: (parsed.sortBy as string) ?? "amount",
           limit: Number(parsed.limit ?? 10),
         });
       case "list_recent_conversations":
