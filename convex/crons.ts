@@ -23,4 +23,10 @@ crons.interval(
   internal.emails.unwindSnoozed,
 );
 
+crons.interval(
+  "process due campaign recipients",
+  { minutes: 1 },
+  internal.campaignRunner.processDueRecipients,
+);
+
 export default crons;

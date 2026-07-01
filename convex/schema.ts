@@ -1185,4 +1185,129 @@ export default defineSchema({
     .index("by_workspace", ["workspaceId"])
     .index("by_reference", ["reference"])
     .index("by_workspace_status", ["workspaceId", "status"]),
+
+  /* ============================================================ */
+  /* Phase 8 — Campaigns + drip sequences                           */
+  /* ============================================================ */
+
+  campaigns: defineTable({
+    workspaceId: v.id("workspaces"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    channel: v.union(
+      v.literal("email"),
+      v.literal("whatsapp"),
+      v.literal("multi"),
+    ),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("scheduled"),
+      v.literal("running"),
+      v.literal("paused"),
+      v.literal("complete"),
+      v.literal("cancelled"),
+    ),
+    // Audience — a simple filter shape resolved at launch time.
+    // { lifecycleStage: string[], tags: string[], companyId?, ownerId? }
+    audienceFilter: v.optional(v.any()),
+    // How many messages / day per recipient? Global daily throttle
+    // to avoid provider rate limits and human overload.
+    dailyThrottle: v.optional(v.number()),                  // messages per hour across all recipients
+    // Stop rules — pause on reply, stop on conversion.
+    stopOnReply: v.boolean(),
+    stopOnConversion: v.boolean(),
+    // Scheduling
+    scheduledStartAt: v.optional(v.number()),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    // Ownership
+    ownerId: v.optional(v.id("users")),
+    // Aggregates — updated on send/reply/convert (avoids fanout)
+    recipientCount: v.number(),
+    sentCount: v.number(),
+    openCount: v.number(),
+    replyCount: v.number(),
+    conversionCount: v.number(),
+    optOutCount: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_status", ["workspaceId", "status"])
+    .index("by_workspace_owner", ["workspaceId", "ownerId"]),
+
+  campaignSteps: defineTable({
+    campaignId: v.id("campaigns"),
+    workspaceId: v.id("workspaces"),
+    order: v.number(),
+    // Delay in hours from previous step (or from launch for step 0).
+    delayHours: v.number(),
+    channel: v.union(v.literal("email"), v.literal("whatsapp")),
+    // Email-specific
+    subject: v.optional(v.string()),
+    bodyHtml: v.optional(v.string()),
+    bodyText: v.optional(v.string()),
+    // WhatsApp-specific
+    templateName: v.optional(v.string()),
+    templateLanguage: v.optional(v.string()),
+    templateVariables: v.optional(v.array(v.string())),     // positional
+    // Sender identity override for this step
+    senderIdentityId: v.optional(v.id("senderIdentities")),
+    // A/B — coalesce later, MVP just runs one variant
+    variantLabel: v.optional(v.string()),
+  })
+    .index("by_campaign_order", ["campaignId", "order"])
+    .index("by_workspace", ["workspaceId"]),
+
+  campaignRecipients: defineTable({
+    campaignId: v.id("campaigns"),
+    workspaceId: v.id("workspaces"),
+    contactId: v.id("contacts"),
+    state: v.union(
+      v.literal("pending"),
+      v.literal("sending"),
+      v.literal("sent"),
+      v.literal("replied"),
+      v.literal("converted"),
+      v.literal("opted_out"),
+      v.literal("completed"),
+      v.literal("failed"),
+      v.literal("paused"),
+    ),
+    // Where we are in the step sequence — 0 = first step queued.
+    currentStepIndex: v.number(),
+    nextSendAt: v.optional(v.number()),                     // when the cron should try this recipient next
+    lastSentAt: v.optional(v.number()),
+    // Correlation ids for tracking replies/conversions back to this row
+    lastConversationId: v.optional(v.id("conversations")),
+    dealId: v.optional(v.id("deals")),                      // set when a deal is linked
+    failureReason: v.optional(v.string()),
+  })
+    .index("by_campaign_state", ["campaignId", "state"])
+    .index("by_workspace", ["workspaceId"])
+    .index("by_campaign_next", ["campaignId", "state", "nextSendAt"])
+    .index("by_contact", ["contactId"]),
+
+  campaignEvents: defineTable({
+    campaignId: v.id("campaigns"),
+    workspaceId: v.id("workspaces"),
+    recipientId: v.id("campaignRecipients"),
+    stepIndex: v.optional(v.number()),
+    eventType: v.union(
+      v.literal("sent"),
+      v.literal("opened"),
+      v.literal("clicked"),
+      v.literal("replied"),
+      v.literal("converted"),
+      v.literal("opted_out"),
+      v.literal("bounced"),
+      v.literal("failed"),
+    ),
+    messageId: v.optional(v.id("messages")),
+    dealId: v.optional(v.id("deals")),
+    payload: v.optional(v.any()),
+    occurredAt: v.number(),
+  })
+    .index("by_campaign_time", ["campaignId", "occurredAt"])
+    .index("by_recipient_time", ["recipientId", "occurredAt"])
+    .index("by_workspace_type", ["workspaceId", "eventType"]),
 });
