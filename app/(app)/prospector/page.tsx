@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import {
   Search, MapPin, Star, ExternalLink, Loader2, Phone, Globe,
@@ -14,11 +14,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { MapBrowse } from "./map-browse";
+import { MapBrowseOsm } from "./map-browse-osm";
 
 export default function ProspectorPage() {
   const searches = useQuery(api.prospector.listSearches, {});
   const [activeSearchId, setActiveSearchId] = useState<Id<"prospectorSearches"> | null>(null);
   const [mode, setMode] = useState<"search" | "map">("search");
+  const [mapProvider, setMapProvider] = useState<"google" | "osm">("osm");
+  const mapsKey = useQuery(api.prospector.getMapsClientKey, {});
+  // Default to Google if a Maps key is configured, else OSM
+  useEffect(() => {
+    if (mapsKey?.key) setMapProvider("google");
+    else if (mapsKey && !mapsKey.key) setMapProvider("osm");
+  }, [mapsKey?.key]);
 
   // Auto-select the newest search
   const derivedActive = activeSearchId ?? searches?.[0]?._id ?? null;
@@ -47,7 +55,42 @@ export default function ProspectorPage() {
       </div>
 
       {mode === "map" ? (
-        <MapBrowse />
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.12em]">
+            <span className="text-muted-foreground">Data source:</span>
+            <button
+              onClick={() => setMapProvider("google")}
+              disabled={!mapsKey?.key}
+              className={cn(
+                "px-3 h-7 border transition-colors",
+                mapProvider === "google"
+                  ? "border-primary text-primary bg-primary/10"
+                  : "border-border text-muted-foreground hover:border-foreground",
+                !mapsKey?.key && "opacity-40 cursor-not-allowed",
+              )}
+            >
+              Google Places
+              {!mapsKey?.key && <span className="ml-1 text-[10px]">(add key)</span>}
+            </button>
+            <button
+              onClick={() => setMapProvider("osm")}
+              className={cn(
+                "px-3 h-7 border transition-colors",
+                mapProvider === "osm"
+                  ? "border-primary text-primary bg-primary/10"
+                  : "border-border text-muted-foreground hover:border-foreground",
+              )}
+            >
+              OpenStreetMap (free)
+            </button>
+            <span className="ml-auto text-muted-foreground italic normal-case tracking-normal">
+              {mapProvider === "google"
+                ? "Full business data, needs Google billing"
+                : "Free, tags-only, community-mapped"}
+            </span>
+          </div>
+          {mapProvider === "google" ? <MapBrowse /> : <MapBrowseOsm />}
+        </div>
       ) : (
         <>
       <NewSearchForm
@@ -211,9 +254,27 @@ function NewSearchForm({ onCreated }: { onCreated: (id: Id<"prospectorSearches">
           Search
         </button>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Uses Google Places Text Search. Add your key in Settings → Integrations → Google Maps Places.
-      </p>
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-xs text-muted-foreground">
+          Uses Google Places Text Search. Add your key at Settings → Integrations → Google Maps Places.
+        </p>
+        <a
+          href={
+            query.trim().length >= 2
+              ? `https://www.google.com/maps/search/${encodeURIComponent(
+                  query.trim() + (location.trim() ? " " + location.trim() : ""),
+                )}`
+              : `https://www.google.com/maps/`
+          }
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-primary whitespace-nowrap"
+          title="Browse this query on Google Maps in a new tab — free, no API needed"
+        >
+          <ExternalLink className="size-3" />
+          Open on Google Maps
+        </a>
+      </div>
     </div>
   );
 }
