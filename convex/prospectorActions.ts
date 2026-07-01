@@ -24,6 +24,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 
 const ENDPOINT = "https://places.googleapis.com/v1/places:searchText";
+const LEGACY_TEXTSEARCH_ENDPOINT = "https://maps.googleapis.com/maps/api/place/textsearch/json";
 
 // The bracketed dotted paths are the FieldMask.
 const FIELD_MASK = [
@@ -90,46 +91,57 @@ export const searchAndPersist = action({
       });
     }
 
-    // 2. Build request
-    const body: Record<string, unknown> = {
-      textQuery: setup.search.query + (setup.search.location ? ` in ${setup.search.location}` : ""),
-      pageSize: 20,
-    };
-    if (args.pageToken) body.pageToken = args.pageToken;
-    // Bias to Kenya by default if the workspace hasn't set a location
+    // Enforce daily cap BEFORE the billable call
+    await ctx.runMutation(internal.apiUsage.checkAndRecord, {
+      workspaceId: setup.search.workspaceId,
+    });
+
+    // 2. Legacy Places API — works with default billing (no Places API New
+    // subscription needed). We normalize the response into the same
+    // shape the /v1 endpoint returns downstream.
+    const query = setup.search.query + (setup.search.location ? ` in ${setup.search.location}` : "");
+    const params = new URLSearchParams({
+      query,
+      key: setup.apiKey,
+    });
     if (!setup.search.locationBias && !setup.search.location) {
-      body.regionCode = "KE";
+      params.set("region", "ke");
     }
-    if (setup.search.locationBias) {
-      body.locationBias = setup.search.locationBias;
+    if (args.pageToken) params.set("pagetoken", args.pageToken);
+
+    let legacyJson: LegacyNearbyResponse;
+    try {
+      const res = await fetch(`${LEGACY_TEXTSEARCH_ENDPOINT}?${params.toString()}`);
+      if (!res.ok) {
+        return { persisted: 0, error: `Places API ${res.status}` };
+      }
+      legacyJson = (await res.json()) as LegacyNearbyResponse;
+      if (legacyJson.status && legacyJson.status !== "OK" && legacyJson.status !== "ZERO_RESULTS") {
+        return { persisted: 0, error: legacyJson.error_message ?? legacyJson.status };
+      }
+    } catch (err) {
+      return { persisted: 0, error: err instanceof Error ? err.message : "Network error" };
     }
 
-    // 3. Call Places API
-    let json: PlacesResponse;
-    try {
-      const res = await fetch(ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Goog-Api-Key": setup.apiKey,
-          "X-Goog-FieldMask": FIELD_MASK,
+    // Normalize into the shape expected downstream (mirrors the v1 shape)
+    const json: PlacesResponse = {
+      places: (legacyJson.results ?? []).map((p) => ({
+        id: p.place_id,
+        displayName: { text: p.name ?? "(unnamed)" },
+        formattedAddress: p.formatted_address ?? p.vicinity,
+        addressComponents: [],
+        location: {
+          latitude: p.geometry?.location?.lat,
+          longitude: p.geometry?.location?.lng,
         },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const errText = await res.text();
-        return {
-          persisted: 0,
-          error: `Places API ${res.status}: ${errText.slice(0, 200)}`,
-        };
-      }
-      json = (await res.json()) as PlacesResponse;
-    } catch (err) {
-      return {
-        persisted: 0,
-        error: err instanceof Error ? err.message : "Network error",
-      };
-    }
+        types: p.types,
+        rating: p.rating,
+        userRatingCount: p.user_ratings_total,
+        businessStatus: p.business_status,
+        googleMapsUri: `https://www.google.com/maps/place/?q=place_id:${p.place_id}`,
+      })),
+      nextPageToken: legacyJson.next_page_token,
+    };
 
     if (json.error) {
       return { persisted: 0, error: json.error.message ?? json.error.status ?? "Unknown error" };
@@ -179,7 +191,13 @@ export const searchAndPersist = action({
 /* searchNearby — bounds-based query for the map browse UI              */
 /* ------------------------------------------------------------------ */
 
-const NEARBY_ENDPOINT = "https://places.googleapis.com/v1/places:searchNearby";
+// Legacy Places API — works with default billing (no separate 'Places API New'
+// enablement required). Use these while the founder is on the free tier.
+// If Places API (New) is enabled, we upgrade to /v1/places:searchNearby which
+// has cleaner shape + better field selection.
+const LEGACY_NEARBY_ENDPOINT = "https://maps.googleapis.com/maps/api/place/nearbysearch/json";
+const LEGACY_DETAILS_ENDPOINT = "https://maps.googleapis.com/maps/api/place/details/json";
+const NEARBY_ENDPOINT_NEW = "https://places.googleapis.com/v1/places:searchNearby";
 const NEARBY_FIELD_MASK = [
   "places.id",
   "places.displayName",
@@ -205,6 +223,47 @@ const INCLUDED_TYPE_MAP: Record<string, string[]> = {
   office: ["corporate_office"],
 };
 
+// Legacy API uses a single string, not an array.
+const LEGACY_TYPE_MAP: Record<string, string> = {
+  restaurant: "restaurant",
+  retail: "store",
+  services: "accounting",
+  health: "hospital",
+  auto: "car_repair",
+  hotel: "lodging",
+  office: "point_of_interest",
+};
+
+interface LegacyPlace {
+  place_id: string;
+  name?: string;
+  vicinity?: string;
+  formatted_address?: string;
+  geometry?: { location?: { lat?: number; lng?: number } };
+  types?: string[];
+  rating?: number;
+  user_ratings_total?: number;
+  business_status?: string;
+  photos?: unknown[];
+}
+
+interface LegacyNearbyResponse {
+  results?: LegacyPlace[];
+  status?: string;
+  error_message?: string;
+  next_page_token?: string;
+}
+
+interface LegacyDetailsResponse {
+  result?: LegacyPlace & {
+    international_phone_number?: string;
+    formatted_phone_number?: string;
+    website?: string;
+    url?: string;
+  };
+  status?: string;
+}
+
 export const searchNearby = action({
   args: {
     latitude: v.number(),
@@ -212,6 +271,7 @@ export const searchNearby = action({
     radiusMeters: v.number(),                             // 1-50000
     category: v.optional(v.string()),                     // key of INCLUDED_TYPE_MAP
     includedType: v.optional(v.string()),                 // explicit override
+    useLegacy: v.optional(v.boolean()),                   // default true — Legacy Places API
   },
   handler: async (ctx, args): Promise<{
     places: Array<{
@@ -237,7 +297,55 @@ export const searchNearby = action({
         message: "Google Maps Places key not configured. Add it in Settings → Integrations.",
       });
     }
+    if (!setup.workspaceId) {
+      throw new ConvexError({ code: "NO_WORKSPACE", message: "Not in a workspace." });
+    }
 
+    // Check + record cap BEFORE we make the billable call
+    await ctx.runMutation(internal.apiUsage.checkAndRecord, {
+      workspaceId: setup.workspaceId,
+    });
+
+    // Default to Legacy API (free-tier-friendly)
+    const useLegacy = args.useLegacy !== false;
+
+    if (useLegacy) {
+      const type = args.includedType ?? (args.category ? LEGACY_TYPE_MAP[args.category] : undefined);
+      const params = new URLSearchParams({
+        location: `${args.latitude},${args.longitude}`,
+        radius: String(Math.min(Math.max(args.radiusMeters, 1), 50_000)),
+        key: setup.apiKey,
+      });
+      if (type) params.set("type", type);
+
+      try {
+        const res = await fetch(`${LEGACY_NEARBY_ENDPOINT}?${params.toString()}`);
+        if (!res.ok) return { places: [], error: `Places ${res.status}` };
+        const json = (await res.json()) as LegacyNearbyResponse;
+        if (json.status && json.status !== "OK" && json.status !== "ZERO_RESULTS") {
+          return { places: [], error: json.error_message ?? json.status };
+        }
+        const places = (json.results ?? []).map((p) => ({
+          googlePlaceId: p.place_id,
+          name: p.name ?? "(unnamed)",
+          address: p.formatted_address ?? p.vicinity,
+          latitude: p.geometry?.location?.lat,
+          longitude: p.geometry?.location?.lng,
+          phoneRaw: undefined,                        // Legacy nearby doesn't include phone; need /details
+          website: undefined,
+          googleMapsUri: `https://www.google.com/maps/place/?q=place_id:${p.place_id}`,
+          types: p.types,
+          rating: p.rating,
+          ratingCount: p.user_ratings_total,
+          businessStatus: p.business_status,
+        }));
+        return { places };
+      } catch (err) {
+        return { places: [], error: err instanceof Error ? err.message : "Network error" };
+      }
+    }
+
+    // Fallback: Places API (New) — only when explicitly requested
     const includedTypes = args.includedType
       ? [args.includedType]
       : args.category
@@ -256,7 +364,7 @@ export const searchNearby = action({
     if (includedTypes) body.includedTypes = includedTypes;
 
     try {
-      const res = await fetch(NEARBY_ENDPOINT, {
+      const res = await fetch(NEARBY_ENDPOINT_NEW, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -31,6 +31,7 @@ export default function WorkspacePage() {
     coreValues: "",
     pricingSummary: "",
     prospectorDailyCap: 100,
+    googleMapsDailySearchCap: 200,
   });
   const [saving, setSaving] = useState(false);
 
@@ -48,6 +49,7 @@ export default function WorkspacePage() {
       coreValues: ws.coreValues ?? "",
       pricingSummary: ws.pricingSummary ?? "",
       prospectorDailyCap: ws.prospectorDailyCap ?? 100,
+      googleMapsDailySearchCap: ws.googleMapsDailySearchCap ?? 200,
     });
   }, [ws]);
 
@@ -69,6 +71,7 @@ export default function WorkspacePage() {
           coreValues: values.coreValues.trim() || undefined,
           pricingSummary: values.pricingSummary.trim() || undefined,
           prospectorDailyCap: values.prospectorDailyCap,
+          googleMapsDailySearchCap: values.googleMapsDailySearchCap,
         },
       });
       toast.success("Workspace saved. AI features will use this from the next turn.");
@@ -217,6 +220,25 @@ export default function WorkspacePage() {
               setValues({
                 ...values,
                 prospectorDailyCap: Math.max(1, Math.min(5000, Number(e.target.value) || 100)),
+              })
+            }
+            className="w-32 h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono num"
+          />
+        </Field>
+
+        <Field
+          label="Google Maps search cap (per day)"
+          hint="Hard ceiling on how many Places API calls Atlas will make. 200/day = ~6k/month. Google's free tier is $200/month credit (~11,700 calls). This cap keeps you safely inside free tier forever."
+        >
+          <input
+            type="number"
+            min={1}
+            max={11000}
+            value={values.googleMapsDailySearchCap}
+            onChange={(e) =>
+              setValues({
+                ...values,
+                googleMapsDailySearchCap: Math.max(1, Math.min(11000, Number(e.target.value) || 200)),
               })
             }
             className="w-32 h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono num"

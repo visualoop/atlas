@@ -222,10 +222,28 @@ export default defineSchema({
     // Prospector guardrails — max Places imports per day per workspace,
     // stops the AI from blowing through credits. Default 100.
     prospectorDailyCap: v.optional(v.number()),
+    // Google Maps API search cap per day — the hard ceiling of how
+    // many Places API calls Atlas will make before locking down.
+    // 200/day * 30 = 6,000/mo, well under Google's $200 free credit
+    // (~11,700 calls). Default 200. Bump if you upgrade billing.
+    googleMapsDailySearchCap: v.optional(v.number()),
     archivedAt: v.optional(v.number()),
   })
     .index("by_org", ["organizationId"])
     .index("by_org_slug", ["organizationId", "slug"]),
+
+  // Per-day API usage counters — enforces hard rate limits so the
+  // founder never accidentally leaves a provider's free tier.
+  apiUsageDaily: defineTable({
+    workspaceId: v.id("workspaces"),
+    provider: v.string(),                    // 'google_maps_places' | 'groq' | 'openai' | …
+    day: v.string(),                          // 'YYYY-MM-DD' UTC
+    count: v.number(),
+    firstUsedAt: v.number(),
+    lastUsedAt: v.number(),
+  })
+    .index("by_workspace_provider_day", ["workspaceId", "provider", "day"])
+    .index("by_workspace_day", ["workspaceId", "day"]),
 
   workspaceMembers: defineTable({
     workspaceId: v.id("workspaces"),

@@ -270,6 +270,7 @@ export const updateWorkspace = mutation({
       coreValues: v.optional(v.string()),
       pricingSummary: v.optional(v.string()),
       prospectorDailyCap: v.optional(v.number()),
+      googleMapsDailySearchCap: v.optional(v.number()),
       timezone: v.optional(v.string()),
       currency: v.optional(v.string()),
       brandColor: v.optional(v.string()),

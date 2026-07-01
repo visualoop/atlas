@@ -20,6 +20,9 @@ export const prepare = internalQuery({
     keys: {
       groq?: string;
       openrouter?: string;
+      gemini?: string;
+      cerebras?: string;
+      openai?: string;
     };
     brand: {
       workspaceName?: string;
@@ -40,9 +43,15 @@ export const prepare = internalQuery({
       .first();
     if (!profile?.lastActiveWorkspaceId || !profile?.lastActiveOrgId) return null;
 
-    // Fetch AI keys (Groq for Compound, OpenRouter for fallback)
-    const keys: { groq?: string; openrouter?: string } = {};
-    for (const p of ["groq", "openrouter"] as const) {
+    // Fetch AI keys for every provider in the fallback chain
+    const keys: {
+      groq?: string;
+      openrouter?: string;
+      gemini?: string;
+      cerebras?: string;
+      openai?: string;
+    } = {};
+    for (const p of ["groq", "openrouter", "gemini", "cerebras", "openai"] as const) {
       try {
         const k = await getOrgKey(ctx, {
           organizationId: profile.lastActiveOrgId,
@@ -251,8 +260,8 @@ export const canRun = query({
       .first();
     if (!profile?.lastActiveOrgId) return { ready: false, reason: "not_in_workspace" };
 
-    // Check for any AI key
-    for (const provider of ["groq", "openrouter"] as const) {
+    // Check for any AI key across the full fallback chain
+    for (const provider of ["groq", "gemini", "cerebras", "openai", "openrouter"] as const) {
       try {
         const k = await getOrgKey(ctx, {
           organizationId: profile.lastActiveOrgId,

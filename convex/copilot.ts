@@ -192,9 +192,24 @@ export const chat = action({
       ...args.messages.filter((m) => m.role !== "system"),
     ];
 
-    const chain: Array<{ provider: "groq" | "openrouter"; model: string; useTools: boolean }> = [
+    const chain: Array<{
+      provider: "groq" | "openrouter" | "gemini" | "cerebras" | "openai";
+      model: string;
+      useTools: boolean;
+    }> = [
+      // Primary: Groq Compound with native web search + code
       { provider: "groq", model: "compound-beta", useTools: true },
+      // Second Groq attempt with smaller model — much higher TPM headroom
+      { provider: "groq", model: "llama-3.1-8b-instant", useTools: true },
+      // Groq llama-3.3-70b — highest quality Groq, most tokens
       { provider: "groq", model: "llama-3.3-70b-versatile", useTools: true },
+      // Gemini — free 1M-context tier, generous rate limits
+      { provider: "gemini", model: "gemini-2.0-flash-exp", useTools: false },
+      // Cerebras — free tier, blazing fast inference
+      { provider: "cerebras", model: "llama-3.3-70b", useTools: false },
+      // OpenAI if configured
+      { provider: "openai", model: "gpt-4o-mini", useTools: true },
+      // OpenRouter free auto-router as final safety net
       { provider: "openrouter", model: "openrouter/auto", useTools: false },
     ];
 
@@ -267,6 +282,15 @@ export const chat = action({
       });
     }
 
+    // Rate-limited across every provider we have configured
+    if (lastError.includes("429") || lastError.toLowerCase().includes("rate limit")) {
+      throw new ConvexError({
+        code: "RATE_LIMITED",
+        message:
+          "All AI providers are currently rate-limited. Wait 60 seconds and retry, or add more providers at Settings → Integrations (Gemini + Cerebras have generous free tiers).",
+      });
+    }
+
     throw new ConvexError({
       code: "AI_UNAVAILABLE",
       message: `AI is temporarily unavailable. Last error: ${lastError || "unknown"}`,
@@ -279,15 +303,22 @@ export const chat = action({
 /* ============================================================ */
 
 async function callChat(args: {
-  provider: "groq" | "openrouter";
+  provider: "groq" | "openrouter" | "gemini" | "cerebras" | "openai";
   model: string;
   apiKey: string;
   messages: ChatMessage[];
   tools?: readonly unknown[];
 }): Promise<GroqResponse> {
+  // Gemini uses its own REST shape — normalize to the OpenAI-compat shape
+  if (args.provider === "gemini") {
+    return await callGemini(args);
+  }
+
   const endpoints: Record<string, string> = {
     groq: "https://api.groq.com/openai/v1/chat/completions",
     openrouter: "https://openrouter.ai/api/v1/chat/completions",
+    cerebras: "https://api.cerebras.ai/v1/chat/completions",
+    openai: "https://api.openai.com/v1/chat/completions",
   };
   const body: Record<string, unknown> = {
     model: args.model,
@@ -321,6 +352,60 @@ async function callChat(args: {
     throw new Error(`${args.provider} ${res.status}: ${(await res.text()).slice(0, 200)}`);
   }
   return (await res.json()) as GroqResponse;
+}
+
+/**
+ * Gemini uses generativelanguage.googleapis.com with a different
+ * message shape. We fold system + user + tool messages into a single
+ * text prompt (tools aren't supported in the free tier's generate
+ * endpoint the same way), then wrap the response in the OpenAI-compat
+ * shape our caller expects.
+ */
+async function callGemini(args: {
+  model: string;
+  apiKey: string;
+  messages: ChatMessage[];
+}): Promise<GroqResponse> {
+  const systemMsg = args.messages.find((m) => m.role === "system")?.content ?? "";
+  const contents = args.messages
+    .filter((m) => m.role !== "system")
+    .map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    }));
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    args.model,
+  )}:generateContent?key=${encodeURIComponent(args.apiKey)}`;
+
+  const body: Record<string, unknown> = {
+    contents,
+    generationConfig: { temperature: 0.4, maxOutputTokens: 2500 },
+  };
+  if (systemMsg) {
+    body.systemInstruction = { parts: [{ text: systemMsg }] };
+  }
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`gemini ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  }
+  const j = (await res.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  const text = j.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+  return {
+    choices: [
+      {
+        message: { role: "assistant", content: text },
+        finish_reason: "stop",
+      },
+    ],
+  };
 }
 
 /* ============================================================ */

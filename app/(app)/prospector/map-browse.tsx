@@ -12,6 +12,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { WhatsAppOpenChat } from "@/components/atlas/whatsapp-open-chat";
 
 interface Place {
   googlePlaceId: string;
@@ -62,6 +63,8 @@ export function MapBrowse() {
 
   // Preflight check: how many can we still import today?
   const budget = useQuery(api.prospector.getImportBudget, {});
+  // Daily Google Maps API call budget (separate from imports)
+  const mapsUsage = useQuery(api.apiUsage.getMapsUsageToday, {});
   // Preflight check: which of the currently-visible places are already
   // imported or suppressed in this workspace?
   const dedup = useQuery(
@@ -285,7 +288,7 @@ export function MapBrowse() {
       <div className="relative bg-muted">
         <div ref={mapRef} className="absolute inset-0" />
         {/* Overlay controls */}
-        <div className="absolute top-3 left-3 right-3 flex items-center gap-2 z-10">
+        <div className="absolute top-3 left-3 right-3 flex items-center gap-2 z-10 flex-wrap">
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -300,12 +303,24 @@ export function MapBrowse() {
           </select>
           <button
             onClick={searchThisArea}
-            disabled={!ready || busy}
-            className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] shadow disabled:opacity-50"
+            disabled={!ready || busy || (mapsUsage && mapsUsage.remaining === 0)}
+            className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] shadow disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Search className="size-3.5" />}
-            Search this area
+            {mapsUsage && mapsUsage.remaining === 0 ? "Daily cap hit" : "Search this area"}
           </button>
+          {mapsUsage && (
+            <span
+              className={cn(
+                "text-[10px] font-mono uppercase tracking-[0.12em] bg-background border border-border px-2 h-9 grid place-items-center shadow",
+                mapsUsage.remaining <= 10 && "text-[var(--warning)]",
+                mapsUsage.remaining === 0 && "text-[var(--destructive)] border-[var(--destructive)]",
+              )}
+              title="Google Maps API calls today — hard-capped to keep you inside free tier"
+            >
+              {mapsUsage.remaining} / {mapsUsage.cap} left
+            </span>
+          )}
         </div>
         {!ready && (
           <div className="absolute inset-0 grid place-items-center bg-background/60">
@@ -461,9 +476,12 @@ function PlaceDetail({
         {p.phoneRaw && (
           <div className="flex items-start gap-2">
             <Phone className="size-3.5 text-muted-foreground shrink-0 mt-0.5" />
-            <a href={`tel:${p.phoneRaw}`} className="text-primary hover:underline font-mono num">
-              {p.phoneRaw}
-            </a>
+            <div className="flex-1 flex items-center justify-between gap-2 flex-wrap">
+              <a href={`tel:${p.phoneRaw}`} className="text-primary hover:underline font-mono num">
+                {p.phoneRaw}
+              </a>
+              <WhatsAppOpenChat phone={p.phoneRaw} label="Chat" size="sm" />
+            </div>
           </div>
         )}
         {p.website && (

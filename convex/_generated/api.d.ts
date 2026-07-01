@@ -17,6 +17,7 @@ import type * as aiWorkflows from "../aiWorkflows.js";
 import type * as analytics from "../analytics.js";
 import type * as analyticsActions from "../analyticsActions.js";
 import type * as analyticsActionsHelpers from "../analyticsActionsHelpers.js";
+import type * as apiUsage from "../apiUsage.js";
 import type * as auth from "../auth.js";
 import type * as automationEngine from "../automationEngine.js";
 import type * as automationEngineHelpers from "../automationEngineHelpers.js";
@@ -113,6 +114,7 @@ declare const fullApi: ApiFromModules<{
   analytics: typeof analytics;
   analyticsActions: typeof analyticsActions;
   analyticsActionsHelpers: typeof analyticsActionsHelpers;
+  apiUsage: typeof apiUsage;
   auth: typeof auth;
   automationEngine: typeof automationEngine;
   automationEngineHelpers: typeof automationEngineHelpers;
