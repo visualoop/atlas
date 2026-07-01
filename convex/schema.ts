@@ -111,7 +111,34 @@ export default defineSchema({
     // The org+workspace this user was last in — for fast re-entry.
     lastActiveOrgId: v.optional(v.id("organizations")),
     lastActiveWorkspaceId: v.optional(v.id("workspaces")),
-  }).index("by_userId", ["userId"]),
+    // Referral program
+    referralCode: v.optional(v.string()),          // unique 8-char code for this user
+    referredByUserId: v.optional(v.id("users")),   // who invited me
+    referralCreditsCents: v.optional(v.int64()),   // accumulated credits (money)
+    referralCurrency: v.optional(v.string()),      // 'KES' default
+  })
+    .index("by_userId", ["userId"])
+    .index("by_referral_code", ["referralCode"]),
+
+  // One row per successful referral. Idempotent by (referredUserId).
+  referralClaims: defineTable({
+    referrerUserId: v.id("users"),                 // who gets the credit
+    referredUserId: v.id("users"),                 // the new signup
+    referralCode: v.string(),                       // snapshot of the code used
+    creditedAmountCents: v.int64(),                 // how much the referrer earned
+    currency: v.string(),                            // 'KES'
+    status: v.union(
+      v.literal("credited"),                          // credit applied
+      v.literal("pending_verification"),              // maybe: hold until referred user does X
+      v.literal("reversed"),                          // fraud / cancellation
+    ),
+    claimedAt: v.number(),
+    reversedAt: v.optional(v.number()),
+    reversedReason: v.optional(v.string()),
+  })
+    .index("by_referrer_time", ["referrerUserId", "claimedAt"])
+    .index("by_referred", ["referredUserId"])
+    .index("by_status", ["status"]),
 
   /* ============================================================ */
   /* Organizations + members + invitations                          */

@@ -25,6 +25,7 @@
 
 import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requireWorkspaceContext } from "./lib/workspaceContext";
 import { recordAudit } from "./lib/authHelpers";
 import { recordTimelineEvent } from "./lib/timeline";
@@ -492,6 +493,20 @@ export const createBooking = mutation({
         payload: { title: link.title, startAt: args.startAt, source: "booking_page" },
       });
     }
+
+    // Fire-and-forget confirmation email
+    await ctx.scheduler.runAfter(0, internal.mailer.sendMeetingConfirmationEmail, {
+      to: email,
+      hostName: ws.name,
+      attendeeName: args.name,
+      meetingTitle: link.title,
+      startAtMs: args.startAt,
+      durationMinutes: link.durationMinutes,
+      timezone: args.timezone,
+      conferenceUrl: link.conferenceUrl,
+      location: link.location,
+      note: args.note,
+    });
 
     return { bookingId, endAt };
   },

@@ -1,24 +1,76 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useTransition, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthActions } from "@convex-dev/auth/react";
+import { useMutation, useQuery } from "convex/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { api } from "@/convex/_generated/api";
 
 type Mode = "password" | "signup" | "magic" | "magic-verify";
 
+const REF_KEY = "atlas_ref_code";
+
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { signIn } = useAuthActions();
+  const bootstrap = useMutation(api.referrals.bootstrapMyProfile);
+
   const [pending, startTransition] = useTransition();
   const [mode, setMode] = useState<Mode>("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [otp, setOtp] = useState("");
+  const [refCode, setRefCode] = useState<string | null>(null);
+
+  // Capture ?ref=CODE from URL, persist to sessionStorage so it survives
+  // the redirect after a magic-link click.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const paramCode = searchParams.get("ref");
+    if (paramCode) {
+      const normalized = paramCode.trim().toUpperCase();
+      window.sessionStorage.setItem(REF_KEY, normalized);
+      setRefCode(normalized);
+      // If user landed with a code, default them to signup
+      setMode("signup");
+    } else {
+      const stored = window.sessionStorage.getItem(REF_KEY);
+      if (stored) setRefCode(stored);
+    }
+  }, [searchParams]);
+
+  // Show "invited by X" preview
+  const referrer = useQuery(
+    api.referrals.resolveByCode,
+    refCode ? { code: refCode } : "skip",
+  );
+
+  async function finishBootstrap() {
+    const code = refCode ?? (typeof window !== "undefined"
+      ? window.sessionStorage.getItem(REF_KEY)
+      : null);
+    try {
+      const res = await bootstrap({
+        referralCode: code ?? undefined,
+        fullName: name.trim() || undefined,
+      });
+      if (res.claim.claimed) {
+        toast.success("Invite code applied. Welcome to Atlas.");
+      }
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(REF_KEY);
+      }
+    } catch (err) {
+      // Non-fatal — user is already signed in
+      console.error("bootstrap failed", err);
+    }
+  }
 
   function go(e: React.FormEvent) {
     e.preventDefault();
@@ -26,24 +78,27 @@ export function LoginForm() {
       try {
         if (mode === "signup") {
           await signIn("password", { email, password, name, flow: "signUp" });
+          await finishBootstrap();
           router.push("/today");
           router.refresh();
           return;
         }
         if (mode === "password") {
           await signIn("password", { email, password, flow: "signIn" });
+          await finishBootstrap();
           router.push("/today");
           router.refresh();
           return;
         }
         if (mode === "magic") {
           await signIn("magic-link-otp", { email });
-          toast.success("Check your email for the code (or the dev server logs for now).");
+          toast.success("Check your email for the code.");
           setMode("magic-verify");
           return;
         }
         if (mode === "magic-verify") {
           await signIn("magic-link-otp", { email, code: otp });
+          await finishBootstrap();
           router.push("/today");
           router.refresh();
           return;
@@ -57,6 +112,25 @@ export function LoginForm() {
 
   return (
     <form onSubmit={go} className="space-y-6">
+      {refCode && (
+        <div className="border border-primary/40 bg-primary/5 p-3 text-xs">
+          <p className="eyebrow text-primary mb-1">Invited</p>
+          <p className="text-foreground">
+            You&rsquo;re using invite code{" "}
+            <span className="font-mono">{refCode}</span>
+            {referrer?.referrerEmail && (
+              <>
+                {" "}from{" "}
+                <span className="font-medium">
+                  {referrer.referrerName ?? referrer.referrerEmail}
+                </span>
+              </>
+            )}
+            . Once you sign up, they earn a credit.
+          </p>
+        </div>
+      )}
+
       {mode === "signup" && (
         <div className="space-y-2">
           <Label htmlFor="name" className="eyebrow">Name</Label>
@@ -114,7 +188,7 @@ export function LoginForm() {
             className="font-mono tracking-[0.4em] text-2xl"
           />
           <p className="text-xs text-muted-foreground">
-            Sent to {email}. In dev, check the Convex server logs.
+            Sent to {email}.
           </p>
         </div>
       )}

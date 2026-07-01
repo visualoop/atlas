@@ -59,10 +59,28 @@ const SIDEBAR_ITEMS = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const bootstrap = useQuery(api.organizations.currentBootstrap);
+  const bootstrapProfile = useMutation(api.referrals.bootstrapMyProfile);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const { signOut } = useAuthActions();
+
+  // On first mount after login, ensure userProfile + referralCode exist.
+  // Also claim any pending ref code stored during signup redirect.
+  useEffect(() => {
+    if (bootstrap === undefined || bootstrap === null) return;
+    const stored = typeof window !== "undefined"
+      ? window.sessionStorage.getItem("atlas_ref_code")
+      : null;
+    bootstrapProfile({ referralCode: stored ?? undefined })
+      .then((res) => {
+        if (res.claim.claimed && typeof window !== "undefined") {
+          window.sessionStorage.removeItem("atlas_ref_code");
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bootstrap === undefined ? undefined : bootstrap === null ? null : bootstrap.user?._id]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

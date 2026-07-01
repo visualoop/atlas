@@ -6,6 +6,7 @@ const ITEMS = [
   { href: "/settings/integrations", label: "Integrations" },
   { href: "/settings/senders", label: "Senders" },
   { href: "/settings/whatsapp", label: "WhatsApp" },
+  { href: "/settings/referrals", label: "Referrals" },
   { href: "/settings/members", label: "Members" },
 ];
 

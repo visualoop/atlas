@@ -13,6 +13,7 @@
 
 import { v, ConvexError } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requireWorkspaceContext } from "./lib/workspaceContext";
 import { recordAudit } from "./lib/authHelpers";
 import { recordTimelineEvent } from "./lib/timeline";
@@ -478,6 +479,18 @@ export const submitLandingSignup = mutation({
         },
       });
     }
+
+    // Fire-and-forget welcome email
+    await ctx.scheduler.runAfter(0, internal.mailer.sendLandingWelcomeEmail, {
+      to: email,
+      workspaceName: ws.name,
+      pageTitle: page.title,
+      pageKind: page.kind,
+      firstName: args.firstName,
+      // Lead-magnet URL wiring — needs a signed download link. For MVP,
+      // if the page has a leadMagnetFileId we surface it as the accept
+      // page URL; a proper signed-URL flow lands in follow-up.
+    });
 
     return {
       status: "ok" as const,

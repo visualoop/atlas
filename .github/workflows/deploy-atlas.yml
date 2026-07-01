@@ -181,6 +181,8 @@ jobs:
           CONFIG_ENCRYPTION_KEY: ${{ secrets.CONFIG_ENCRYPTION_KEY }}
           JWT_PRIVATE_KEY_ENV: ${{ secrets.JWT_PRIVATE_KEY }}
           JWKS_ENV: ${{ secrets.JWKS }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          AUTH_FROM_EMAIL: ${{ secrets.AUTH_FROM_EMAIL }}
         run: |
           set -e
           # SITE_URL — always set
@@ -229,5 +231,21 @@ jobs:
             npx convex env set -- JWKS "$JWKS_ENV"
           fi
 
+          # Resend for auth OTP + system emails
+          if [ -n "$RESEND_API_KEY" ]; then
+            npx convex env set -- RESEND_API_KEY "$RESEND_API_KEY"
+          fi
+          if [ -n "$AUTH_FROM_EMAIL" ]; then
+            npx convex env set -- AUTH_FROM_EMAIL "$AUTH_FROM_EMAIL"
+          fi
+
+          # Resend (optional, but required for real magic-link OTP delivery)
+          if [ -n "$RESEND_API_KEY" ]; then
+            npx convex env set -- RESEND_API_KEY "$RESEND_API_KEY"
+          fi
+          if [ -n "$AUTH_FROM_EMAIL" ]; then
+            npx convex env set -- AUTH_FROM_EMAIL "$AUTH_FROM_EMAIL"
+          fi
+
           echo "==> Env vars now set:"
-          npx convex env list | grep -E "SITE_URL|CONFIG_ENCRYPTION_KEY|JWT_PRIVATE_KEY|JWKS" || true
+          npx convex env list | grep -E "SITE_URL|CONFIG_ENCRYPTION_KEY|JWT_PRIVATE_KEY|JWKS|RESEND|AUTH_FROM" || true
