@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useAction } from "convex/react";
-import { Sparkles, Send, X, Loader2, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Sparkles, Send, X, Trash2, KeyRound, Loader2 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ export function CopilotPanel({ open, onOpenChange }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
+  const [needsSetup, setNeedsSetup] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const chat = useAction(api.copilot.chat);
@@ -85,9 +87,32 @@ export function CopilotPanel({ open, onOpenChange }: Props) {
         },
       ]);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Something went wrong";
-      toast.error(msg);
-      // Roll back the user message so they can retry
+      // Parse ConvexError payload — the message body is the useful bit
+      let msg = err instanceof Error ? err.message : "Something went wrong";
+      let code: string | undefined;
+      try {
+        const errObj = err as { data?: { code?: string; message?: string } };
+        if (errObj?.data?.code) {
+          code = errObj.data.code;
+          msg = errObj.data.message ?? msg;
+        } else {
+          // Match "Uncaught ConvexError: {...}"
+          const match = msg.match(/ConvexError: (\{[\s\S]*?\})/);
+          if (match) {
+            const parsed = JSON.parse(match[1]) as { code?: string; message?: string };
+            code = parsed.code;
+            msg = parsed.message ?? msg;
+          }
+        }
+      } catch {}
+
+      if (code === "NO_AI_KEY") {
+        setNeedsSetup(true);
+        // Roll back the user message so the empty state is preserved
+        setMessages((prev) => prev.slice(0, -1));
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setPending(false);
     }
@@ -138,7 +163,55 @@ export function CopilotPanel({ open, onOpenChange }: Props) {
           ref={scrollerRef}
           className="flex-1 overflow-y-auto p-4 space-y-4"
         >
-          {messages.length === 0 && !pending && (
+          {needsSetup ? (
+            <div className="h-full grid place-items-center">
+              <div className="text-center space-y-4 max-w-xs">
+                <KeyRound className="size-8 text-primary mx-auto" />
+                <p className="font-display italic text-2xl">
+                  Set up an AI key.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Copilot needs a Groq or OpenRouter key. Both have generous
+                  free tiers — 30 requests / minute is plenty for daily use.
+                </p>
+                <div className="pt-2 space-y-2">
+                  <Link
+                    href="/settings/integrations"
+                    className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] active:scale-[0.97]"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    <KeyRound className="size-3.5" />
+                    Open Integrations
+                  </Link>
+                  <p className="text-[11px] text-muted-foreground italic">
+                    <a
+                      href="https://console.groq.com/keys"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      Get a Groq key
+                    </a>
+                    {" · "}
+                    <a
+                      href="https://openrouter.ai/keys"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      Get an OpenRouter key
+                    </a>
+                  </p>
+                </div>
+                <button
+                  onClick={() => setNeedsSetup(false)}
+                  className="text-[11px] font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground pt-3"
+                >
+                  Try again
+                </button>
+              </div>
+            </div>
+          ) : messages.length === 0 && !pending && (
             <div className="h-full grid place-items-center">
               <div className="text-center space-y-4 max-w-xs">
                 <Sparkles className="size-8 text-primary mx-auto" />

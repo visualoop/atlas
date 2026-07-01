@@ -200,9 +200,11 @@ export const chat = action({
 
     let toolCallsCount = 0;
     let lastError = "";
+    let anyKeyConfigured = false;
     for (const step of chain) {
       const apiKey = setup.keys[step.provider];
       if (!apiKey) continue;
+      anyKeyConfigured = true;
 
       try {
         // Multi-turn tool-call loop, up to 5 iterations
@@ -257,9 +259,17 @@ export const chat = action({
       }
     }
 
+    if (!anyKeyConfigured) {
+      throw new ConvexError({
+        code: "NO_AI_KEY",
+        message:
+          "No AI provider is configured for this workspace. Add a Groq or OpenRouter key at Settings → Integrations to use Copilot.",
+      });
+    }
+
     throw new ConvexError({
       code: "AI_UNAVAILABLE",
-      message: `AI is temporarily unavailable. Last error: ${lastError}`,
+      message: `AI is temporarily unavailable. Last error: ${lastError || "unknown"}`,
     });
   },
 });
