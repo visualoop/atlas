@@ -596,4 +596,86 @@ export default defineSchema({
   })
     .index("by_provider_external", ["provider", "externalId"])
     .index("by_provider_received", ["provider", "receivedAt"]),
+
+  /* ============================================================ */
+  /* Phase 3 — Prospector (Google Maps lead generation)             */
+  /* ============================================================ */
+
+  // A saved search — the query itself plus the last-run metadata.
+  // Justine types "Boutiques in Westlands, Nairobi", we save it, and
+  // she can re-run/expand later without retyping.
+  prospectorSearches: defineTable({
+    workspaceId: v.id("workspaces"),
+    query: v.string(),                                        // free-form text
+    location: v.optional(v.string()),                         // "Nairobi, KE"
+    locationBias: v.optional(v.any()),                        // Google circle/rectangle
+    resultCount: v.number(),
+    importedCount: v.number(),                                // how many actually became companies
+    lastRunAt: v.optional(v.number()),
+    lastRunBy: v.optional(v.id("users")),
+    nextPageToken: v.optional(v.string()),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_time", ["workspaceId", "lastRunAt"]),
+
+  // A single result from a search — cached so we don't re-query.
+  // These are transient (until imported), but keep the raw record
+  // for scoring and enrichment.
+  prospectorResults: defineTable({
+    workspaceId: v.id("workspaces"),
+    searchId: v.id("prospectorSearches"),
+    googlePlaceId: v.string(),                                // unique per Google
+    name: v.string(),
+    address: v.optional(v.string()),
+    city: v.optional(v.string()),
+    country: v.optional(v.string()),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
+    phone: v.optional(v.string()),                            // E.164 if we can normalize
+    phoneRaw: v.optional(v.string()),                         // original from Google
+    website: v.optional(v.string()),
+    email: v.optional(v.string()),                            // populated by enrichment
+    googleMapsUri: v.optional(v.string()),
+    types: v.optional(v.array(v.string())),                   // ['cafe', 'restaurant']
+    rating: v.optional(v.number()),
+    ratingCount: v.optional(v.number()),
+    businessStatus: v.optional(v.string()),
+    rawPlaceData: v.optional(v.any()),
+    // Import state
+    importedAt: v.optional(v.number()),
+    importedCompanyId: v.optional(v.id("companies")),
+    // Enrichment
+    enrichedAt: v.optional(v.number()),
+    enrichmentStatus: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("in_progress"),
+        v.literal("done"),
+        v.literal("failed"),
+        v.literal("no_website"),
+      ),
+    ),
+    enrichmentError: v.optional(v.string()),
+    // Fit score — populated by AI later
+    fitScore: v.optional(v.number()),
+    fitReasoning: v.optional(v.string()),
+    // Suppression — set when the founder rejects, so re-runs skip it
+    rejectedAt: v.optional(v.number()),
+    rejectedReason: v.optional(v.string()),
+  })
+    .index("by_search", ["searchId"])
+    .index("by_workspace_place", ["workspaceId", "googlePlaceId"])
+    .index("by_workspace_search_imported", ["workspaceId", "searchId", "importedAt"]),
+
+  // Workspace-scoped suppression — Google Place IDs that should
+  // never appear in results again (e.g., competitors, dead leads).
+  prospectorSuppressions: defineTable({
+    workspaceId: v.id("workspaces"),
+    googlePlaceId: v.string(),
+    reason: v.optional(v.string()),
+    addedBy: v.optional(v.id("users")),
+  })
+    .index("by_workspace_place", ["workspaceId", "googlePlaceId"])
+    .index("by_workspace", ["workspaceId"]),
 });
