@@ -1310,4 +1310,102 @@ export default defineSchema({
     .index("by_campaign_time", ["campaignId", "occurredAt"])
     .index("by_recipient_time", ["recipientId", "occurredAt"])
     .index("by_workspace_type", ["workspaceId", "eventType"]),
+
+  /* ============================================================ */
+  /* Phase 8a — Social Publishing (FB / IG / LinkedIn)              */
+  /* ============================================================ */
+
+  socialConnections: defineTable({
+    workspaceId: v.id("workspaces"),
+    platform: v.union(
+      v.literal("facebook_page"),                            // FB Business Page
+      v.literal("instagram_business"),                       // IG Business account
+      v.literal("linkedin_personal"),                        // LinkedIn personal profile
+      v.literal("linkedin_company"),                         // LinkedIn company page
+    ),
+    externalId: v.string(),                                  // Meta Page ID / IG account ID / LI URN
+    displayName: v.string(),                                  // "Blyss" / "Justine Gichana"
+    avatarUrl: v.optional(v.string()),
+    // Token metadata — actual encrypted values live in orgIntegrationKeys
+    // (per-platform provider labels like 'meta_page_<id>'). We keep the
+    // expiry hint here so the UI can flag stale tokens.
+    tokenExpiresAt: v.optional(v.number()),
+    scopes: v.optional(v.array(v.string())),
+    status: v.union(
+      v.literal("connected"),
+      v.literal("token_expired"),
+      v.literal("revoked"),
+      v.literal("error"),
+    ),
+    connectedBy: v.id("users"),
+    lastSyncAt: v.optional(v.number()),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_platform", ["workspaceId", "platform"])
+    .index("by_external_id", ["externalId"]),
+
+  socialPosts: defineTable({
+    workspaceId: v.id("workspaces"),
+    // A single "post" can go out to multiple connections (cross-post).
+    connectionIds: v.array(v.id("socialConnections")),
+    // Content — shared across platforms but variants can be per-platform
+    caption: v.string(),                                     // primary body
+    perPlatformOverrides: v.optional(v.any()),               // { [connectionId]: { caption?, mediaIds? } }
+    mediaFileIds: v.array(v.id("files")),                    // uploaded to Convex storage
+    firstLink: v.optional(v.string()),                        // for LI/FB link preview
+    status: v.union(
+      v.literal("draft"),
+      v.literal("scheduled"),
+      v.literal("publishing"),
+      v.literal("published"),
+      v.literal("failed"),
+      v.literal("cancelled"),
+    ),
+    scheduledFor: v.optional(v.number()),
+    publishedAt: v.optional(v.number()),
+    // Per-connection publish state — updated as each platform completes
+    // { [connectionId]: { status, externalPostId, externalUrl, publishedAt, error } }
+    publishResults: v.optional(v.any()),
+    // Engagement aggregates — refreshed by cron
+    likeCount: v.optional(v.number()),
+    commentCount: v.optional(v.number()),
+    shareCount: v.optional(v.number()),
+    impressionCount: v.optional(v.number()),
+    reachCount: v.optional(v.number()),
+    lastInsightsAt: v.optional(v.number()),
+    // Ownership
+    ownerId: v.id("users"),
+    // Optional link to a campaign or content piece
+    campaignId: v.optional(v.id("campaigns")),
+    contentPieceId: v.optional(v.string()),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace_time", ["workspaceId"])
+    .index("by_workspace_status", ["workspaceId", "status"])
+    .index("by_workspace_scheduled", ["workspaceId", "status", "scheduledFor"])
+    .searchIndex("search_caption", {
+      searchField: "caption",
+      filterFields: ["workspaceId", "status", "archivedAt"],
+    }),
+
+  socialComments: defineTable({
+    workspaceId: v.id("workspaces"),
+    postId: v.id("socialPosts"),
+    connectionId: v.id("socialConnections"),
+    platform: v.string(),
+    externalCommentId: v.string(),
+    externalAuthorId: v.optional(v.string()),
+    authorName: v.string(),
+    authorAvatarUrl: v.optional(v.string()),
+    text: v.string(),
+    sentiment: v.optional(v.string()),                       // 'positive' | 'neutral' | 'negative'
+    // Reply state — Atlas replies land as conversations for unified inbox
+    conversationId: v.optional(v.id("conversations")),
+    receivedAt: v.number(),
+    hidden: v.boolean(),
+  })
+    .index("by_post_time", ["postId", "receivedAt"])
+    .index("by_workspace_time", ["workspaceId", "receivedAt"])
+    .index("by_external", ["externalCommentId"]),
 });
