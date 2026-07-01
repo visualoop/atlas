@@ -47,18 +47,17 @@ export default function ContactsPage() {
     lifecycleStage: lifecycle ?? undefined,
     limit: 200,
   });
-
   const bulkUpdate = useMutation(api.contacts.bulkUpdate);
   const bulkArchive = useMutation(api.contacts.bulkArchive);
 
   const toggleSelected = (id: Id<"contacts">) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
-
   const toggleAll = (all: boolean) => {
     if (all && contacts) setSelected(new Set(contacts.map((c) => c._id)));
     else setSelected(new Set());
@@ -84,7 +83,7 @@ export default function ContactsPage() {
         }
       >
         {contacts === undefined ? (
-          <ContactsTableSkeleton />
+          <TableSkeleton />
         ) : contacts.length === 0 ? (
           <EmptyState onCreate={() => setNewOpen(true)} />
         ) : (
@@ -158,7 +157,7 @@ function ContactsTable({
           <tr className="border-b border-[var(--border-strong)] bg-background sticky top-0">
             <Th className="w-10">
               <Checkbox
-                checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                checked={allChecked}
                 onCheckedChange={(v) => onToggleAll(v === true)}
                 aria-label="Select all"
               />
@@ -176,7 +175,6 @@ function ContactsTable({
               key={c._id}
               tabIndex={0}
               onClick={(e) => {
-                // Don't open detail when clicking the checkbox cell
                 if ((e.target as HTMLElement).closest("[data-row-checkbox]")) return;
                 onOpen(c._id);
               }}
@@ -185,13 +183,17 @@ function ContactsTable({
               }}
               className="border-b border-border hover:bg-muted/40 cursor-pointer transition-colors focus:outline-none focus:bg-muted/60"
             >
-              <Td data-row-checkbox onClick={(e) => e.stopPropagation()}>
+              <td
+                data-row-checkbox
+                onClick={(e) => e.stopPropagation()}
+                className="px-4 py-2.5"
+              >
                 <Checkbox
                   checked={selected.has(c._id)}
                   onCheckedChange={() => onToggle(c._id)}
                   aria-label={`Select ${c.firstName}`}
                 />
-              </Td>
+              </td>
               <Td>
                 <span className="font-medium">
                   {c.firstName}
@@ -213,9 +215,7 @@ function ContactsTable({
                       {c.phone}
                     </span>
                   )}
-                  {c.whatsapp && (
-                    <MessageSquare className="size-3 shrink-0" />
-                  )}
+                  {c.whatsapp && <MessageSquare className="size-3 shrink-0" />}
                 </div>
               </Td>
               <Td>
@@ -236,7 +236,7 @@ function ContactsTable({
   );
 }
 
-function ContactsTableSkeleton() {
+function TableSkeleton() {
   return (
     <div className="border border-border divide-y divide-border">
       {Array.from({ length: 6 }).map((_, i) => (
@@ -272,29 +272,14 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
 
 function Th({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <th
-      className={`eyebrow font-mono h-9 px-4 text-muted-foreground font-medium ${className ?? ""}`}
-    >
+    <th className={`eyebrow font-mono h-9 px-4 text-muted-foreground font-medium ${className ?? ""}`}>
       {children}
     </th>
   );
 }
 
-function Td({
-  children,
-  className,
-  onClick,
-  ...rest
-}: {
-  children: React.ReactNode;
-  className?: string;
-  onClick?: (e: React.MouseEvent) => void;
-} & React.HTMLAttributes<HTMLTableCellElement>) {
-  return (
-    <td onClick={onClick} {...rest} className={`px-4 py-2.5 ${className ?? ""}`}>
-      {children}
-    </td>
-  );
+function Td({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <td className={`px-4 py-2.5 ${className ?? ""}`}>{children}</td>;
 }
 
 const LIFECYCLE_STYLES: Record<string, string> = {

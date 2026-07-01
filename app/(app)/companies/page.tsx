@@ -2,15 +2,18 @@
 
 import { useState } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { Globe, MapPin } from "lucide-react";
 import { ListLayout } from "@/components/atlas/list-layout";
 import { FilterChips } from "@/components/atlas/filter-chips";
+import { BulkActionBar } from "@/components/atlas/bulk-action-bar";
+import { Checkbox } from "@/components/ui/checkbox";
 import { NewCompanySheet } from "./new-company-sheet";
 import { CompanyDetailSheet } from "./company-detail-sheet";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
 
 const LIFECYCLE_FILTERS = [
   { value: "cold", label: "Cold" },
@@ -30,6 +33,7 @@ export default function CompaniesPage() {
   const [search, setSearch] = useState("");
   const [lifecycle, setLifecycle] = useState<LifecycleStage | null>(null);
   const [newOpen, setNewOpen] = useState(false);
+  const [selected, setSelected] = useState<Set<Id<"companies">>>(new Set());
 
   function setActiveId(id: Id<"companies"> | null) {
     const params = new URLSearchParams(searchParams.toString());
@@ -43,6 +47,21 @@ export default function CompaniesPage() {
     lifecycleStage: lifecycle ?? undefined,
     limit: 200,
   });
+  const bulkUpdate = useMutation(api.companies.bulkUpdate);
+  const bulkArchive = useMutation(api.companies.bulkArchive);
+
+  const toggleSelected = (id: Id<"companies">) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleAll = (all: boolean) => {
+    if (all && companies) setSelected(new Set(companies.map((c) => c._id)));
+    else setSelected(new Set());
+  };
 
   return (
     <>
@@ -68,9 +87,30 @@ export default function CompaniesPage() {
         ) : companies.length === 0 ? (
           <EmptyState onCreate={() => setNewOpen(true)} />
         ) : (
-          <CompaniesTable companies={companies} onOpen={(id) => setActiveId(id)} />
+          <CompaniesTable
+            companies={companies}
+            onOpen={setActiveId}
+            selected={selected}
+            onToggle={toggleSelected}
+            onToggleAll={toggleAll}
+          />
         )}
       </ListLayout>
+
+      <BulkActionBar
+        count={selected.size}
+        onClear={() => setSelected(new Set())}
+        onChangeStage={async (stage) => {
+          await bulkUpdate({ ids: Array.from(selected), patch: { lifecycleStage: stage } });
+          toast.success(`${selected.size} updated.`);
+          setSelected(new Set());
+        }}
+        onArchive={async () => {
+          await bulkArchive({ ids: Array.from(selected) });
+          toast.success(`${selected.size} archived.`);
+          setSelected(new Set());
+        }}
+      />
 
       <NewCompanySheet open={newOpen} onOpenChange={setNewOpen} />
       {openId && (
@@ -87,6 +127,9 @@ export default function CompaniesPage() {
 function CompaniesTable({
   companies,
   onOpen,
+  selected,
+  onToggle,
+  onToggleAll,
 }: {
   companies: Array<{
     _id: Id<"companies">;
@@ -99,12 +142,25 @@ function CompaniesTable({
     _creationTime: number;
   }>;
   onOpen: (id: Id<"companies">) => void;
+  selected: Set<Id<"companies">>;
+  onToggle: (id: Id<"companies">) => void;
+  onToggleAll: (all: boolean) => void;
 }) {
+  const allChecked = companies.length > 0 && selected.size === companies.length;
+  const someChecked = selected.size > 0 && !allChecked;
+
   return (
     <div className="border border-border">
       <table className="w-full text-sm">
         <thead className="text-left">
           <tr className="border-b border-[var(--border-strong)] bg-background sticky top-0">
+            <Th className="w-10">
+              <Checkbox
+                checked={allChecked}
+                onCheckedChange={(v) => onToggleAll(v === true)}
+                aria-label="Select all"
+              />
+            </Th>
             <Th>Name</Th>
             <Th>Domain</Th>
             <Th>Industry</Th>
@@ -118,12 +174,26 @@ function CompaniesTable({
             <tr
               key={c._id}
               tabIndex={0}
-              onClick={() => onOpen(c._id)}
+              onClick={(e) => {
+                if ((e.target as HTMLElement).closest("[data-row-checkbox]")) return;
+                onOpen(c._id);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") onOpen(c._id);
               }}
               className="border-b border-border hover:bg-muted/40 cursor-pointer transition-colors focus:outline-none focus:bg-muted/60"
             >
+              <td
+                data-row-checkbox
+                onClick={(e) => e.stopPropagation()}
+                className="px-4 py-2.5"
+              >
+                <Checkbox
+                  checked={selected.has(c._id)}
+                  onCheckedChange={() => onToggle(c._id)}
+                  aria-label={`Select ${c.name}`}
+                />
+              </td>
               <Td>
                 <span className="font-medium">{c.name}</span>
               </Td>
@@ -168,8 +238,8 @@ function TableSkeleton() {
   return (
     <div className="border border-border divide-y divide-border">
       {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="px-4 py-3 grid grid-cols-6 gap-4 items-center">
-          {Array.from({ length: 6 }).map((_, j) => (
+        <div key={i} className="px-4 py-3 grid grid-cols-7 gap-4 items-center">
+          {Array.from({ length: 7 }).map((_, j) => (
             <Skeleton key={j} className="h-4 w-full max-w-[120px]" />
           ))}
         </div>
