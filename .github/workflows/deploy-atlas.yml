@@ -208,19 +208,7 @@ jobs:
             HAS_JWKS=$(npx convex env get JWKS 2>/dev/null || echo "")
             if [ -z "$HAS_JWT" ] || [ -z "$HAS_JWKS" ]; then
               echo "==> Generating JWT keypair"
-              node <<'NODE'
-              const { generateKeyPair, exportPKCS8, exportJWK } = require("jose");
-              (async () => {
-                const { privateKey, publicKey } = await generateKeyPair("RS256", { extractable: true });
-                const priv = (await exportPKCS8(privateKey)).replace(/\n/g, " ");
-                const pubJwk = { ...(await exportJWK(publicKey)), use: "sig", alg: "RS256" };
-                const jwks = JSON.stringify({ keys: [pubJwk] });
-                console.log("PRIV::" + priv);
-                console.log("JWKS::" + jwks);
-              })();
-              NODE
-              # Node output was captured via /dev/stdout; parse it back
-              # (using a subshell to avoid tangling with the workflow).
+              npm install --no-save jose >/dev/null 2>&1 || true
               KEYS=$(node -e "
                 const { generateKeyPair, exportPKCS8, exportJWK } = require('jose');
                 (async () => {
