@@ -1,31 +1,36 @@
 {
-  "name": "Atlas — Operating system for a founder",
+  "name": "Atlas",
   "short_name": "Atlas",
-  "description": "The operating system for a founder. Built by Blyss.",
-  "start_url": "/",
-  "scope": "/",
+  "description": "Founder Operating System — inbox, CRM, deals, campaigns, calendar, and analytics in one calm workspace.",
+  "start_url": "/today",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#0A0A0B",
   "theme_color": "#0A0A0B",
-  "orientation": "portrait-primary",
+  "categories": ["business", "productivity"],
   "icons": [
     {
-      "src": "/icons/icon-192.png",
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "maskable"
     },
     {
-      "src": "/icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/icon-512-maskable.png",
+      "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "shortcuts": [
+    { "name": "Inbox", "url": "/inbox", "icons": [{ "src": "/icon.svg", "sizes": "any" }] },
+    { "name": "Today", "url": "/today", "icons": [{ "src": "/icon.svg", "sizes": "any" }] },
+    { "name": "Pipelines", "url": "/pipelines", "icons": [{ "src": "/icon.svg", "sizes": "any" }] }
   ]
 }

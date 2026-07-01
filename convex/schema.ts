@@ -1971,4 +1971,132 @@ export default defineSchema({
     .index("by_license_key", ["licenseKey"])
     .index("by_workspace_status", ["workspaceId", "status"])
     .index("by_workspace_end", ["workspaceId", "trialEndAt"]),
+
+  /* ============================================================ */
+  /* Phase 12 — Composio + Automation Builder + Public API          */
+  /* ============================================================ */
+
+  // Org-level Composio config — one row per organization once the
+  // Composio account is linked. Encrypted API key lives under
+  // orgIntegrationKeys with provider='composio'.
+  composioConfig: defineTable({
+    organizationId: v.id("organizations"),
+    // Composio project id (workspace on Composio's side)
+    composioProjectId: v.optional(v.string()),
+    // Cache of installed app slugs — refreshed on Composio API calls.
+    installedApps: v.optional(v.array(v.string())),
+    lastSyncAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"]),
+
+  // Per-user OAuth connection to a Composio-managed app (Slack, Notion,
+  // GitHub, HubSpot, Airtable, X, TikTok, etc.). Tier-2 secret pattern —
+  // the actual token lives on Composio's side; we just track which
+  // (user, app) pairs are linked.
+  composioConnections: defineTable({
+    workspaceId: v.id("workspaces"),
+    userId: v.id("users"),
+    appSlug: v.string(),                                     // 'slack' | 'notion' | 'github' | …
+    composioConnectionId: v.string(),                        // Composio's id
+    accountLabel: v.optional(v.string()),                    // "justine@blyss.co.ke"
+    status: v.union(
+      v.literal("active"),
+      v.literal("disconnected"),
+      v.literal("error"),
+    ),
+    connectedAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+  })
+    .index("by_workspace_user", ["workspaceId", "userId"])
+    .index("by_workspace_app", ["workspaceId", "appSlug"])
+    .index("by_composio_connection", ["composioConnectionId"]),
+
+  // Native automation builder — node-based flows.
+  automations: defineTable({
+    workspaceId: v.id("workspaces"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    // Trigger — what starts the flow
+    triggerType: v.union(
+      v.literal("timeline_event"),                           // e.g. deal_won, email_received
+      v.literal("scheduler"),                                 // cron-like
+      v.literal("webhook"),                                   // POST from external
+      v.literal("manual"),                                    // one-off
+    ),
+    triggerConfig: v.any(),                                  // {eventType, cron, path, …}
+    // Ordered graph of steps — { id, kind: 'native'|'composio'|'ai', args, next }
+    nodes: v.array(v.any()),
+    // Enablement
+    active: v.boolean(),
+    lastRunAt: v.optional(v.number()),
+    runCount: v.number(),
+    ownerId: v.id("users"),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_active", ["workspaceId", "active"])
+    .index("by_trigger_type", ["workspaceId", "triggerType"]),
+
+  // Per-run audit log — inputs, outputs, node-by-node results.
+  automationRuns: defineTable({
+    automationId: v.id("automations"),
+    workspaceId: v.id("workspaces"),
+    triggeredBy: v.optional(v.id("users")),
+    triggerPayload: v.optional(v.any()),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("running"),
+      v.literal("success"),
+      v.literal("failed"),
+      v.literal("partial"),                                    // some steps failed
+    ),
+    nodeResults: v.optional(v.array(v.any())),
+    startedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+  })
+    .index("by_automation_time", ["automationId", "startedAt"])
+    .index("by_workspace_time", ["workspaceId", "startedAt"])
+    .index("by_workspace_status", ["workspaceId", "status"]),
+
+  // Public REST API keys — for external systems calling into Atlas.
+  publicApiKeys: defineTable({
+    workspaceId: v.id("workspaces"),
+    organizationId: v.id("organizations"),
+    label: v.string(),                                       // 'Zapier zap for X' | 'Omnix admin'
+    // We store the SHA-256 hash of the token, never the token itself.
+    // The token is shown once at creation time.
+    tokenHash: v.string(),
+    tokenLastFour: v.string(),                               // for display
+    // Scopes — what this key can do.
+    scopes: v.array(v.string()),                             // ['contacts:read', 'deals:write', …]
+    // Rate limits + expiry
+    requestsPerMinute: v.number(),
+    expiresAt: v.optional(v.number()),
+    createdBy: v.id("users"),
+    lastUsedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+    usageCount: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_token_hash", ["tokenHash"])
+    .index("by_workspace_active", ["workspaceId", "revokedAt"]),
+
+  // Webhook subscriptions — external URLs Atlas POSTs to on events.
+  webhookSubscriptions: defineTable({
+    workspaceId: v.id("workspaces"),
+    label: v.string(),
+    targetUrl: v.string(),
+    events: v.array(v.string()),                             // ['deal.won', 'payment.received', …]
+    // Shared secret for HMAC signing of outbound payloads.
+    signingSecret: v.string(),
+    active: v.boolean(),
+    lastSuccessAt: v.optional(v.number()),
+    lastFailureAt: v.optional(v.number()),
+    consecutiveFailures: v.number(),
+    createdBy: v.id("users"),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_active", ["workspaceId", "active"]),
 });
