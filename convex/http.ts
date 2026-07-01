@@ -186,6 +186,51 @@ http.route({
 });
 
 /* ------------------------------------------------------------------ */
+/* UTM short-link redirect — GET /go/<shortCode>                        */
+/* ------------------------------------------------------------------ */
+/*
+ * Looks up the UTM link, logs a click + attribution touch, appends
+ * UTM parameters to the destination, and 302-redirects. Missing or
+ * archived codes fall through to a 404.
+ */
+
+http.route({
+  pathPrefix: "/go/",
+  method: "GET",
+  handler: httpAction(async (ctx, req) => {
+    const url = new URL(req.url);
+    const shortCode = url.pathname.replace(/^\/go\//, "").replace(/\/$/, "");
+    if (!shortCode || shortCode.length > 32) {
+      return new Response("Not found", { status: 404 });
+    }
+
+    const link = await ctx.runQuery(internal.analytics.getUtmByShortCode, { shortCode });
+    if (!link || link.archivedAt) {
+      return new Response("Not found", { status: 404 });
+    }
+
+    // Build the destination with UTM parameters appended
+    const dest = new URL(link.destination);
+    if (link.utmSource) dest.searchParams.set("utm_source", link.utmSource);
+    if (link.utmMedium) dest.searchParams.set("utm_medium", link.utmMedium);
+    if (link.utmCampaign) dest.searchParams.set("utm_campaign", link.utmCampaign);
+    if (link.utmContent) dest.searchParams.set("utm_content", link.utmContent);
+    if (link.utmTerm) dest.searchParams.set("utm_term", link.utmTerm);
+
+    await ctx.runMutation(internal.analytics.recordUtmClick, {
+      utmLinkId: link._id,
+      referrer: req.headers.get("referer") ?? undefined,
+      userAgent: req.headers.get("user-agent") ?? undefined,
+    });
+
+    return new Response(null, {
+      status: 302,
+      headers: { Location: dest.toString() },
+    });
+  }),
+});
+
+/* ------------------------------------------------------------------ */
 /* Paystack webhook — POST /webhook/paystack                           */
 /* ------------------------------------------------------------------ */
 /*

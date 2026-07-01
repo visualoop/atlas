@@ -1658,4 +1658,129 @@ export default defineSchema({
     .index("by_workspace_url", ["workspaceId", "url"])
     .index("by_workspace_time", ["workspaceId", "discoveredAt"])
     .index("by_workspace_relevance", ["workspaceId", "relevanceScore"]),
+
+  /* ============================================================ */
+  /* Phase 9 — Analytics + Attribution + Cash flow                  */
+  /* ============================================================ */
+
+  utmLinks: defineTable({
+    workspaceId: v.id("workspaces"),
+    // Short code appearing at /go/<shortCode> — 6-8 chars
+    shortCode: v.string(),
+    // Destination URL after the redirect
+    destination: v.string(),
+    // Label for the founder
+    label: v.string(),
+    // UTM parameters
+    utmSource: v.optional(v.string()),                       // 'newsletter' | 'linkedin' | …
+    utmMedium: v.optional(v.string()),                       // 'email' | 'social' | 'cpc'
+    utmCampaign: v.optional(v.string()),                     // campaign name/slug
+    utmContent: v.optional(v.string()),                      // creative variant
+    utmTerm: v.optional(v.string()),                         // keyword
+    // Optional links to source records
+    campaignId: v.optional(v.id("campaigns")),
+    broadcastId: v.optional(v.id("broadcasts")),
+    socialPostId: v.optional(v.id("socialPosts")),
+    // Counters
+    clickCount: v.number(),
+    lastClickAt: v.optional(v.number()),
+    createdBy: v.id("users"),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_short_code", ["shortCode"])
+    .index("by_workspace_campaign", ["workspaceId", "utmCampaign"]),
+
+  // Every attribution touchpoint — a click, an inbound email, a
+  // signup, etc. Reconstructing multi-touch attribution walks this.
+  attributionTouches: defineTable({
+    workspaceId: v.id("workspaces"),
+    contactId: v.optional(v.id("contacts")),
+    // Anonymous sessions — before we know the contact
+    sessionId: v.optional(v.string()),
+    touchType: v.union(
+      v.literal("utm_click"),
+      v.literal("landing_view"),
+      v.literal("landing_signup"),
+      v.literal("email_click"),
+      v.literal("email_reply"),
+      v.literal("social_click"),
+      v.literal("first_response"),
+      v.literal("meeting_booked"),
+      v.literal("deal_created"),
+      v.literal("deal_won"),
+    ),
+    source: v.optional(v.string()),
+    medium: v.optional(v.string()),
+    campaign: v.optional(v.string()),
+    // Links back to the record that generated the touch
+    utmLinkId: v.optional(v.id("utmLinks")),
+    landingPageId: v.optional(v.id("landingPages")),
+    campaignId: v.optional(v.id("campaigns")),
+    broadcastId: v.optional(v.id("broadcasts")),
+    socialPostId: v.optional(v.id("socialPosts")),
+    dealId: v.optional(v.id("deals")),
+    // Metadata
+    referrer: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
+    ip: v.optional(v.string()),
+    occurredAt: v.number(),
+  })
+    .index("by_workspace_contact_time", ["workspaceId", "contactId", "occurredAt"])
+    .index("by_workspace_time", ["workspaceId", "occurredAt"])
+    .index("by_workspace_type", ["workspaceId", "touchType", "occurredAt"])
+    .index("by_session", ["sessionId"]),
+
+  // Daily aggregated snapshots — cron computes each night for fast
+  // Today-view KPI reads. Rolling 90-day retention.
+  analyticsSnapshots: defineTable({
+    workspaceId: v.id("workspaces"),
+    // 'YYYY-MM-DD' key for uniqueness + range queries
+    day: v.string(),
+    // Sales
+    newContacts: v.number(),
+    newDeals: v.number(),
+    dealsWon: v.number(),
+    dealsLost: v.number(),
+    wonRevenueCents: v.int64(),
+    lostRevenueCents: v.int64(),
+    pipelineValueCents: v.int64(),                           // total open pipeline
+    // Money
+    invoicesIssuedCents: v.int64(),
+    invoicesPaidCents: v.int64(),
+    // Engagement
+    emailsSent: v.number(),
+    emailsReceived: v.number(),
+    whatsappSent: v.number(),
+    whatsappReceived: v.number(),
+    // Growth
+    landingViews: v.number(),
+    landingSignups: v.number(),
+    utmClicks: v.number(),
+    generatedAt: v.number(),
+  })
+    .index("by_workspace_day", ["workspaceId", "day"])
+    .index("by_workspace_time", ["workspaceId", "generatedAt"]),
+
+  // Fixed expenses — used by cash-flow projection view. Manual entry
+  // for now; connect to expense tracking in Phase 10+.
+  businessExpenses: defineTable({
+    workspaceId: v.id("workspaces"),
+    label: v.string(),                                       // 'Office rent' | 'Domain'
+    amountCents: v.int64(),
+    currency: v.string(),
+    cadence: v.union(
+      v.literal("one_time"),
+      v.literal("weekly"),
+      v.literal("monthly"),
+      v.literal("quarterly"),
+      v.literal("yearly"),
+    ),
+    nextDueDate: v.optional(v.number()),
+    category: v.optional(v.string()),                        // 'infra' | 'people' | 'ops'
+    active: v.boolean(),
+    createdBy: v.id("users"),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_active", ["workspaceId", "active"]),
 });
