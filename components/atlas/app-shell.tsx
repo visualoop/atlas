@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
@@ -166,6 +165,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           activeOrg={activeOrg}
           organizations={organizations}
           onNewOrg={() => router.push("/onboarding/new-org")}
+          onNavigate={(href) => router.push(href)}
         />
 
         <SidebarInset className="min-w-0">
@@ -272,11 +272,13 @@ function AtlasSidebar({
   activeOrg,
   organizations,
   onNewOrg,
+  onNavigate,
 }: {
   pathname: string;
   activeOrg: { _id: string; name: string; slug: string };
   organizations: Array<{ _id: string; name: string }>;
   onNewOrg: () => void;
+  onNavigate: (href: string) => void;
 }) {
   return (
     <Sidebar collapsible="icon">
@@ -314,20 +316,20 @@ function AtlasSidebar({
       </SidebarHeader>
 
       <SidebarContent>
-        <NavGroup label="" items={PRIMARY_NAV} pathname={pathname} />
-        <NavGroup label="CRM" items={CRM_NAV} pathname={pathname} />
-        <NavGroup label="Work" items={WORK_NAV} pathname={pathname} />
-        <NavGroup label="Growth" items={GROWTH_NAV} pathname={pathname} />
+        <NavGroup label="" items={PRIMARY_NAV} pathname={pathname} onNavigate={onNavigate} />
+        <NavGroup label="CRM" items={CRM_NAV} pathname={pathname} onNavigate={onNavigate} />
+        <NavGroup label="Work" items={WORK_NAV} pathname={pathname} onNavigate={onNavigate} />
+        <NavGroup label="Growth" items={GROWTH_NAV} pathname={pathname} onNavigate={onNavigate} />
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              render={<Link href="/settings" />}
               tooltip="Settings"
               isActive={pathname.startsWith("/settings")}
               className="rounded-none"
+              onClick={() => onNavigate("/settings")}
             >
               <Settings className="size-4" />
               <span>Settings</span>
@@ -345,10 +347,12 @@ function NavGroup({
   label,
   items,
   pathname,
+  onNavigate,
 }: {
   label: string;
   items: NavItem[];
   pathname: string;
+  onNavigate: (href: string) => void;
 }) {
   return (
     <SidebarGroup>
@@ -365,10 +369,10 @@ function NavGroup({
             return (
               <SidebarMenuItem key={item.href}>
                 <SidebarMenuButton
-                  render={<Link href={item.href} />}
                   tooltip={item.label}
                   isActive={active}
                   className="rounded-none"
+                  onClick={() => onNavigate(item.href)}
                 >
                   <Icon className="size-4" />
                   <span>{item.label}</span>
