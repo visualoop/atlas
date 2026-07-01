@@ -1,20 +1,24 @@
 # ============================================================
 # Deploy Atlas — self-hosted Convex backend to k3s.
 #
-# Mirrors infra/workflows/deploy-chapaswali.yml.
+# One-shot flow (using webfactory/ssh-agent + native ssh commands so
+# we can capture command output for the admin key):
 #
-# Two phases:
-#   1. INFRA — copy manifests to server, apply them
-#              (backend + dashboard + ingresses + backup).
-#              Injects instance secret + admin key as k8s Secret.
-#   2. FUNCTIONS — push convex/*.ts to the running backend with
-#              `npx convex deploy`, using the admin key.
+#   1. Install SSH key via ssh-agent, add server host key.
+#   2. Copy manifests to server.
+#   3. Apply k8s manifests + create Convex secret (with existing admin
+#      key if present).
+#   4. Wait for backend rollout.
+#   5. If admin key not yet in the repo secret store, generate one on
+#      the backend and save it via `gh secret set`.
+#   6. Push Convex functions via `npx convex deploy` (only if the
+#      admin key was available at start OR we just generated one this run).
 #
 # Required GitHub repo secrets:
-#   SERVER_IP                          k3s server IP (already set: 130.162.184.133)
-#   SSH_PRIVATE_KEY                    SSH key for ubuntu@server (already set)
-#   CONVEX_INSTANCE_SECRET_ATLAS       Backend instance secret (`openssl rand -hex 32`)
-#   CONVEX_SELF_HOSTED_ADMIN_KEY_ATLAS Admin key (generated after first deploy)
+#   SERVER_IP                          k3s server IP (130.162.184.133)
+#   SSH_PRIVATE_KEY                    SSH key for ubuntu@server
+#   CONVEX_INSTANCE_SECRET_ATLAS       Backend instance secret
+#   CONVEX_SELF_HOSTED_ADMIN_KEY_ATLAS Admin key — populated on first run
 # ============================================================
 name: Deploy Atlas Convex
 
@@ -31,151 +35,163 @@ concurrency:
   group: deploy-atlas
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  actions: write
+
 jobs:
-  infra:
-    name: Apply Atlas Convex manifests
+  deploy:
+    name: Deploy Atlas Convex
     runs-on: ubuntu-latest
-    outputs:
-      has_admin_key: ${{ steps.flags.outputs.has_admin_key }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compute flags
-        id: flags
-        env:
-          ADMIN_KEY: ${{ secrets.CONVEX_SELF_HOSTED_ADMIN_KEY_ATLAS }}
-        run: |
-          if [ -n "$ADMIN_KEY" ]; then
-            echo "has_admin_key=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_admin_key=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Create target dir on server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ubuntu
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            sudo mkdir -p /opt/cluster-infra
-            sudo chown -R ubuntu:ubuntu /opt/cluster-infra
-
-      - name: Copy atlas manifests to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ubuntu
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "infra/atlas/**"
-          target: "/opt/cluster-infra"
-          overwrite: true
-
-      - name: Apply on server
-        uses: appleboy/ssh-action@v1.0.3
-        env:
-          CONVEX_INSTANCE_SECRET: ${{ secrets.CONVEX_INSTANCE_SECRET_ATLAS }}
-          CONVEX_ADMIN_KEY: ${{ secrets.CONVEX_SELF_HOSTED_ADMIN_KEY_ATLAS }}
-          GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ubuntu
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: CONVEX_INSTANCE_SECRET,CONVEX_ADMIN_KEY,GHCR_USER,GHCR_TOKEN
-          command_timeout: 15m
-          script: |
-            set -e
-            cd /opt/cluster-infra/infra/atlas
-            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-            K="sudo KUBECONFIG=$KUBECONFIG kubectl"
-            NS=atlas
-
-            # Namespace + quota are managed by the shared infra deploy
-            # (resource-quotas.yaml). Ensure namespace exists in case
-            # this runs first.
-            $K create namespace $NS --dry-run=client -o yaml | $K apply -f -
-
-            # GHCR pull secret — anonymous pulls of public Convex images
-            # were rate-limited from the server IP. Authenticated pull
-            # via GITHUB_TOKEN fixes it.
-            echo "==> GHCR pull secret"
-            $K -n $NS create secret docker-registry ghcr-pull \
-              --docker-server=ghcr.io \
-              --docker-username="${GHCR_USER}" \
-              --docker-password="${GHCR_TOKEN}" \
-              --dry-run=client -o yaml | $K apply -f -
-
-            # Convex secret: instance-secret always; admin-key only if
-            # already generated (first deploy won't have it).
-            echo "==> Convex secret"
-            if [ -n "${CONVEX_ADMIN_KEY}" ]; then
-              $K -n $NS create secret generic atlas-convex \
-                --from-literal=instance-secret="${CONVEX_INSTANCE_SECRET}" \
-                --from-literal=admin-key="${CONVEX_ADMIN_KEY}" \
-                --dry-run=client -o yaml | $K apply -f -
-            else
-              EXISTING_KEY=$($K -n $NS get secret atlas-convex \
-                -o jsonpath='{.data.admin-key}' 2>/dev/null | base64 -d || echo "")
-              $K -n $NS create secret generic atlas-convex \
-                --from-literal=instance-secret="${CONVEX_INSTANCE_SECRET}" \
-                --from-literal=admin-key="${EXISTING_KEY}" \
-                --dry-run=client -o yaml | $K apply -f -
-            fi
-
-            echo "==> Apply backend + dashboard + ingress + backup"
-            $K apply -f 01-convex-backend.yaml
-            $K apply -f 02-convex-dashboard.yaml
-            $K apply -f 03-ingress.yaml
-            $K apply -f 04-backup-cronjob.yaml
-
-            echo "==> Wait for backend rollout"
-            if ! $K -n $NS rollout status deployment/convex-backend --timeout=5m; then
-              echo "!! Rollout failed — diagnostics:"
-              echo "---- pods ----"
-              $K -n $NS get pods -o wide || true
-              echo "---- describe ----"
-              $K -n $NS describe deployment/convex-backend | tail -40 || true
-              echo "---- events ----"
-              $K -n $NS get events --sort-by=.lastTimestamp | tail -30 || true
-              echo "---- backend logs ----"
-              $K -n $NS logs deployment/convex-backend --tail=80 --all-containers=true || true
-              echo "---- previous logs (if crashed) ----"
-              $K -n $NS logs deployment/convex-backend --tail=50 --previous --all-containers=true || true
-              exit 1
-            fi
-
-            echo ""
-            echo "============================================================"
-            echo " Convex backend up. Endpoints (after DNS + cert):"
-            echo "   API:       https://api.atlas.blyss.co.ke"
-            echo "   Actions:   https://actions.atlas.blyss.co.ke"
-            echo "   Dashboard: https://convex.atlas.blyss.co.ke"
-            echo ""
-            if [ -z "${CONVEX_ADMIN_KEY}" ]; then
-              echo " FIRST DEPLOY: generate the admin key now —"
-              echo "   sudo kubectl -n $NS exec deploy/convex-backend -- \\"
-              echo "     ./generate_admin_key.sh"
-              echo " Then add it as CONVEX_SELF_HOSTED_ADMIN_KEY_ATLAS"
-              echo " and re-run this workflow to push functions."
-            fi
-            echo "============================================================"
-
-  functions:
-    name: Push Convex functions
-    needs: infra
-    runs-on: ubuntu-latest
-    if: ${{ needs.infra.outputs.has_admin_key == 'true' }}
-    steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
+
+      - name: Install SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        env:
+          IP: ${{ secrets.SERVER_IP }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$IP" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Copy manifests + apply k3s
+        env:
+          IP: ${{ secrets.SERVER_IP }}
+          CONVEX_INSTANCE_SECRET: ${{ secrets.CONVEX_INSTANCE_SECRET_ATLAS }}
+          CONVEX_ADMIN_KEY: ${{ secrets.CONVEX_SELF_HOSTED_ADMIN_KEY_ATLAS }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          # Ensure target dir
+          ssh ubuntu@"$IP" 'sudo mkdir -p /opt/cluster-infra && sudo chown -R ubuntu:ubuntu /opt/cluster-infra'
+          # Copy manifests
+          rsync -az --delete infra/atlas/ ubuntu@"$IP":/opt/cluster-infra/infra/atlas/
+
+          # Build the remote script locally with env vars interpolated,
+          # then pipe to ssh so the remote receives the resolved values.
+          REMOTE_SCRIPT=$(cat <<EOF
+          set -e
+          cd /opt/cluster-infra/infra/atlas
+          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+          K="sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl"
+          NS=atlas
+
+          \$K create namespace \$NS --dry-run=client -o yaml | \$K apply -f -
+
+          echo "==> GHCR pull secret"
+          \$K -n \$NS create secret docker-registry ghcr-pull \\
+            --docker-server=ghcr.io \\
+            --docker-username="${GHCR_USER}" \\
+            --docker-password="${GHCR_TOKEN}" \\
+            --dry-run=client -o yaml | \$K apply -f -
+
+          echo "==> Convex secret"
+          if [ -n "${CONVEX_ADMIN_KEY}" ]; then
+            \$K -n \$NS create secret generic atlas-convex \\
+              --from-literal=instance-secret="${CONVEX_INSTANCE_SECRET}" \\
+              --from-literal=admin-key="${CONVEX_ADMIN_KEY}" \\
+              --dry-run=client -o yaml | \$K apply -f -
+          else
+            EXISTING_KEY=\$(\$K -n \$NS get secret atlas-convex \\
+              -o jsonpath='{.data.admin-key}' 2>/dev/null | base64 -d || echo "")
+            \$K -n \$NS create secret generic atlas-convex \\
+              --from-literal=instance-secret="${CONVEX_INSTANCE_SECRET}" \\
+              --from-literal=admin-key="\$EXISTING_KEY" \\
+              --dry-run=client -o yaml | \$K apply -f -
+          fi
+
+          echo "==> Apply backend + dashboard + ingress + backup"
+          \$K apply -f 01-convex-backend.yaml
+          \$K apply -f 02-convex-dashboard.yaml
+          \$K apply -f 03-ingress.yaml
+          \$K apply -f 04-backup-cronjob.yaml
+
+          echo "==> Wait for backend rollout"
+          if ! \$K -n \$NS rollout status deployment/convex-backend --timeout=5m; then
+            \$K -n \$NS get pods -o wide || true
+            \$K -n \$NS describe deployment/convex-backend | tail -40 || true
+            \$K -n \$NS logs deployment/convex-backend --tail=80 --all-containers=true || true
+            exit 1
+          fi
+          echo "==> Backend ready"
+          EOF
+          )
+          echo "$REMOTE_SCRIPT" | ssh ubuntu@"$IP" 'bash -s'
+
+      - name: Generate admin key if missing
+        id: gen_key
+        env:
+          IP: ${{ secrets.SERVER_IP }}
+          EXISTING_KEY: ${{ secrets.CONVEX_SELF_HOSTED_ADMIN_KEY_ATLAS }}
+        run: |
+          set -e
+          if [ -n "$EXISTING_KEY" ]; then
+            echo "existing=true" >> "$GITHUB_OUTPUT"
+            echo "Admin key already stored."
+            exit 0
+          fi
+          echo "==> Generating admin key on backend"
+          # Wait for backend pod to accept exec (occasionally races the rollout)
+          for i in 1 2 3 4 5 6; do
+            if ssh ubuntu@"$IP" "sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl -n atlas exec deploy/convex-backend -- true" >/dev/null 2>&1; then
+              break
+            fi
+            echo "waiting for backend exec ($i/6)..."
+            sleep 8
+          done
+
+          OUT=$(ssh ubuntu@"$IP" "sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl -n atlas exec deploy/convex-backend -- ./generate_admin_key.sh" 2>&1 || true)
+          echo "==== raw output ===="
+          echo "$OUT"
+          echo "==== end ===="
+
+          # Convex prints something like: "You may want to write this down: <slug>|<hex>"
+          KEY=$(echo "$OUT" | grep -Eo '[a-z][a-z0-9-]*\|[a-f0-9]{60,}' | head -1)
+          if [ -z "$KEY" ]; then
+            echo "!! Could not extract admin key"
+            exit 1
+          fi
+          echo "::add-mask::$KEY"
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          echo "existing=false" >> "$GITHUB_OUTPUT"
+          echo "Generated admin key (masked)."
+
+      - name: Save admin key as repo secret
+        if: ${{ steps.gen_key.outputs.existing == 'false' && steps.gen_key.outputs.key != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT_FOR_SECRETS || secrets.GITHUB_TOKEN }}
+          NEW_KEY: ${{ steps.gen_key.outputs.key }}
+        run: |
+          echo "$NEW_KEY" | gh secret set CONVEX_SELF_HOSTED_ADMIN_KEY_ATLAS --repo ${{ github.repository }}
+          echo "Admin key saved."
+
       - name: Install deps
         run: npm ci
-      - name: Deploy functions to self-hosted backend
+
+      - name: Push Convex functions
         env:
           CONVEX_SELF_HOSTED_URL: https://api.atlas.blyss.co.ke
-          CONVEX_SELF_HOSTED_ADMIN_KEY: ${{ secrets.CONVEX_SELF_HOSTED_ADMIN_KEY_ATLAS }}
-        run: npx convex deploy -y
+          CONVEX_SELF_HOSTED_ADMIN_KEY: ${{ steps.gen_key.outputs.key || secrets.CONVEX_SELF_HOSTED_ADMIN_KEY_ATLAS }}
+        run: |
+          if [ -z "$CONVEX_SELF_HOSTED_ADMIN_KEY" ]; then
+            echo "!! No admin key available"
+            exit 1
+          fi
+          # Wait for the ingress TLS cert to issue before deploy
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            code=$(curl -sk -o /dev/null -w "%{http_code}" "$CONVEX_SELF_HOSTED_URL/api/version" || echo "0")
+            echo "api probe attempt $i: HTTP $code"
+            if [ "$code" != "0" ] && [ "$code" != "000" ]; then break; fi
+            sleep 12
+          done
+          npx convex deploy -y
