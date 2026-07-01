@@ -255,7 +255,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
         No companies yet.
       </p>
       <p className="text-sm text-muted-foreground max-w-prose mx-auto">
-        Add your first company manually, or use Prospector (coming in Phase 3) to bulk-import from Google Maps.
+        Add your first company manually, or use <a href="/prospector" className="text-primary underline">Prospector</a> to bulk-import from Google Maps.
       </p>
       <button
         onClick={onCreate}

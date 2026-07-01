@@ -54,6 +54,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CommandPalette } from "@/components/atlas/command-palette";
+import { CopilotPanel } from "@/components/atlas/copilot-panel";
 import { api } from "@/convex/_generated/api";
 import { cn } from "@/lib/utils";
 
@@ -94,6 +95,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const bootstrap = useQuery(api.organizations.currentBootstrap);
   const bootstrapProfile = useMutation(api.referrals.bootstrapMyProfile);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const { signOut } = useAuthActions();
@@ -120,6 +122,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setPaletteOpen((v) => !v);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "j") {
+        e.preventDefault();
+        setCopilotOpen((v) => !v);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -218,6 +224,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Search className="size-4" />
             </button>
 
+            <button
+              onClick={() => setCopilotOpen(true)}
+              className="hidden md:inline-flex items-center gap-1.5 h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-primary hover:text-primary transition-colors"
+              title="Copilot (⌘J)"
+            >
+              <Sparkles className="size-3.5" />
+              Copilot
+              <span className="font-mono text-[10px] bg-muted px-1 py-0.5">⌘J</span>
+            </button>
+            <button
+              onClick={() => setCopilotOpen(true)}
+              className="md:hidden size-9 grid place-items-center hover:bg-muted"
+              aria-label="Copilot"
+            >
+              <Sparkles className="size-4" />
+            </button>
+
             <DropdownMenu>
               <DropdownMenuTrigger
                 className="ml-1 md:ml-auto size-8 grid place-items-center hover:bg-muted transition-colors text-xs font-mono border border-border rounded-none"
@@ -263,6 +286,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </SidebarInset>
 
         <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+        <CopilotPanel open={copilotOpen} onOpenChange={setCopilotOpen} />
       </SidebarProvider>
     </TooltipProvider>
   );
