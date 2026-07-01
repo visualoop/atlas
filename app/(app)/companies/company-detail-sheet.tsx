@@ -1,9 +1,12 @@
 "use client";
 
 import { useQuery, useMutation } from "convex/react";
-import { Mail, Phone, Globe, MapPin, Trash2 } from "lucide-react";
+import { Mail, Phone, Globe, Trash2 } from "lucide-react";
 import { RecordSheet } from "@/components/atlas/record-sheet";
 import { TimelineFeed } from "@/components/atlas/timeline-feed";
+import { NotesTab } from "@/components/atlas/notes-tab";
+import { TasksTab } from "@/components/atlas/tasks-tab";
+import { FilesTab } from "@/components/atlas/files-tab";
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -126,24 +129,24 @@ export function CompanyDetailSheet({
           content: <ContactsList contacts={contacts} />,
         },
         {
-          id: "deals",
-          label: "Deals",
-          content: <PlaceholderTab name="Deals" phase="Phase 5" />,
-        },
-        {
           id: "notes",
           label: "Notes",
-          content: <PlaceholderTab name="Notes" phase="next sprint" />,
+          content: <NotesTab relatedToType="company" relatedToId={companyId} />,
         },
         {
           id: "tasks",
           label: "Tasks",
-          content: <PlaceholderTab name="Tasks" phase="next sprint" />,
+          content: <TasksTab relatedToType="company" relatedToId={companyId} />,
         },
         {
           id: "files",
           label: "Files",
-          content: <PlaceholderTab name="Files" phase="next sprint" />,
+          content: <FilesTab relatedToType="company" relatedToId={companyId} />,
+        },
+        {
+          id: "deals",
+          label: "Deals",
+          content: <PlaceholderTab name="Deals" phase="Phase 5" />,
         },
       ]}
     />

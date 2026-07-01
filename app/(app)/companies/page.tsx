@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useQuery } from "convex/react";
 import { Globe, MapPin } from "lucide-react";
 import { ListLayout } from "@/components/atlas/list-layout";
@@ -21,10 +22,21 @@ const LIFECYCLE_FILTERS = [
 type LifecycleStage = (typeof LIFECYCLE_FILTERS)[number]["value"];
 
 export default function CompaniesPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const openId = searchParams.get("open") as Id<"companies"> | null;
+
   const [search, setSearch] = useState("");
   const [lifecycle, setLifecycle] = useState<LifecycleStage | null>(null);
   const [newOpen, setNewOpen] = useState(false);
-  const [activeId, setActiveId] = useState<Id<"companies"> | null>(null);
+
+  function setActiveId(id: Id<"companies"> | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (id) params.set("open", id);
+    else params.delete("open");
+    router.replace(`${pathname}${params.toString() ? "?" + params.toString() : ""}`);
+  }
 
   const companies = useQuery(api.companies.list, {
     search: search.trim() || undefined,
@@ -61,9 +73,9 @@ export default function CompaniesPage() {
       </ListLayout>
 
       <NewCompanySheet open={newOpen} onOpenChange={setNewOpen} />
-      {activeId && (
+      {openId && (
         <CompanyDetailSheet
-          companyId={activeId}
+          companyId={openId}
           open={true}
           onOpenChange={(o) => !o && setActiveId(null)}
         />

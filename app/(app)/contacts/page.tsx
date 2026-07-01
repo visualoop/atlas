@@ -1,15 +1,19 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { Mail, Phone, MessageSquare } from "lucide-react";
 import { ListLayout } from "@/components/atlas/list-layout";
 import { FilterChips } from "@/components/atlas/filter-chips";
+import { BulkActionBar } from "@/components/atlas/bulk-action-bar";
+import { Checkbox } from "@/components/ui/checkbox";
 import { NewContactSheet } from "./new-contact-sheet";
 import { ContactDetailSheet } from "./contact-detail-sheet";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
 
 const LIFECYCLE_FILTERS = [
   { value: "cold", label: "Cold" },
@@ -21,16 +25,44 @@ const LIFECYCLE_FILTERS = [
 type LifecycleStage = (typeof LIFECYCLE_FILTERS)[number]["value"];
 
 export default function ContactsPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const openId = searchParams.get("open") as Id<"contacts"> | null;
+
   const [search, setSearch] = useState("");
   const [lifecycle, setLifecycle] = useState<LifecycleStage | null>(null);
   const [newOpen, setNewOpen] = useState(false);
-  const [activeId, setActiveId] = useState<Id<"contacts"> | null>(null);
+  const [selected, setSelected] = useState<Set<Id<"contacts">>>(new Set());
+
+  function setActiveId(id: Id<"contacts"> | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (id) params.set("open", id);
+    else params.delete("open");
+    router.replace(`${pathname}${params.toString() ? "?" + params.toString() : ""}`);
+  }
 
   const contacts = useQuery(api.contacts.list, {
     search: search.trim() || undefined,
     lifecycleStage: lifecycle ?? undefined,
     limit: 200,
   });
+
+  const bulkUpdate = useMutation(api.contacts.bulkUpdate);
+  const bulkArchive = useMutation(api.contacts.bulkArchive);
+
+  const toggleSelected = (id: Id<"contacts">) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = (all: boolean) => {
+    if (all && contacts) setSelected(new Set(contacts.map((c) => c._id)));
+    else setSelected(new Set());
+  };
 
   return (
     <>
@@ -58,15 +90,33 @@ export default function ContactsPage() {
         ) : (
           <ContactsTable
             contacts={contacts}
-            onOpen={(id) => setActiveId(id)}
+            onOpen={setActiveId}
+            selected={selected}
+            onToggle={toggleSelected}
+            onToggleAll={toggleAll}
           />
         )}
       </ListLayout>
 
+      <BulkActionBar
+        count={selected.size}
+        onClear={() => setSelected(new Set())}
+        onChangeStage={async (stage) => {
+          await bulkUpdate({ ids: Array.from(selected), patch: { lifecycleStage: stage } });
+          toast.success(`${selected.size} updated.`);
+          setSelected(new Set());
+        }}
+        onArchive={async () => {
+          await bulkArchive({ ids: Array.from(selected) });
+          toast.success(`${selected.size} archived.`);
+          setSelected(new Set());
+        }}
+      />
+
       <NewContactSheet open={newOpen} onOpenChange={setNewOpen} />
-      {activeId && (
+      {openId && (
         <ContactDetailSheet
-          contactId={activeId}
+          contactId={openId}
           open={true}
           onOpenChange={(o) => !o && setActiveId(null)}
         />
@@ -78,6 +128,9 @@ export default function ContactsPage() {
 function ContactsTable({
   contacts,
   onOpen,
+  selected,
+  onToggle,
+  onToggleAll,
 }: {
   contacts: Array<{
     _id: Id<"contacts">;
@@ -91,12 +144,25 @@ function ContactsTable({
     _creationTime: number;
   }>;
   onOpen: (id: Id<"contacts">) => void;
+  selected: Set<Id<"contacts">>;
+  onToggle: (id: Id<"contacts">) => void;
+  onToggleAll: (all: boolean) => void;
 }) {
+  const allChecked = contacts.length > 0 && selected.size === contacts.length;
+  const someChecked = selected.size > 0 && !allChecked;
+
   return (
     <div className="border border-border">
       <table className="w-full text-sm">
         <thead className="text-left">
           <tr className="border-b border-[var(--border-strong)] bg-background sticky top-0">
+            <Th className="w-10">
+              <Checkbox
+                checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                onCheckedChange={(v) => onToggleAll(v === true)}
+                aria-label="Select all"
+              />
+            </Th>
             <Th>Name</Th>
             <Th>Title</Th>
             <Th>Contact</Th>
@@ -109,12 +175,23 @@ function ContactsTable({
             <tr
               key={c._id}
               tabIndex={0}
-              onClick={() => onOpen(c._id)}
+              onClick={(e) => {
+                // Don't open detail when clicking the checkbox cell
+                if ((e.target as HTMLElement).closest("[data-row-checkbox]")) return;
+                onOpen(c._id);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") onOpen(c._id);
               }}
               className="border-b border-border hover:bg-muted/40 cursor-pointer transition-colors focus:outline-none focus:bg-muted/60"
             >
+              <Td data-row-checkbox onClick={(e) => e.stopPropagation()}>
+                <Checkbox
+                  checked={selected.has(c._id)}
+                  onCheckedChange={() => onToggle(c._id)}
+                  aria-label={`Select ${c.firstName}`}
+                />
+              </Td>
               <Td>
                 <span className="font-medium">
                   {c.firstName}
@@ -163,12 +240,10 @@ function ContactsTableSkeleton() {
   return (
     <div className="border border-border divide-y divide-border">
       {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="px-4 py-3 grid grid-cols-5 gap-4 items-center">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-4 w-40" />
-          <Skeleton className="h-4 w-16" />
-          <Skeleton className="h-4 w-12 justify-self-end" />
+        <div key={i} className="px-4 py-3 grid grid-cols-6 gap-4 items-center">
+          {Array.from({ length: 6 }).map((_, j) => (
+            <Skeleton key={j} className="h-4 w-full max-w-[120px]" />
+          ))}
         </div>
       ))}
     </div>
@@ -205,8 +280,21 @@ function Th({ children, className }: { children: React.ReactNode; className?: st
   );
 }
 
-function Td({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <td className={`px-4 py-2.5 ${className ?? ""}`}>{children}</td>;
+function Td({
+  children,
+  className,
+  onClick,
+  ...rest
+}: {
+  children: React.ReactNode;
+  className?: string;
+  onClick?: (e: React.MouseEvent) => void;
+} & React.HTMLAttributes<HTMLTableCellElement>) {
+  return (
+    <td onClick={onClick} {...rest} className={`px-4 py-2.5 ${className ?? ""}`}>
+      {children}
+    </td>
+  );
 }
 
 const LIFECYCLE_STYLES: Record<string, string> = {

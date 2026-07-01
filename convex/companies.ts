@@ -352,3 +352,63 @@ export const restore = mutation({
     });
   },
 });
+
+/* ------------------------------------------------------------------ */
+/* bulk operations                                                      */
+/* ------------------------------------------------------------------ */
+
+export const bulkUpdate = mutation({
+  args: {
+    ids: v.array(v.id("companies")),
+    patch: v.object({
+      lifecycleStage: v.optional(v.string()),
+      ownerId: v.optional(v.id("users")),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const wsCtx = await requireWorkspaceContext(ctx);
+    if (args.patch.lifecycleStage &&
+        !LIFECYCLE_STAGES.includes(args.patch.lifecycleStage as LifecycleStage)) {
+      throw new ConvexError({ code: "INVALID_LIFECYCLE", message: "Invalid lifecycle." });
+    }
+    for (const id of args.ids) {
+      const company = await ctx.db.get(id);
+      if (!company || company.workspaceId !== wsCtx.workspace._id) continue;
+      await ctx.db.patch(id, args.patch);
+      await recordAudit(ctx, {
+        organizationId: wsCtx.workspace.organizationId,
+        workspaceId: wsCtx.workspace._id,
+        actorId: wsCtx.user._id,
+        action: "updated",
+        resourceType: "company",
+        resourceId: id,
+        after: args.patch,
+        reason: "bulk_update",
+      });
+    }
+    return args.ids.length;
+  },
+});
+
+export const bulkArchive = mutation({
+  args: { ids: v.array(v.id("companies")) },
+  handler: async (ctx, { ids }) => {
+    const wsCtx = await requireWorkspaceContext(ctx);
+    const now = Date.now();
+    for (const id of ids) {
+      const company = await ctx.db.get(id);
+      if (!company || company.workspaceId !== wsCtx.workspace._id) continue;
+      await ctx.db.patch(id, { archivedAt: now });
+      await recordAudit(ctx, {
+        organizationId: wsCtx.workspace.organizationId,
+        workspaceId: wsCtx.workspace._id,
+        actorId: wsCtx.user._id,
+        action: "archived",
+        resourceType: "company",
+        resourceId: id,
+        reason: "bulk_archive",
+      });
+    }
+    return ids.length;
+  },
+});

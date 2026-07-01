@@ -21,15 +21,6 @@ import {
   ChevronDown,
 } from "lucide-react";
 import {
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from "@/components/ui/command";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -41,6 +32,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CommandPalette } from "@/components/atlas/command-palette";
 import { api } from "@/convex/_generated/api";
 import { cn } from "@/lib/utils";
 
@@ -225,34 +217,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main className="flex-1 min-w-0">{children}</main>
       </div>
 
-      <CommandDialog open={paletteOpen} onOpenChange={setPaletteOpen}>
-        <CommandInput placeholder="Search or run a command…" />
-        <CommandList>
-          <CommandEmpty>No results.</CommandEmpty>
-          <CommandGroup heading="Navigate">
-            {SIDEBAR_ITEMS.map((item) => {
-              const Icon = item.icon;
-              return (
-                <CommandItem
-                  key={item.href}
-                  onSelect={() => {
-                    router.push(item.href);
-                    setPaletteOpen(false);
-                  }}
-                >
-                  <Icon className="size-4 mr-2" />
-                  <span>{item.label}</span>
-                </CommandItem>
-              );
-            })}
-          </CommandGroup>
-          <CommandSeparator />
-          <CommandGroup heading="Account">
-            <CommandItem onSelect={() => router.push("/settings/profile")}>Settings</CommandItem>
-            <CommandItem onSelect={handleSignOut}>Sign out</CommandItem>
-          </CommandGroup>
-        </CommandList>
-      </CommandDialog>
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
     </div>
   );
 }
