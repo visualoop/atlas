@@ -77,6 +77,7 @@ import type * as prospector from "../prospector.js";
 import type * as prospectorActions from "../prospectorActions.js";
 import type * as prospectorHelpers from "../prospectorHelpers.js";
 import type * as prospectorOsm from "../prospectorOsm.js";
+import type * as prospectorOsmHelpers from "../prospectorOsmHelpers.js";
 import type * as publicApi from "../publicApi.js";
 import type * as referrals from "../referrals.js";
 import type * as referralsActions from "../referralsActions.js";
@@ -175,6 +176,7 @@ declare const fullApi: ApiFromModules<{
   prospectorActions: typeof prospectorActions;
   prospectorHelpers: typeof prospectorHelpers;
   prospectorOsm: typeof prospectorOsm;
+  prospectorOsmHelpers: typeof prospectorOsmHelpers;
   publicApi: typeof publicApi;
   referrals: typeof referrals;
   referralsActions: typeof referralsActions;

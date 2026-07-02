@@ -1,34 +1,34 @@
 "use node";
 
 /**
- * OpenStreetMap POI search — using Overpass API.
+ * OpenStreetMap POI search — Overpass API + workspace-level cache.
  *
- * Nominatim was the wrong tool: it's a geocoder (address → coords)
- * that treats free-text queries as place-name lookups. For "find all
- * restaurants around here" queries, Overpass is the correct engine —
- * it lets you query OSM by tags (amenity=restaurant, shop=*, etc.).
+ * Two problems with raw Overpass usage:
+ *   1. Community endpoints are heavily rate-limited (429 during peak).
+ *   2. Cold queries are slow (2-5s for a Nairobi bbox).
  *
- * Free forever. No API key. No billing. Rate-limited by fair-use
- * policy — we self-throttle in the frontend.
+ * Solution:
+ *   - Server-side cache in Convex — key by (grid cell, category), 24h TTL.
+ *     Rounds lat/lng to 0.02° precision (~2km) so nearby pans share cache.
+ *   - Two mirror endpoints tried in sequence with 500ms backoff between.
+ *   - Fair-use headers (User-Agent + From email) for better queue priority.
  *
  * Docs: https://wiki.openstreetmap.org/wiki/Overpass_API
- * Live query builder: https://overpass-turbo.eu
- *
- * Data coverage in Kenya: strong in Nairobi + Mombasa CBDs (community-
- * mapped), thinner in rural areas. Contributors also add phone, website,
- * opening_hours tags to many businesses.
  */
 
 import { v } from "convex/values";
 import { action } from "./_generated/server";
+import { internal } from "./_generated/api";
 
-const OVERPASS_ENDPOINT = "https://overpass-api.de/api/interpreter";
-// Backup endpoints if the main one is down or rate-limiting
 const OVERPASS_MIRRORS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
-  "https://overpass.private.coffee/api/interpreter",
 ];
+
+const USER_AGENT = "Atlas by Blyss (atlas.blyss.co.ke)";
+const FROM_EMAIL = "justinequartz1@gmail.com";
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const GRID_PRECISION = 0.02;                 // ~2km at equator — cache buckets
 
 interface OverpassElement {
   type: "node" | "way" | "relation";
@@ -44,11 +44,6 @@ interface OverpassResponse {
   remark?: string;
 }
 
-/**
- * Overpass QL fragment per category — matches OSM tags for that kind
- * of business. Uses `nwr` (node + way + relation) so we catch tagged
- * points, polygons (mall footprints), and grouped features.
- */
 const CATEGORY_TAG_QUERIES: Record<string, string> = {
   restaurant: 'nwr["amenity"~"^(restaurant|cafe|bar|fast_food|food_court|pub|ice_cream)$"]',
   retail: 'nwr["shop"]',
@@ -59,6 +54,28 @@ const CATEGORY_TAG_QUERIES: Record<string, string> = {
   office: 'nwr["office"];nwr["amenity"~"^(bank|post_office|coworking_space)$"]',
 };
 
+interface Place {
+  googlePlaceId: string;
+  name: string;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
+  phoneRaw?: string;
+  website?: string;
+  googleMapsUri?: string;
+  types?: string[];
+  rating?: number;
+  ratingCount?: number;
+  businessStatus?: string;
+}
+
+function gridKey(lat: number, lng: number, radiusM: number, category: string): string {
+  const rLat = Math.round(lat / GRID_PRECISION) * GRID_PRECISION;
+  const rLng = Math.round(lng / GRID_PRECISION) * GRID_PRECISION;
+  const rBucket = Math.round(radiusM / 1000);   // 1km buckets
+  return `${rLat.toFixed(3)}:${rLng.toFixed(3)}:${rBucket}:${category}`;
+}
+
 export const searchNearbyOsm = action({
   args: {
     latitude: v.number(),
@@ -66,33 +83,23 @@ export const searchNearbyOsm = action({
     radiusMeters: v.number(),
     category: v.optional(v.string()),
   },
-  handler: async (_ctx, args): Promise<{
-    places: Array<{
-      googlePlaceId: string;
-      name: string;
-      address?: string;
-      latitude?: number;
-      longitude?: number;
-      phoneRaw?: string;
-      website?: string;
-      googleMapsUri?: string;
-      types?: string[];
-      rating?: number;
-      ratingCount?: number;
-      businessStatus?: string;
-    }>;
+  handler: async (ctx, args): Promise<{
+    places: Place[];
     error?: string;
+    cached?: boolean;
   }> => {
-    // Overpass expects meters directly for `around:R` — no minimum
-    // enforcement needed. Cap at 25km to keep the response small.
     const radius = Math.min(Math.max(args.radiusMeters, 300), 25_000);
+    const category = args.category ?? "retail";
+    const key = gridKey(args.latitude, args.longitude, radius, category);
 
-    const catQuery =
-      (args.category && CATEGORY_TAG_QUERIES[args.category]) ??
-      CATEGORY_TAG_QUERIES.retail;
+    // 1. Serve from cache if fresh
+    const cached = await ctx.runQuery(internal.prospectorOsmHelpers.getCached, { key });
+    if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+      return { places: cached.places as Place[], cached: true };
+    }
 
-    // Overpass QL — the `out center;` returns coords for ways + relations
-    // as their centroid, alongside their tags.
+    // 2. Fetch from Overpass
+    const catQuery = CATEGORY_TAG_QUERIES[category] ?? CATEGORY_TAG_QUERIES.retail;
     const overpassQL = `
 [out:json][timeout:25];
 (
@@ -102,18 +109,30 @@ export const searchNearbyOsm = action({
     .map((q) => `${q.trim()}(around:${radius},${args.latitude},${args.longitude});`)
     .join("\n  ")}
 );
-out center tags 60;
+out center tags 80;
 `.trim();
 
-    // Try mirrors sequentially if one fails
     let lastError = "";
-    for (const endpoint of OVERPASS_MIRRORS) {
+    for (let i = 0; i < OVERPASS_MIRRORS.length; i++) {
+      const endpoint = OVERPASS_MIRRORS[i];
+      // Backoff between mirror attempts
+      if (i > 0) await new Promise((r) => setTimeout(r, 500));
+
       try {
         const res = await fetch(endpoint, {
           method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": USER_AGENT,
+            "From": FROM_EMAIL,
+          },
           body: `data=${encodeURIComponent(overpassQL)}`,
         });
+
+        if (res.status === 429) {
+          lastError = `${endpoint} rate-limited (429)`;
+          continue;
+        }
         if (!res.ok) {
           lastError = `${endpoint} HTTP ${res.status}`;
           continue;
@@ -132,7 +151,6 @@ out center tags 60;
             const name = tags.name ?? tags["name:en"] ?? tags.brand ?? tags.operator;
             if (!name || !lat || !lon) return null;
 
-            // Address from OSM addr:* tags
             const addr = [
               tags["addr:housenumber"],
               tags["addr:street"],
@@ -142,7 +160,6 @@ out center tags 60;
               .filter(Boolean)
               .join(", ");
 
-            // Types — combine primary tag family with subtype
             const types: string[] = [];
             if (tags.amenity) types.push(tags.amenity);
             if (tags.shop) types.push(`shop:${tags.shop}`);
@@ -163,17 +180,34 @@ out center tags 60;
               rating: undefined,
               ratingCount: undefined,
               businessStatus: "OPERATIONAL",
-            };
+            } as Place;
           })
-          .filter((x): x is NonNullable<typeof x> => x !== null);
+          .filter((x): x is Place => x !== null);
 
-        return { places };
+        // 3. Cache the result
+        await ctx.runMutation(internal.prospectorOsmHelpers.saveCached, {
+          key,
+          places,
+        });
+
+        return { places, cached: false };
       } catch (err) {
         lastError = err instanceof Error ? err.message : "Network error";
         continue;
       }
     }
 
-    return { places: [], error: `OSM search failed: ${lastError}` };
+    // All mirrors failed — serve stale cache if we have anything, else error
+    if (cached) {
+      return {
+        places: cached.places as Place[],
+        cached: true,
+        error: "Fresh OSM data unavailable — showing cached results from earlier.",
+      };
+    }
+    return {
+      places: [],
+      error: `OpenStreetMap is temporarily rate-limiting free requests. Wait 60 seconds and try again, or switch to Places+OSM mode (uses your Google Places key instead).`,
+    };
   },
 });

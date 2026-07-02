@@ -169,17 +169,30 @@ export function MapBrowseOsm() {
         radiusMeters: Math.round(radius),
         category: category || undefined,
       });
+
+      // Case A: got fresh or cached results — show them.
+      if (res.places.length > 0) {
+        setPlaces(res.places);
+        if (res.cached && res.error) {
+          toast.info("Showing cached results — fresh OSM data is rate-limited right now.");
+        } else if (res.cached) {
+          toast.info(`${res.places.length} results (cached — fast).`);
+        }
+        return;
+      }
+
+      // Case B: no results and there's an error explaining why.
       if (res.error) {
         toast.error(res.error);
         setPlaces([]);
-      } else {
-        setPlaces(res.places);
-        if (res.places.length === 0) {
-          toast.info(
-            "No businesses tagged here in OSM. Try zooming in, changing category, or use Google Maps to search this area (billing enabled).",
-          );
-        }
+        return;
       }
+
+      // Case C: 0 results but no error — search worked, area is empty.
+      setPlaces([]);
+      toast.info(
+        "No businesses tagged here in OSM. Try zooming in, changing category, or use Google Maps to search this area (billing enabled).",
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed.");
     } finally {

@@ -247,6 +247,15 @@ export default defineSchema({
     .index("by_workspace_provider_day", ["workspaceId", "provider", "day"])
     .index("by_workspace_day", ["workspaceId", "day"]),
 
+  // OSM/Overpass search cache — 24h TTL, keyed by (grid cell, category)
+  // so pans in the same neighborhood don't re-hit the rate-limited
+  // community endpoints.
+  osmSearchCache: defineTable({
+    key: v.string(),                          // '{roundedLat}:{roundedLng}:{radiusKm}:{category}'
+    places: v.array(v.any()),
+    cachedAt: v.number(),
+  }).index("by_key", ["key"]),
+
   workspaceMembers: defineTable({
     workspaceId: v.id("workspaces"),
     userId: v.id("users"),
