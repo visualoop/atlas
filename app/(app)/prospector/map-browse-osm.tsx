@@ -58,6 +58,7 @@ export function MapBrowseOsm() {
   const [places, setPlaces] = useState<Place[]>([]);
   const [scoresById, setScoresById] = useState<Record<string, { fitScore: number; fitReason: string }>>({});
   const [visibleCount, setVisibleCount] = useState(20);
+  const [hideBadFit, setHideBadFit] = useState(true);
   const [selected, setSelected] = useState<Place | null>(null);
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set());
   const [suppressedIds, setSuppressedIds] = useState<Set<string>>(new Set());
@@ -268,11 +269,28 @@ export function MapBrowseOsm() {
 
   const sortedPlaces = useMemo(
     () =>
-      [...places].sort((a, b) => {
-        const sa = scoresById[a.googlePlaceId]?.fitScore ?? 50;
-        const sb = scoresById[b.googlePlaceId]?.fitScore ?? 50;
-        return sb - sa;
-      }),
+      [...places]
+        .filter((p) => {
+          if (!hideBadFit) return true;
+          const s = scoresById[p.googlePlaceId]?.fitScore;
+          // Show unscored (loading) + scored ≥ 25. Filter true bad-fits.
+          if (typeof s !== "number") return true;
+          return s >= 25;
+        })
+        .sort((a, b) => {
+          const sa = scoresById[a.googlePlaceId]?.fitScore ?? 50;
+          const sb = scoresById[b.googlePlaceId]?.fitScore ?? 50;
+          return sb - sa;
+        }),
+    [places, scoresById, hideBadFit],
+  );
+
+  const hiddenCount = useMemo(
+    () =>
+      places.filter((p) => {
+        const s = scoresById[p.googlePlaceId]?.fitScore;
+        return typeof s === "number" && s < 25;
+      }).length,
     [places, scoresById],
   );
 
@@ -398,7 +416,12 @@ export function MapBrowseOsm() {
             <div className="px-4 py-3 border-b border-border space-y-2 sticky top-0 bg-background z-10">
               <div className="flex items-baseline justify-between gap-2">
                 <p className="eyebrow">
-                  {places.length} result{places.length === 1 ? "" : "s"}
+                  {sortedPlaces.length} result{sortedPlaces.length === 1 ? "" : "s"}
+                  {hiddenCount > 0 && (
+                    <span className="text-muted-foreground">
+                      {" "}· {hiddenCount} low-fit hidden
+                    </span>
+                  )}
                   {importedIds.size > 0 && (
                     <span className="text-muted-foreground">
                       {" "}· {places.filter((p) => importedIds.has(p.googlePlaceId)).length} already
@@ -412,6 +435,14 @@ export function MapBrowseOsm() {
                   </p>
                 )}
               </div>
+              {hiddenCount > 0 && (
+                <button
+                  onClick={() => setHideBadFit((v) => !v)}
+                  className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground"
+                >
+                  {hideBadFit ? "Show" : "Hide"} low-fit ({hiddenCount})
+                </button>
+              )}
               {candidates.length > 0 && (
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] text-muted-foreground">Import top</span>

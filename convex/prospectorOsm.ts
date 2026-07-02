@@ -54,6 +54,58 @@ const CATEGORY_TAG_QUERIES: Record<string, string> = {
   office: 'nwr["office"];nwr["amenity"~"^(bank|post_office|coworking_space)$"]',
 };
 
+/**
+ * Kenyan mega-brand deny-list. These businesses have enterprise
+ * procurement, existing POS/CRM systems, and multi-quarter sales
+ * cycles. They almost never respond to a founder's cold outreach.
+ *
+ * We hard-filter them from Prospector results so founders don't
+ * waste time seeing 15 Naivas branches in every search.
+ *
+ * Match is case-insensitive substring. Add to /settings/workspace
+ * for per-workspace additions.
+ */
+const MEGA_BRAND_DENYLIST = [
+  // Supermarkets
+  "naivas", "carrefour", "quickmart", "chandarana", "cleanshelf",
+  "tuskys", "tusky", "nakumatt", "uchumi", "ukwala", "eastmatt",
+  "shoprite", "game store", "gamestore",
+  // Restaurants + fast food
+  "java house", "javahouse", "artcaffe", "kfc", "pizza inn", "chicken inn",
+  "creamy inn", "galitos", "subway", "mcdonald", "burger king", "steers",
+  "debonairs", "domino", "cj's", "cj s", "wimpy", "big square",
+  // Banks + financial
+  "kcb", "equity bank", "co-operative bank", "cooperative bank", "co-op bank",
+  "absa", "standard chartered", "stanchart", "stanbic", "ncba", "dtb",
+  "national bank", "family bank", "i&m bank", "im bank", "citibank",
+  "gulf african bank", "sidian", "cba bank", "commercial bank of africa",
+  "hfc", "kwft", "faulu", "housing finance",
+  // Telcos
+  "safaricom", "airtel", "telkom kenya", "jamii telecom",
+  // Fuel
+  "shell", "total energies", "totalenergies", "rubis", "ola energy", "oilibya",
+  "kenol kobil", "kenolkobil", "vivo", "hass petroleum",
+  // Pharmacies chains
+  "goodlife pharmacy", "goodlife", "haltons", "healthplus", "afrimed", "portland pharmacy",
+  // Electronics chains
+  "hotpoint", "samsung dealership", "samsung store",
+  // Insurance / big services
+  "britam", "jubilee", "cic insurance", "old mutual", "sanlam", "apa insurance",
+  "uap", "resolution insurance", "madison insurance",
+  // Retail apparel chains
+  "bata", "mr price", "woolworths", "truworths",
+  // Hotels chains
+  "serena", "sarova", "fairmont", "hilton", "radisson", "movenpick",
+  "intercontinental", "sheraton", "villa rosa", "kempinski",
+  // Bookshops + electronics chains
+  "text book centre", "textbook centre",
+];
+
+function isMegaBrand(name: string): boolean {
+  const lc = name.toLowerCase();
+  return MEGA_BRAND_DENYLIST.some((brand) => lc.includes(brand));
+}
+
 interface Place {
   googlePlaceId: string;
   name: string;
@@ -202,13 +254,41 @@ out center tags 60;
           })
           .filter((x): x is Place => x !== null);
 
+        // Filter out Kenyan mega-brands (Naivas, Safaricom, Bata, etc.)
+        // — they don't respond to founder cold outreach.
+        const noMega = places.filter((p) => !isMegaBrand(p.name));
+
+        // Collapse duplicates by exact name — if OSM has 5 branches of
+        // "Prestige Bookshop", keep just the first with a hint that
+        // more exist. Keeps the list scannable.
+        const byName = new Map<string, Place & { _dupCount?: number }>();
+        for (const p of noMega) {
+          const key = p.name.toLowerCase().trim();
+          const existing = byName.get(key);
+          if (existing) {
+            existing._dupCount = (existing._dupCount ?? 1) + 1;
+          } else {
+            byName.set(key, p);
+          }
+        }
+        const dedupedPlaces = Array.from(byName.values()).map((p) => {
+          if (p._dupCount && p._dupCount > 1) {
+            return {
+              ...p,
+              types: [...(p.types ?? []), `${p._dupCount} branches`],
+            };
+          }
+          const { _dupCount: _dc, ...rest } = p;
+          return rest as Place;
+        });
+
         // 3. Cache the result
         await ctx.runMutation(internal.prospectorOsmHelpers.saveCached, {
           key,
-          places,
+          places: dedupedPlaces,
         });
 
-        return { places, cached: false };
+        return { places: dedupedPlaces, cached: false };
       } catch (err) {
         lastError = err instanceof Error ? err.message : "Network error";
         continue;

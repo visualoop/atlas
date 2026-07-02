@@ -85,7 +85,7 @@ export const rankProspects = action({
       };
     }
 
-    const prompt = `You are helping a founder pick which businesses to prospect.
+    const prompt = `You are helping a founder pick which businesses to prospect via WhatsApp / email.
 
 WORKSPACE:
 ${setup.brand?.workspaceName ? `Name: ${setup.brand.workspaceName}` : ""}
@@ -93,12 +93,27 @@ ${setup.brand?.oneLiner ? `One-liner: ${setup.brand.oneLiner}` : ""}
 ${setup.brand?.offerings ? `Offerings:\n${setup.brand.offerings}` : ""}
 ${setup.brand?.targetMarket ? `Ideal customer: ${setup.brand.targetMarket}` : ""}
 
-For each candidate below, score 0-100 how well it matches the ideal customer.
-Score guidance:
-- 90-100: perfect fit — exactly the profile, small enough to buy from a founder
-- 60-89: good fit — likely relevant, worth reaching out
-- 30-59: maybe — off-target size or category but not disqualifying
-- 0-29: bad fit — wrong size (mega-chain), wrong category, or already covered by competitors
+For each candidate below, score 0-100 how likely it is that a cold WhatsApp / email pitch from a solo founder converts.
+
+Score guidance (be strict — most cold outreach fails; scores should skew low):
+- 90-100: perfect fit — small independent business matching the ICP exactly, likely no existing system, decision-maker is the owner + reachable via WhatsApp
+- 60-89: good fit — likely relevant, worth a try, decision-maker probably owner
+- 30-59: maybe — off-target size or unclear buyer, low-probability outreach
+- 10-29: bad fit — likely already has a competitor's system, or buyer is a committee, or reaching an unresponsive department
+- 0-9: no chance — a mega-brand, franchise, government body, or anything with 20+ locations or hundreds of employees
+
+Automatic 0-9 signals:
+- Any national/international chain (Naivas, KFC, Bata, KCB, Safaricom, Shell, Java House, Serena, Goodlife Pharmacy, etc.)
+- Any government office / ministry / county
+- Any name containing "Group", "Holdings", "Corporation", "Limited PLC", "Inc."
+- Any franchise-looking name (name of country + industry + Ltd)
+- Multi-branch entities (already tagged "N branches" in types)
+
+Reason field must be crisp and diagnostic. Examples:
+- "Independent hardware, likely paper-based inventory, owner-reachable"
+- "Bank branch — committee procurement, no cold path"
+- "Franchise café — HQ decides POS, local manager can't"
+- "Salon, likely 2-4 staff, prime Loyalty prospect"
 
 CANDIDATES:
 ${args.places
@@ -108,7 +123,7 @@ ${args.places
   )
   .join("\n")}
 
-Return ONLY a JSON array with objects: {"id": "<googlePlaceId>", "score": 0-100, "reason": "one crisp sentence"}. No prose, no code fence.`;
+Return ONLY a JSON array with objects: {"id": "<googlePlaceId>", "score": 0-100, "reason": "one crisp diagnostic sentence"}. No prose, no code fence.`;
 
     const chain: Array<{ provider: "groq" | "gemini" | "cerebras" | "openrouter"; model: string }> = [
       { provider: "groq", model: "llama-3.1-8b-instant" },
