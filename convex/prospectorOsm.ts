@@ -417,8 +417,14 @@ export const searchNearbyOsm = action({
     // 1. Serve from cache if fresh (unless refresh explicitly requested)
     const cached = await ctx.runQuery(internal.prospectorOsmHelpers.getCached, { key });
     if (!args.refresh && cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+      // Defensively strip any legacy `_dupCount` field that may still
+      // exist in cache entries written before that field was stripped
+      // at write time.
+      const sanitized = (cached.places as Array<Place & { _dupCount?: number }>).map(
+        ({ _dupCount, ...rest }) => rest as Place,
+      );
       return {
-        places: cached.places as Place[],
+        places: sanitized,
         cached: true,
         source: cacheNs as "geoapify" | "overpass",
       };
@@ -602,13 +608,13 @@ out center tags 60;
           }
         }
         const dedupedPlaces = Array.from(byName.values()).map((p) => {
-          if (p._dupCount && p._dupCount > 1) {
+          const { _dupCount: dupCount, ...rest } = p;
+          if (dupCount && dupCount > 1) {
             return {
-              ...p,
-              types: [...(p.types ?? []), `${p._dupCount} branches`],
-            };
+              ...rest,
+              types: [...(rest.types ?? []), `${dupCount} branches`],
+            } as Place;
           }
-          const { _dupCount: _dc, ...rest } = p;
           return rest as Place;
         });
 
@@ -818,13 +824,13 @@ function applyMegaBrandFilter(places: Place[]): Place[] {
     }
   }
   return Array.from(byName.values()).map((p) => {
-    if (p._dupCount && p._dupCount > 1) {
+    const { _dupCount: dupCount, ...rest } = p;
+    if (dupCount && dupCount > 1) {
       return {
-        ...p,
-        types: [...(p.types ?? []), `${p._dupCount} branches`],
-      };
+        ...rest,
+        types: [...(rest.types ?? []), `${dupCount} branches`],
+      } as Place;
     }
-    const { _dupCount: _dc, ...rest } = p;
     return rest as Place;
   });
 }

@@ -493,13 +493,13 @@ function filterAndDedupe<T extends PlaceLike>(places: T[]): T[] {
     }
   }
   return Array.from(byName.values()).map((p) => {
-    if (p._dupCount && p._dupCount > 1) {
+    const { _dupCount: dupCount, ...rest } = p;
+    if (dupCount && dupCount > 1) {
       return {
-        ...p,
-        types: [...(p.types ?? []), `${p._dupCount} branches`],
+        ...rest,
+        types: [...(rest.types ?? []), `${dupCount} branches`],
       } as T;
     }
-    const { _dupCount: _dc, ...rest } = p;
     return rest as T;
   });
 }
