@@ -27,6 +27,14 @@ import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 
+/**
+ * Parallelism budget for enrichment.
+ * Geoapify free tier is 3000/day + 20 req/sec — 3 in-flight is safe.
+ * Google Places also comfortably handles this.
+ */
+const BATCH_SIZE = 3;
+const RESCHEDULE_DELAY_MS = 500;
+
 interface EnrichmentResult {
   phone?: string;
   whatsapp?: string;
@@ -246,3 +254,60 @@ function normalizePhoneKe(raw: string | undefined): string | undefined {
   // valid intl number from a non-KE place)
   return raw;
 }
+
+/**
+ * Batch dispatcher — claims up to BATCH_SIZE pending companies from
+ * the queue, runs their enrichments in parallel via Promise.allSettled,
+ * then re-schedules itself in RESCHEDULE_DELAY_MS if anything remains.
+ *
+ * Called from bulkImportMapPlaces + importMapPlace via a single
+ * scheduler.runAfter(0, runEnrichmentBatch, {}). Any subsequent import
+ * that fires while a batch is running will just be picked up by the
+ * next batch tick — the queue is single-consumer per-tick but the
+ * flag is idempotent.
+ *
+ * Retry policy: enqueueEnrichment sets enrichmentPending=true.
+ * claimEnrichmentBatch clears the flag and bumps enrichmentAttempts.
+ * If enrichCompany fails, the flag stays cleared but the attempt
+ * counter persists — the user can manually re-enqueue via a UI
+ * button (not implemented yet) or the next import of the same place
+ * will re-trigger.
+ */
+export const runEnrichmentBatch = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ processed: number; remaining: boolean }> => {
+    const claimed = await ctx.runMutation(
+      internal.prospectorEnrichHelpers.claimEnrichmentBatch,
+      { batchSize: BATCH_SIZE },
+    );
+
+    if (claimed.length === 0) {
+      return { processed: 0, remaining: false };
+    }
+
+    // Run all claimed enrichments in parallel
+    await Promise.allSettled(
+      claimed.map((c) =>
+        ctx.runAction(internal.prospectorEnrich.enrichCompany, {
+          companyId: c.companyId as Id<"companies">,
+          googlePlaceId: c.googlePlaceId,
+        }),
+      ),
+    );
+
+    // Check if more are pending, and reschedule if so
+    const stillPending = await ctx.runQuery(
+      internal.prospectorEnrichHelpers.hasPendingEnrichments,
+      {},
+    );
+    if (stillPending) {
+      await ctx.scheduler.runAfter(
+        RESCHEDULE_DELAY_MS,
+        internal.prospectorEnrich.runEnrichmentBatch,
+        {},
+      );
+    }
+
+    return { processed: claimed.length, remaining: stillPending };
+  },
+});

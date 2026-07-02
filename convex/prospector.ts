@@ -531,14 +531,13 @@ export const importMapPlace = internalMutation({
       payload: { source: "prospector_map", googlePlaceId: args.googlePlaceId },
     });
 
-    // Schedule background enrichment — fetches phone/website/hours
+    // Enqueue for background enrichment (throttled to 3 in parallel
+    // via runEnrichmentBatch dispatcher — no thundering herd)
+    await ctx.db.patch(companyId, { enrichmentPending: true });
     await ctx.scheduler.runAfter(
       0,
-      internal.prospectorEnrich.enrichCompany,
-      {
-        companyId,
-        googlePlaceId: args.googlePlaceId,
-      },
+      internal.prospectorEnrich.runEnrichmentBatch,
+      {},
     );
 
     return { companyId, duplicated: false };
@@ -796,20 +795,24 @@ export const bulkImportMapPlaces = mutation({
         payload: { source: "prospector_map_bulk", googlePlaceId: p.googlePlaceId },
       });
 
-      // Schedule background enrichment — fetch phone/website/hours
-      // from Geoapify Place Details (or Google Place Details fallback)
-      // and patch the company. Runs in ~1s per company.
-      await ctx.scheduler.runAfter(
-        0,
-        internal.prospectorEnrich.enrichCompany,
-        {
-          companyId,
-          googlePlaceId: p.googlePlaceId,
-        },
-      );
+      // Enqueue for background enrichment (dispatcher processes
+      // 3 in parallel with 500ms rescheduling — no thundering herd
+      // even if user imports 20 businesses at once)
+      await ctx.db.patch(companyId, { enrichmentPending: true });
 
       imported++;
       budget--;
+    }
+
+    // Kick the dispatcher once at the end of the batch — it will
+    // claim up to 3 pending, run them in parallel, and reschedule
+    // itself until the queue is empty.
+    if (imported > 0) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.prospectorEnrich.runEnrichmentBatch,
+        {},
+      );
     }
 
     return {

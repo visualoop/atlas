@@ -354,6 +354,8 @@ export default defineSchema({
     googlePlaceId: v.optional(v.string()),     // for Prospector dedup
     enrichedAt: v.optional(v.number()),
     enrichmentData: v.optional(v.any()),       // raw Places + scraped fields
+    enrichmentPending: v.optional(v.boolean()), // queued for background enrich
+    enrichmentAttempts: v.optional(v.number()), // retry counter
     source: v.string(),                        // 'manual' | 'prospector' | 'inbound_email' | …
     fitScore: v.optional(v.number()),          // AI fit 0-100
     lifecycleStage: v.string(),                // 'cold' | 'warm' | 'qualified' | 'customer' | 'lost' | 'archived'
@@ -367,6 +369,7 @@ export default defineSchema({
     .index("by_workspace_owner", ["workspaceId", "ownerId"])
     .index("by_workspace_place", ["workspaceId", "googlePlaceId"])
     .index("by_workspace_domain", ["workspaceId", "domain"])
+    .index("by_enrichment_pending", ["enrichmentPending"])
     .searchIndex("search_name", {
       searchField: "name",
       filterFields: ["workspaceId", "lifecycleStage", "archivedAt"],

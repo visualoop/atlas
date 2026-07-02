@@ -10,6 +10,74 @@ import { internalQuery, internalMutation } from "./_generated/server";
 import { getOrgKey } from "./lib/secretsAccess";
 import { recordTimelineEvent } from "./lib/timeline";
 
+/**
+ * Enqueue a company for background enrichment. Idempotent — sets
+ * enrichmentPending=true so the dispatcher can pick it up.
+ */
+export const enqueueEnrichment = internalMutation({
+  args: { companyId: v.id("companies") },
+  handler: async (ctx, args) => {
+    const company = await ctx.db.get(args.companyId);
+    if (!company) return;
+    await ctx.db.patch(args.companyId, {
+      enrichmentPending: true,
+    });
+  },
+});
+
+/**
+ * Dispatcher: fetch up to 3 pending enrichments from any workspace,
+ * mark them in-flight (clear enrichmentPending), and return them.
+ * The action reads this, runs enrichments in parallel, then re-schedules
+ * itself if more remain.
+ */
+export const claimEnrichmentBatch = internalMutation({
+  args: { batchSize: v.number() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<Array<{ companyId: string; googlePlaceId: string }>> => {
+    const pending = await ctx.db
+      .query("companies")
+      .withIndex("by_enrichment_pending", (q) => q.eq("enrichmentPending", true))
+      .take(Math.min(Math.max(args.batchSize, 1), 20));
+
+    const claimed: Array<{ companyId: string; googlePlaceId: string }> = [];
+    for (const c of pending) {
+      if (!c.googlePlaceId) {
+        // No place id — can't enrich, just clear the flag
+        await ctx.db.patch(c._id, { enrichmentPending: false });
+        continue;
+      }
+      // Clear flag + bump attempts (so retries don't loop forever)
+      const attempts = (c.enrichmentAttempts ?? 0) + 1;
+      await ctx.db.patch(c._id, {
+        enrichmentPending: false,
+        enrichmentAttempts: attempts,
+      });
+      if (attempts > 3) continue; // Give up after 3 tries
+      claimed.push({ companyId: c._id, googlePlaceId: c.googlePlaceId });
+    }
+    return claimed;
+  },
+});
+
+/**
+ * Return true if any enrichments are still pending. Used by the
+ * dispatcher to decide whether to re-schedule itself.
+ */
+export const hasPendingEnrichments = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<boolean> => {
+    const row = await ctx.db
+      .query("companies")
+      .withIndex("by_enrichment_pending", (q) => q.eq("enrichmentPending", true))
+      .first();
+    return row !== null;
+  },
+});
+
+
 export const prepareForEnrichment = internalQuery({
   args: { companyId: v.id("companies") },
   handler: async (ctx, args) => {
