@@ -261,6 +261,8 @@ export function MapBrowseOsm() {
           types: p.types,
           rating: p.rating,
           ratingCount: p.ratingCount,
+          hasPhone: Boolean(p.phoneRaw?.trim()),
+          hasWebsite: Boolean(p.website?.trim()),
         })),
       });
       const map: Record<string, { fitScore: number; fitReason: string }> = {};

@@ -70,12 +70,12 @@ export function RecordSheet({
 
           {/* Tabs */}
           <Tabs defaultValue={defaultTab ?? tabs[0]?.id} className="flex-1 flex flex-col min-h-0">
-            <TabsList className="border-b border-border bg-transparent rounded-none px-6 h-auto p-0 gap-0 justify-start overflow-x-auto">
+            <TabsList className="border-b border-border bg-transparent rounded-none px-2 sm:px-6 h-auto p-0 gap-0 justify-start overflow-x-auto flex-nowrap w-full scrollbar-none">
               {tabs.map((t) => (
                 <TabsTrigger
                   key={t.id}
                   value={t.id}
-                  className="rounded-none border-b-2 border-transparent px-4 py-3 text-xs eyebrow text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent"
+                  className="rounded-none border-b-2 border-transparent px-3 sm:px-4 py-3 text-xs eyebrow text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent shrink-0 whitespace-nowrap"
                 >
                   {t.label}
                   {typeof t.count === "number" && (

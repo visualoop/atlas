@@ -273,4 +273,13 @@
   .atlas-progress {
     animation: atlasProgress 1.4s ease-in-out infinite;
   }
+
+  /* Hide scrollbar visually while keeping scroll behavior (tabs bar, etc.) */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
 }

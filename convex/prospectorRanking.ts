@@ -29,6 +29,8 @@ interface PlaceIn {
   types?: string[];
   rating?: number;
   ratingCount?: number;
+  hasPhone?: boolean;
+  hasWebsite?: boolean;
 }
 
 interface ScoredPlace {
@@ -47,6 +49,8 @@ export const rankProspects = action({
         types: v.optional(v.array(v.string())),
         rating: v.optional(v.number()),
         ratingCount: v.optional(v.number()),
+        hasPhone: v.optional(v.boolean()),
+        hasWebsite: v.optional(v.boolean()),
       }),
     ),
   },
@@ -187,6 +191,12 @@ function buildRankingPrompt(args: {
     if (p.types?.length) bits.push(`(${p.types.slice(0, 2).join(",")})`);
     if (p.address) bits.push(`— ${p.address.slice(0, 60)}`);
     if (typeof p.rating === "number") bits.push(`★${p.rating}`);
+    // Contactability signals — crucial for scoring
+    const reach: string[] = [];
+    if (p.hasPhone) reach.push("📞");
+    if (p.hasWebsite) reach.push("🌐");
+    if (reach.length === 0) reach.push("no contact");
+    bits.push(`[${reach.join(" ")}]`);
     return `${i + 1}. [${p.googlePlaceId}] ${bits.join(" ")}`;
   });
 
@@ -196,24 +206,30 @@ WORKSPACE:
 ${brandLines.join("\n") || "(no brand context — score neutrally)"}
 
 RULES:
-- 90-100: perfect fit, independent SMB matching ICP, owner-reachable
-- 60-89: likely fit, small chain (2-5 branches) or clear ICP match
-- 30-59: uncertain, off-target size or unclear buyer
-- 0-29: bad fit — national chain, franchise, govt body, or wrong industry
+- 90-100: perfect fit AND reachable (phone/website present)
+- 60-89: likely fit, reachable via at least one channel
+- 30-59: relevant but no contact info — needs walk-in visit
+- 0-29: bad fit — chain, franchise, govt body, or wrong industry
+
+CONTACTABILITY (weight this heavily):
+- [📞 🌐] = phone + website both — easy WhatsApp + email cold outreach
+- [📞] = phone only — WhatsApp works, no email path
+- [🌐] = website only — email scrape possible, no direct phone
+- [no contact] = neither — score at most 40 unless walk-in target
 
 AUTOMATIC 0-9 only for:
 - National chains (10+ branches, e.g. Naivas, KFC, KCB, Safaricom)
 - Government bodies (ministry, county, agency, board)
-- Names with "Group Holdings", "Corporation", "PLC", "Inc.", "Ltd."
+- Names with "Group Holdings", "Corporation", "PLC", "Inc."
 - Multinational subsidiaries
 
 Small independent shops with 2-5 branches are FINE — still owner-run,
-still perfect for cold outreach. Don't auto-fail them.
+still perfect for cold outreach if reachable.
 
 CANDIDATES:
 ${candidateLines.join("\n")}
 
-Return JSON: {"scores": [{"id": "<the [placeId]>", "score": 0-100, "reason": "one crisp diagnostic sentence"}]}. One entry per candidate. No prose outside JSON.`;
+Return JSON: {"scores": [{"id": "<the [placeId]>", "score": 0-100, "reason": "one crisp diagnostic sentence noting contact channel or lack thereof"}]}. One entry per candidate. No prose outside JSON.`;
 }
 
 async function callLlm(args: {
