@@ -677,6 +677,7 @@ export const bulkImportMapPlaces = mutation({
         types: v.optional(v.array(v.string())),
         rating: v.optional(v.number()),
         ratingCount: v.optional(v.number()),
+        businessStatus: v.optional(v.string()),
       }),
     ),
   },
