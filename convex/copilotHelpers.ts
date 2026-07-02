@@ -440,3 +440,237 @@ export const canRun = query({
     return { ready: false, reason: "no_ai_key" };
   },
 });
+
+
+/**
+ * List tasks. Filter presets: today (due today), overdue (past due),
+ * week (due this week), all (any open task). Sorted by dueAt asc.
+ */
+export const listTasks = internalQuery({
+  args: {
+    workspaceId: v.id("workspaces"),
+    filter: v.string(),
+    limit: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setHours(23, 59, 59, 999);
+    const endOfWeek = new Date(startOfDay);
+    endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+    const all = await ctx.db
+      .query("tasks")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("archivedAt"), undefined),
+          q.eq(q.field("status"), "open"),
+        ),
+      )
+      .take(200);
+
+    const filtered = all.filter((t) => {
+      if (!t.dueAt) return args.filter === "all";
+      switch (args.filter) {
+        case "today":
+          return t.dueAt >= startOfDay.getTime() && t.dueAt <= endOfDay.getTime();
+        case "overdue":
+          return t.dueAt < startOfDay.getTime();
+        case "week":
+          return t.dueAt >= startOfDay.getTime() && t.dueAt <= endOfWeek.getTime();
+        case "all":
+        default:
+          return true;
+      }
+    });
+
+    const sorted = filtered.sort((a, b) => (a.dueAt ?? Infinity) - (b.dueAt ?? Infinity));
+
+    return {
+      filter: args.filter,
+      total: sorted.length,
+      tasks: sorted.slice(0, args.limit).map((t) => ({
+        id: t._id,
+        title: t.title,
+        description: t.description,
+        priority: t.priority,
+        dueAt: t.dueAt,
+        dueIso: t.dueAt ? new Date(t.dueAt).toISOString() : undefined,
+        overdue: t.dueAt ? t.dueAt < now : false,
+        assigneeId: t.assigneeId,
+        relatedToType: t.relatedToType,
+        relatedToId: t.relatedToId,
+      })),
+    };
+  },
+});
+
+/**
+ * One-shot orientation snapshot — call this FIRST when the user
+ * greets you or asks anything vague. Returns:
+ *   - Workspace brand (with a hint if it's empty)
+ *   - Today's queue counts
+ *   - Top 3 open deals by amount
+ *   - 3 rotting deals
+ *   - 3 most recent messages
+ * Compact response so the AI can decide what to say without more
+ * tool calls.
+ */
+export const workspaceSnapshot = internalQuery({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const ws = await ctx.db.get(args.workspaceId);
+    if (!ws) return { error: "workspace_not_found" };
+
+    // Brand summary
+    const brand = {
+      workspaceName: ws.name,
+      hasContext: Boolean(
+        ws.oneLiner || ws.elevatorPitch || ws.offerings || ws.targetMarket,
+      ),
+      oneLiner: ws.oneLiner ?? null,
+      offerings: ws.offerings ?? null,
+      targetMarket: ws.targetMarket ?? null,
+      website: ws.website ?? null,
+    };
+
+    // Open deals — top 3
+    const deals = await ctx.db
+      .query("deals")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("archivedAt"), undefined),
+          q.eq(q.field("wonAt"), undefined),
+          q.eq(q.field("lostAt"), undefined),
+        ),
+      )
+      .take(200);
+    const stages = await ctx.db
+      .query("pipelineStages")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .collect();
+    const stageMap = new Map(stages.map((s) => [s._id as unknown as string, s]));
+
+    const topOpen = [...deals]
+      .sort((a, b) => Number(b.amountCents - a.amountCents))
+      .slice(0, 3)
+      .map((d) => ({
+        id: d._id,
+        name: d.name,
+        amountCents: d.amountCents.toString(),
+        currency: d.currency,
+        stage: stageMap.get(d.stageId as unknown as string)?.name ?? "unknown",
+        healthScore: d.healthScore,
+      }));
+
+    // Rotting deals
+    const oneDay = 24 * 60 * 60 * 1000;
+    const rotting = deals
+      .filter((d) => {
+        const rotDays = stageMap.get(d.stageId as unknown as string)?.rotDays ?? 14;
+        return (now - d.lastActivityAt) / oneDay >= rotDays;
+      })
+      .sort((a, b) => a.lastActivityAt - b.lastActivityAt)
+      .slice(0, 3)
+      .map((d) => ({
+        id: d._id,
+        name: d.name,
+        daysStale: Math.round((now - d.lastActivityAt) / oneDay),
+      }));
+
+    // Today counts
+    const conversations = await ctx.db
+      .query("conversations")
+      .withIndex("by_workspace_state_time", (q) =>
+        q.eq("workspaceId", args.workspaceId).eq("state", "open"),
+      )
+      .filter((q) => q.gt(q.field("unreadCount"), 0))
+      .take(20);
+
+    const tasks = await ctx.db
+      .query("tasks")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("archivedAt"), undefined),
+          q.eq(q.field("status"), "open"),
+          q.lte(q.field("dueAt"), endOfDay.getTime()),
+        ),
+      )
+      .take(20);
+
+    const events = await ctx.db
+      .query("calendarEvents")
+      .withIndex("by_workspace_start", (q) =>
+        q
+          .eq("workspaceId", args.workspaceId)
+          .gte("startAt", startOfDay.getTime())
+          .lte("startAt", endOfDay.getTime()),
+      )
+      .filter((q) => q.eq(q.field("status"), "scheduled"))
+      .take(10);
+
+    // Recent messages
+    const recentMsgs = await ctx.db
+      .query("messages")
+      .withIndex("by_workspace_time", (q) => q.eq("workspaceId", args.workspaceId))
+      .order("desc")
+      .take(3);
+
+    return {
+      brand,
+      today: {
+        unreadConversations: conversations.length,
+        openTasks: tasks.length,
+        meetingsToday: events.length,
+      },
+      topOpenDeals: topOpen,
+      rottingDeals: rotting,
+      recentMessages: recentMsgs.map((m) => ({
+        id: m._id,
+        direction: m.direction,
+        subject: m.subject,
+        preview: m.bodyText.slice(0, 120),
+        at: new Date(m._creationTime).toISOString(),
+      })),
+      hint: brand.hasContext
+        ? undefined
+        : "Workspace brand is empty. When answering ANY question, mention that the founder should fill in Settings → Workspace so you can give more personalized answers.",
+    };
+  },
+});
+
+
+/**
+ * Public query — for the Copilot panel to check whether workspace
+ * brand fields have been filled in. If not, we nudge the founder
+ * with an inline banner.
+ */
+export const workspaceBrandInfo = query({
+  args: {},
+  handler: async (ctx): Promise<{ hasContext: boolean }> => {
+    const user = await requireUser(ctx);
+    const profile = await ctx.db
+      .query("userProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .first();
+    if (!profile?.lastActiveWorkspaceId) return { hasContext: false };
+    const ws = await ctx.db.get(profile.lastActiveWorkspaceId);
+    if (!ws) return { hasContext: false };
+    return {
+      hasContext: Boolean(
+        ws.oneLiner || ws.elevatorPitch || ws.offerings || ws.targetMarket,
+      ),
+    };
+  },
+});

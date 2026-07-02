@@ -40,7 +40,8 @@ const CHAT_MSG = v.object({
 const BASE_SYSTEM = `You are Atlas Copilot, an agentic assistant for a founder.
 
 You have access to the founder's workspace via tools. Use them:
-- To look up any record they mention (contact, company, deal, conversation)
+- On any vague greeting or open-ended question ("hi", "what should I do today", "catch me up"), ALWAYS call \`workspace_snapshot\` FIRST. Never say "I don't have context" without checking.
+- To look up any record the founder mentions (contact, company, deal, conversation, task)
 - To search the web when the question needs external info (Groq Compound web_search)
 - To draft emails, create tasks, and take small actions when asked
 
@@ -50,7 +51,8 @@ Rules of engagement:
 - If a task requires info you don't have, call a tool. Don't guess.
 - When you cite a workspace record, include its ID so the founder can click through: [contact:jd7...].
 - Don't invent facts. If you're unsure, say so.
-- Do exactly what's asked, not more.`;
+- Do exactly what's asked, not more.
+- If \`workspace_snapshot\` returns \`hint\`, weave that suggestion into your answer once (never repeat it in the same session).`;
 
 function buildSystemPrompt(brand: {
   workspaceName?: string;
@@ -201,6 +203,32 @@ const ATLAS_TOOLS = [
     function: {
       name: "workspace_kpis",
       description: "Snapshot of pipeline value, deals won this month, outstanding invoices, and cash runway.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_tasks",
+      description: "List open (uncompleted) tasks. Best for questions like 'what should I do today', 'what's on my list', 'anything overdue'. Sortable by dueDate (soonest first) or recentlyCreated.",
+      parameters: {
+        type: "object",
+        properties: {
+          filter: {
+            type: "string",
+            enum: ["all", "today", "overdue", "week"],
+            description: "'today' = due today, 'overdue' = due date passed, 'week' = due this week, 'all' = every open task. Default 'all'.",
+          },
+          limit: { type: "number" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "workspace_snapshot",
+      description: "One-shot overview when the user greets you or asks a vague question like 'what should we do today' or 'catch me up'. Returns: workspace brand summary (or a warning if empty), today's queue counts, top 3 open deals by amount, 3 most recent messages, and 3 rotting deals. Use this FIRST when the user's intent is unclear.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -534,6 +562,16 @@ async function handleAtlasTool(
         });
       case "workspace_kpis":
         return await ctx.runQuery(internal.copilotHelpers.kpiSummary, {
+          workspaceId,
+        });
+      case "list_tasks":
+        return await ctx.runQuery(internal.copilotHelpers.listTasks, {
+          workspaceId,
+          filter: (parsed.filter as string) ?? "all",
+          limit: Number(parsed.limit ?? 20),
+        });
+      case "workspace_snapshot":
+        return await ctx.runQuery(internal.copilotHelpers.workspaceSnapshot, {
           workspaceId,
         });
       default:

@@ -30,6 +30,10 @@ export function CopilotPanel({ open, onOpenChange }: Props) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const chat = useAction(api.copilot.chat);
   const preflight = useQuery(api.copilotHelpers.canRun, open ? {} : "skip");
+  const workspaceInfo = useQuery(
+    api.copilotHelpers.workspaceBrandInfo,
+    open ? {} : "skip",
+  );
 
   // Reflect preflight into needsSetup so open+empty shows the right state
   useEffect(() => {
@@ -237,14 +241,32 @@ export function CopilotPanel({ open, onOpenChange }: Props) {
                   Ask me anything.
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  I have access to your contacts, companies, deals, and inbox.
+                  I have access to your contacts, companies, deals, tasks, and inbox.
                   Web search + code execution are built in.
                 </p>
+                {workspaceInfo && !workspaceInfo.hasContext && (
+                  <div className="border border-[var(--warning)] bg-[var(--warning)]/5 p-3 text-left space-y-1.5 text-xs">
+                    <p className="font-medium text-[var(--warning)]">
+                      Missing workspace context.
+                    </p>
+                    <p className="text-muted-foreground">
+                      Tell me what you sell + who you sell to so my answers
+                      aren't generic.
+                    </p>
+                    <Link
+                      href="/settings/workspace"
+                      onClick={() => onOpenChange(false)}
+                      className="inline-flex text-[var(--warning)] hover:underline font-mono uppercase tracking-[0.12em] text-[10px] pt-1"
+                    >
+                      Set up →
+                    </Link>
+                  </div>
+                )}
                 <div className="space-y-1.5 text-left pt-2">
-                  <SuggestedPrompt text="Who did I speak to yesterday?" onClick={setInput} />
+                  <SuggestedPrompt text="What should I do today?" onClick={setInput} />
                   <SuggestedPrompt text="Summarise my top 3 open deals" onClick={setInput} />
+                  <SuggestedPrompt text="Who did I speak to yesterday?" onClick={setInput} />
                   <SuggestedPrompt text="What's my cash runway?" onClick={setInput} />
-                  <SuggestedPrompt text="Find coffee shops in Nairobi worth prospecting" onClick={setInput} />
                 </div>
               </div>
             </div>
