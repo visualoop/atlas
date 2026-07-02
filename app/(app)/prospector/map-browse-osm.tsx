@@ -1,5 +1,6 @@
 "use client";
 
+import "leaflet/dist/leaflet.css";
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useAction, useQuery, useMutation } from "convex/react";
 import Link from "next/link";
@@ -76,16 +77,8 @@ export function MapBrowseOsm() {
     let cancelled = false;
     (async () => {
       const L = await import("leaflet");
-      // Inject Leaflet CSS lazily so we don't hydrate a global stylesheet
-      if (!document.querySelector('link[data-atlas-leaflet-css]')) {
-        const link = document.createElement("link");
-        link.rel = "stylesheet";
-        link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-        link.setAttribute("data-atlas-leaflet-css", "true");
-        link.integrity = "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=";
-        link.crossOrigin = "";
-        document.head.appendChild(link);
-      }
+      // CSS is imported at the top of the file via 'leaflet/dist/leaflet.css'
+      // — Next.js bundles it so we don't hit the tracking-prevention CDN block.
       if (cancelled || !mapContainerRef.current) return;
       const map = L.map(mapContainerRef.current, {
         center: DEFAULT_CENTER,

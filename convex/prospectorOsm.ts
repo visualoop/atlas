@@ -88,7 +88,10 @@ export const searchNearbyOsm = action({
     error?: string;
     cached?: boolean;
   }> => {
-    const radius = Math.min(Math.max(args.radiusMeters, 300), 25_000);
+    // Overpass performance degrades badly beyond 5km; cap it. Nairobi's
+    // CBD is fully covered at 3-5km. If the user has panned way out,
+    // they need to zoom in for meaningful business density anyway.
+    const radius = Math.min(Math.max(args.radiusMeters, 300), 5_000);
     const category = args.category ?? "retail";
     const key = gridKey(args.latitude, args.longitude, radius, category);
 
@@ -101,7 +104,7 @@ export const searchNearbyOsm = action({
     // 2. Fetch from Overpass
     const catQuery = CATEGORY_TAG_QUERIES[category] ?? CATEGORY_TAG_QUERIES.retail;
     const overpassQL = `
-[out:json][timeout:25];
+[out:json][timeout:15];
 (
   ${catQuery
     .split(";")
@@ -109,7 +112,7 @@ export const searchNearbyOsm = action({
     .map((q) => `${q.trim()}(around:${radius},${args.latitude},${args.longitude});`)
     .join("\n  ")}
 );
-out center tags 80;
+out center tags 60;
 `.trim();
 
     let lastError = "";
@@ -119,6 +122,8 @@ out center tags 80;
       if (i > 0) await new Promise((r) => setTimeout(r, 500));
 
       try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 20_000);
         const res = await fetch(endpoint, {
           method: "POST",
           headers: {
@@ -127,7 +132,9 @@ out center tags 80;
             "From": FROM_EMAIL,
           },
           body: `data=${encodeURIComponent(overpassQL)}`,
+          signal: controller.signal,
         });
+        clearTimeout(timer);
 
         if (res.status === 429) {
           lastError = `${endpoint} rate-limited (429)`;

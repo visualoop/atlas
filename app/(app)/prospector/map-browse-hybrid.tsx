@@ -1,5 +1,7 @@
 "use client";
 
+import "leaflet/dist/leaflet.css";
+
 /**
  * MapBrowseHybrid — the best of both worlds when the founder has only
  * Google's Places API enabled (not Maps JavaScript API).
@@ -90,13 +92,7 @@ export function MapBrowseHybrid() {
     let cancelled = false;
     (async () => {
       const L = await import("leaflet");
-      if (!document.querySelector('link[data-atlas-leaflet-css]')) {
-        const link = document.createElement("link");
-        link.rel = "stylesheet";
-        link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-        link.setAttribute("data-atlas-leaflet-css", "true");
-        document.head.appendChild(link);
-      }
+      // CSS is bundled — see top of file — no runtime CDN injection needed.
       if (cancelled || !mapContainerRef.current) return;
       const map = L.map(mapContainerRef.current, {
         center: DEFAULT_CENTER,
