@@ -28,7 +28,7 @@ export const getTodayCount = internalQuery({
     const ws = await ctx.db.get(args.workspaceId);
     if (!ws) return { count: 0, cap: 0, day: "" };
 
-    const cap = ws.googleMapsDailySearchCap ?? 200;
+    const cap = ws.googleMapsDailySearchCap ?? 150;
     const day = todayKey();
 
     const row = await ctx.db
@@ -57,7 +57,7 @@ export const checkAndRecord = internalMutation({
     const ws = await ctx.db.get(args.workspaceId);
     if (!ws) throw new ConvexError({ code: "NOT_FOUND", message: "Workspace not found." });
 
-    const cap = ws.googleMapsDailySearchCap ?? 200;
+    const cap = ws.googleMapsDailySearchCap ?? 150;
     const day = todayKey();
 
     const existing = await ctx.db

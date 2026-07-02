@@ -225,8 +225,9 @@ export default defineSchema({
     prospectorDailyCap: v.optional(v.number()),
     // Google Maps API search cap per day — the hard ceiling of how
     // many Places API calls Atlas will make before locking down.
-    // 200/day * 30 = 6,000/mo, well under Google's $200 free credit
-    // (~11,700 calls). Default 200. Bump if you upgrade billing.
+    // 150/day * 30 = 4,500/mo, ~72% of Google's $200 free credit
+    // (~6,250 Places API calls at $32/1000). Default 150. Bump if you
+    // upgrade billing.
     googleMapsDailySearchCap: v.optional(v.number()),
     archivedAt: v.optional(v.number()),
   })

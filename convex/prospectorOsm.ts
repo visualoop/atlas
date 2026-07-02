@@ -1,88 +1,64 @@
 "use node";
 
 /**
- * OpenStreetMap Nominatim — free alternative to Google Places.
+ * OpenStreetMap POI search — using Overpass API.
  *
- * No API key. No billing. Rate-limited by Nominatim's usage policy to
- * 1 request per second — we self-throttle by adding a 1s delay between
- * calls if the founder hammers it.
+ * Nominatim was the wrong tool: it's a geocoder (address → coords)
+ * that treats free-text queries as place-name lookups. For "find all
+ * restaurants around here" queries, Overpass is the correct engine —
+ * it lets you query OSM by tags (amenity=restaurant, shop=*, etc.).
  *
- * Data richness: 30-50% of Google Places. Business names + addresses
- * are usually good in Nairobi. Phone/website/rating fields are only
- * populated when the OSM community tagged them, which is patchy.
+ * Free forever. No API key. No billing. Rate-limited by fair-use
+ * policy — we self-throttle in the frontend.
  *
- * Coverage:
- *  - Nairobi central: 60-80% of businesses (as of 2025)
- *  - Rural Kenya: 20-30%
- *  - International: varies by city
+ * Docs: https://wiki.openstreetmap.org/wiki/Overpass_API
+ * Live query builder: https://overpass-turbo.eu
  *
- * Ideal for: quick prospecting when the founder doesn't have Google
- * billing yet. Not a permanent replacement — recommend upgrading to
- * Google Places once billing is added.
- *
- * Docs: https://nominatim.org/release-docs/develop/api/Search/
- * Usage policy: https://operations.osmfoundation.org/policies/nominatim/
+ * Data coverage in Kenya: strong in Nairobi + Mombasa CBDs (community-
+ * mapped), thinner in rural areas. Contributors also add phone, website,
+ * opening_hours tags to many businesses.
  */
 
 import { v } from "convex/values";
 import { action } from "./_generated/server";
-import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
 
-const NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/search";
-const USER_AGENT = "Atlas by Blyss (atlas.blyss.co.ke; justinequartz1@gmail.com)";
+const OVERPASS_ENDPOINT = "https://overpass-api.de/api/interpreter";
+// Backup endpoints if the main one is down or rate-limiting
+const OVERPASS_MIRRORS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+];
 
-interface NominatimResult {
-  place_id: number;
-  osm_type: string;
-  osm_id: number;
-  lat: string;
-  lon: string;
-  display_name: string;
-  name?: string;
-  category?: string;                          // v2 API — was `class` in v1
-  type?: string;
-  addresstype?: string;
-  address?: {
-    house_number?: string;
-    road?: string;
-    suburb?: string;
-    city?: string;
-    town?: string;
-    village?: string;
-    county?: string;
-    country?: string;
-    country_code?: string;
-    amenity?: string;
-    shop?: string;
-  };
-  extratags?: {
-    phone?: string;
-    website?: string;
-    opening_hours?: string;
-    email?: string;
-    "contact:phone"?: string;
-    "contact:website"?: string;
-  } | null;
-  importance?: number;
+interface OverpassElement {
+  type: "node" | "way" | "relation";
+  id: number;
+  lat?: number;
+  lon?: number;
+  center?: { lat: number; lon: number };
+  tags?: Record<string, string>;
 }
 
-const CATEGORY_QUERIES: Record<string, string> = {
-  restaurant: "restaurant",
-  retail: "shop",
-  services: "office",
-  health: "hospital",
-  auto: "car",
-  hotel: "hotel",
-  office: "office",
-};
+interface OverpassResponse {
+  elements?: OverpassElement[];
+  remark?: string;
+}
 
 /**
- * searchNearbyOsm — fetches businesses near a lat/lng from Nominatim.
- *
- * Nominatim doesn't have a true nearby-search — we simulate one by
- * constructing a bounded query using a viewbox around the center.
+ * Overpass QL fragment per category — matches OSM tags for that kind
+ * of business. Uses `nwr` (node + way + relation) so we catch tagged
+ * points, polygons (mall footprints), and grouped features.
  */
+const CATEGORY_TAG_QUERIES: Record<string, string> = {
+  restaurant: 'nwr["amenity"~"^(restaurant|cafe|bar|fast_food|food_court|pub|ice_cream)$"]',
+  retail: 'nwr["shop"]',
+  services: 'nwr["office"]',
+  health: 'nwr["amenity"~"^(hospital|clinic|doctors|pharmacy|dentist)$"]',
+  auto: 'nwr["amenity"~"^(fuel|car_wash|car_rental|charging_station)$"];nwr["shop"~"^(car|car_repair|car_parts|motorcycle)$"]',
+  hotel: 'nwr["tourism"~"^(hotel|hostel|guest_house|motel|apartment)$"]',
+  office: 'nwr["office"];nwr["amenity"~"^(bank|post_office|coworking_space)$"]',
+};
+
 export const searchNearbyOsm = action({
   args: {
     latitude: v.number(),
@@ -90,16 +66,16 @@ export const searchNearbyOsm = action({
     radiusMeters: v.number(),
     category: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<{
+  handler: async (_ctx, args): Promise<{
     places: Array<{
-      googlePlaceId: string;                     // We use "osm-<place_id>" so the shape matches Google
+      googlePlaceId: string;
       name: string;
       address?: string;
       latitude?: number;
       longitude?: number;
       phoneRaw?: string;
       website?: string;
-      googleMapsUri?: string;                    // OSM url instead
+      googleMapsUri?: string;
       types?: string[];
       rating?: number;
       ratingCount?: number;
@@ -107,86 +83,97 @@ export const searchNearbyOsm = action({
     }>;
     error?: string;
   }> => {
-    // Rough conversion: 1 degree lat ≈ 111km, so radiusMeters/111000 = deg.
-    // Nominatim's tagged POI density is much sparser than Google's — at
-    // small zooms we get zero results. Force a minimum 3km radius so
-    // even a very-zoomed-in browser view still queries a useful area.
-    const effectiveRadius = Math.max(3000, args.radiusMeters);
-    const degLat = effectiveRadius / 111_000;
-    const degLng =
-      effectiveRadius / (111_000 * Math.cos((args.latitude * Math.PI) / 180));
-    // Nominatim viewbox order: left,top,right,bottom (west, north, east, south)
-    const viewbox = [
-      args.longitude - degLng,
-      args.latitude + degLat,
-      args.longitude + degLng,
-      args.latitude - degLat,
-    ].join(",");
+    // Overpass expects meters directly for `around:R` — no minimum
+    // enforcement needed. Cap at 25km to keep the response small.
+    const radius = Math.min(Math.max(args.radiusMeters, 300), 25_000);
 
-    const searchTerm =
-      (args.category && CATEGORY_QUERIES[args.category]) || "shop";
+    const catQuery =
+      (args.category && CATEGORY_TAG_QUERIES[args.category]) ??
+      CATEGORY_TAG_QUERIES.retail;
 
-    const params = new URLSearchParams({
-      q: searchTerm,
-      format: "jsonv2",
-      viewbox,
-      bounded: "1",
-      limit: "40",
-      extratags: "1",
-      addressdetails: "1",
-    });
+    // Overpass QL — the `out center;` returns coords for ways + relations
+    // as their centroid, alongside their tags.
+    const overpassQL = `
+[out:json][timeout:25];
+(
+  ${catQuery
+    .split(";")
+    .filter((q) => q.trim())
+    .map((q) => `${q.trim()}(around:${radius},${args.latitude},${args.longitude});`)
+    .join("\n  ")}
+);
+out center tags 60;
+`.trim();
 
-    try {
-      const res = await fetch(`${NOMINATIM_ENDPOINT}?${params.toString()}`, {
-        headers: {
-          "User-Agent": USER_AGENT,
-          "Accept-Language": "en",
-        },
-      });
-      if (!res.ok) {
-        return { places: [], error: `Nominatim ${res.status}` };
+    // Try mirrors sequentially if one fails
+    let lastError = "";
+    for (const endpoint of OVERPASS_MIRRORS) {
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `data=${encodeURIComponent(overpassQL)}`,
+        });
+        if (!res.ok) {
+          lastError = `${endpoint} HTTP ${res.status}`;
+          continue;
+        }
+        const json = (await res.json()) as OverpassResponse;
+        if (json.remark) {
+          lastError = json.remark;
+          continue;
+        }
+
+        const places = (json.elements ?? [])
+          .map((el) => {
+            const lat = el.lat ?? el.center?.lat;
+            const lon = el.lon ?? el.center?.lon;
+            const tags = el.tags ?? {};
+            const name = tags.name ?? tags["name:en"] ?? tags.brand ?? tags.operator;
+            if (!name || !lat || !lon) return null;
+
+            // Address from OSM addr:* tags
+            const addr = [
+              tags["addr:housenumber"],
+              tags["addr:street"],
+              tags["addr:city"] ?? tags["addr:town"],
+              tags["addr:country"],
+            ]
+              .filter(Boolean)
+              .join(", ");
+
+            // Types — combine primary tag family with subtype
+            const types: string[] = [];
+            if (tags.amenity) types.push(tags.amenity);
+            if (tags.shop) types.push(`shop:${tags.shop}`);
+            if (tags.office) types.push(`office:${tags.office}`);
+            if (tags.tourism) types.push(`tourism:${tags.tourism}`);
+            if (tags.cuisine) types.push(`cuisine:${tags.cuisine}`);
+
+            return {
+              googlePlaceId: `osm-${el.type}-${el.id}`,
+              name,
+              address: addr || undefined,
+              latitude: lat,
+              longitude: lon,
+              phoneRaw: tags.phone ?? tags["contact:phone"] ?? tags["contact:mobile"],
+              website: tags.website ?? tags["contact:website"] ?? tags["contact:url"],
+              googleMapsUri: `https://www.openstreetmap.org/${el.type}/${el.id}`,
+              types,
+              rating: undefined,
+              ratingCount: undefined,
+              businessStatus: "OPERATIONAL",
+            };
+          })
+          .filter((x): x is NonNullable<typeof x> => x !== null);
+
+        return { places };
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : "Network error";
+        continue;
       }
-      const json = (await res.json()) as NominatimResult[];
-
-      const places = json.map((r) => {
-        const city =
-          r.address?.city ?? r.address?.town ?? r.address?.village ?? r.address?.county;
-        const addr = [r.address?.road, city, r.address?.country].filter(Boolean).join(", ");
-        // Nominatim omits `name` for some entries; fall back to address amenity tag
-        // or the first segment of display_name.
-        const name =
-          r.name ||
-          r.address?.amenity ||
-          r.address?.shop ||
-          r.display_name.split(",")[0] ||
-          "(unnamed)";
-        const phone = r.extratags?.phone ?? r.extratags?.["contact:phone"];
-        const website = r.extratags?.website ?? r.extratags?.["contact:website"];
-
-        return {
-          googlePlaceId: `osm-${r.osm_type}-${r.osm_id}`,
-          name,
-          address: addr || r.display_name,
-          latitude: parseFloat(r.lat),
-          longitude: parseFloat(r.lon),
-          phoneRaw: phone,
-          website,
-          googleMapsUri: `https://www.openstreetmap.org/${r.osm_type}/${r.osm_id}`,
-          types: [r.category, r.type, r.addresstype].filter(
-            (v): v is string => typeof v === "string" && v.length > 0,
-          ),
-          rating: undefined,
-          ratingCount: undefined,
-          businessStatus: "OPERATIONAL",
-        };
-      });
-
-      // Filter out entries where the name is just the display_name (no useful name)
-      const usable = places.filter((p) => p.name && p.name !== "(unnamed)" && p.name.length > 1);
-
-      return { places: usable };
-    } catch (err) {
-      return { places: [], error: err instanceof Error ? err.message : "Network error" };
     }
+
+    return { places: [], error: `OSM search failed: ${lastError}` };
   },
 });

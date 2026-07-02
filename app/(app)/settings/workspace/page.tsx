@@ -31,7 +31,7 @@ export default function WorkspacePage() {
     coreValues: "",
     pricingSummary: "",
     prospectorDailyCap: 100,
-    googleMapsDailySearchCap: 200,
+    googleMapsDailySearchCap: 150,
   });
   const [saving, setSaving] = useState(false);
 
@@ -49,7 +49,7 @@ export default function WorkspacePage() {
       coreValues: ws.coreValues ?? "",
       pricingSummary: ws.pricingSummary ?? "",
       prospectorDailyCap: ws.prospectorDailyCap ?? 100,
-      googleMapsDailySearchCap: ws.googleMapsDailySearchCap ?? 200,
+      googleMapsDailySearchCap: ws.googleMapsDailySearchCap ?? 150,
     });
   }, [ws]);
 
@@ -228,7 +228,7 @@ export default function WorkspacePage() {
 
         <Field
           label="Google Maps search cap (per day)"
-          hint="Hard ceiling on how many Places API calls Atlas will make. 200/day = ~6k/month. Google's free tier is $200/month credit (~11,700 calls). This cap keeps you safely inside free tier forever."
+          hint="Hard ceiling on Places API calls. 150/day = ~4,500/month, ~72% of Google's $200/mo free credit. This cap keeps you safely inside free tier forever. Bump to 200 if you want more headroom, or drop to 50 to stay ultra-safe."
         >
           <input
             type="number"
@@ -238,7 +238,7 @@ export default function WorkspacePage() {
             onChange={(e) =>
               setValues({
                 ...values,
-                googleMapsDailySearchCap: Math.max(1, Math.min(11000, Number(e.target.value) || 200)),
+                googleMapsDailySearchCap: Math.max(1, Math.min(11000, Number(e.target.value) || 150)),
               })
             }
             className="w-32 h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono num"
