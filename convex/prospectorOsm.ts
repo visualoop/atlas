@@ -23,6 +23,8 @@ import { internal } from "./_generated/api";
 const OVERPASS_MIRRORS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+  "https://overpass.osm.jp/api/interpreter",
 ];
 
 const USER_AGENT = "Atlas by Blyss (atlas.blyss.co.ke)";
@@ -518,17 +520,77 @@ out center tags 60;
       }
     }
 
-    // All mirrors failed — serve stale cache if we have anything, else error
+    // All mirrors failed. Fallback chain:
+    //   1. Stale cache — serve silently (no scary error banner)
+    //   2. Nominatim text search — only helps for keyword queries
+    //   3. Empty + informative error
     if (cached) {
-      return {
-        places: cached.places as Place[],
-        cached: true,
-        error: "Fresh OSM data unavailable — showing cached results from earlier.",
-      };
+      return { places: cached.places as Place[], cached: true };
     }
+
+    if (keyword) {
+      try {
+        // Nominatim doesn't do POI-by-category well but IS decent at
+        // free-text place lookups within a bbox. Last resort only.
+        const bboxDelta = Math.min(0.1, radius / 111_000); // rough deg per m
+        const params = new URLSearchParams({
+          q: keyword,
+          format: "jsonv2",
+          limit: "40",
+          viewbox: [
+            args.longitude - bboxDelta,
+            args.latitude + bboxDelta,
+            args.longitude + bboxDelta,
+            args.latitude - bboxDelta,
+          ].join(","),
+          bounded: "1",
+          extratags: "1",
+        });
+        const nomRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?${params}`,
+          {
+            headers: { "User-Agent": USER_AGENT, "From": FROM_EMAIL },
+          },
+        );
+        if (nomRes.ok) {
+          const items = (await nomRes.json()) as Array<{
+            osm_id: number;
+            osm_type: string;
+            display_name?: string;
+            name?: string;
+            lat: string;
+            lon: string;
+            type?: string;
+            class?: string;
+          }>;
+          const nomPlaces: Place[] = items
+            .filter((it) => it.name || it.display_name)
+            .map((it) => ({
+              googlePlaceId: `osm-${it.osm_type}-${it.osm_id}`,
+              name: it.name ?? it.display_name?.split(",")[0] ?? "(unnamed)",
+              address: it.display_name,
+              latitude: parseFloat(it.lat),
+              longitude: parseFloat(it.lon),
+              types: [it.class ?? "", it.type ?? ""].filter(Boolean),
+              businessStatus: "OPERATIONAL",
+            }))
+            .filter((p) => !isMegaBrand(p.name));
+          if (nomPlaces.length > 0) {
+            await ctx.runMutation(internal.prospectorOsmHelpers.saveCached, {
+              key,
+              places: nomPlaces,
+            });
+            return { places: nomPlaces, cached: false };
+          }
+        }
+      } catch {
+        // Fall through to empty
+      }
+    }
+
     return {
       places: [],
-      error: `OpenStreetMap is temporarily rate-limiting free requests. Wait 60 seconds and try again, or switch to Places+OSM mode (uses your Google Places key instead).`,
+      error: `OpenStreetMap free mirrors are all rate-limiting right now (${lastError.slice(0, 80)}). Wait 60 seconds, or switch to Places+OSM mode above (uses your Google Places key).`,
     };
   },
 });

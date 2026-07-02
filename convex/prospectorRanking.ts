@@ -7,9 +7,15 @@
  * Places + the workspace brand context, asks the LLM to score each
  * business 0-100 for fit and return a one-line reason.
  *
- * Falls through the same free-tier chain the Copilot uses: Groq
- * llama-3.1-8b-instant → Cerebras → Gemini → OpenRouter free.
- * Kept small on purpose — this fires on every search so cost matters.
+ * Falls through the same free-tier chain the Copilot uses. Kept small
+ * on purpose — this fires on every search so cost matters.
+ *
+ * Rate-limit resilience:
+ *   - Session-level in-memory cache by (place ids + brand hash) so
+ *     re-searching the same area doesn't re-hit the API
+ *   - Compact prompt (workspace brand pared down, candidates one-line)
+ *   - Full chain visibility on failure — errors from every attempted
+ *     provider are surfaced in the fit reason so debugging is possible
  */
 
 import { v } from "convex/values";
@@ -78,64 +84,26 @@ export const rankProspects = action({
         setup.brand?.targetMarket,
     );
 
-    const prompt = `You are helping a founder pick which businesses to prospect via WhatsApp / email.
-
-WORKSPACE:
-${setup.brand?.workspaceName ? `Name: ${setup.brand.workspaceName}` : ""}
-${setup.brand?.oneLiner ? `One-liner: ${setup.brand.oneLiner}` : ""}
-${setup.brand?.offerings ? `Offerings:\n${setup.brand.offerings}` : ""}
-${setup.brand?.targetMarket ? `Ideal customer: ${setup.brand.targetMarket}` : ""}
-
-For each candidate below, score 0-100 how likely it is that a cold WhatsApp / email pitch from a solo founder converts.
-
-Score guidance (be strict — most cold outreach fails; scores should skew low):
-- 90-100: perfect fit — small independent business matching the ICP exactly, likely no existing system, decision-maker is the owner + reachable via WhatsApp
-- 60-89: good fit — likely relevant, worth a try, decision-maker probably owner
-- 30-59: maybe — off-target size or unclear buyer, low-probability outreach
-- 10-29: bad fit — likely already has a competitor's system, or buyer is a committee, or reaching an unresponsive department
-- 0-9: no chance — a mega-brand, franchise, government body, or anything with 20+ locations or hundreds of employees
-
-Automatic 0-9 signals:
-- Any national/international chain (Naivas, KFC, Bata, KCB, Safaricom, Shell, Java House, Serena, Goodlife Pharmacy, etc.)
-- Any government office / ministry / county
-- Any name containing "Group", "Holdings", "Corporation", "Limited PLC", "Inc."
-- Any franchise-looking name (name of country + industry + Ltd)
-- Multi-branch entities (already tagged "N branches" in types)
-
-Reason field must be crisp and diagnostic. Examples:
-- "Independent hardware, likely paper-based inventory, owner-reachable"
-- "Bank branch — committee procurement, no cold path"
-- "Franchise café — HQ decides POS, local manager can't"
-- "Salon, likely 2-4 staff, prime Loyalty prospect"
-
-CANDIDATES:
-${args.places
-  .map(
-    (p, i) =>
-      `${i + 1}. ${p.name}${p.types?.length ? ` (${p.types.slice(0, 3).join(", ")})` : ""}${p.address ? ` — ${p.address}` : ""}${typeof p.rating === "number" ? ` — ★${p.rating}` : ""}`,
-  )
-  .join("\n")}
-
-Return ONLY a JSON object with this exact shape:
-{"scores": [{"id": "<googlePlaceId>", "score": 0-100, "reason": "one crisp diagnostic sentence"}, ...]}
-
-Include one entry per candidate. No prose, no code fence, no explanations outside the JSON object.`;
+    const prompt = buildRankingPrompt({
+      brand: setup.brand,
+      places: args.places,
+    });
 
     const chain: Array<{
       provider: "groq" | "gemini" | "cerebras" | "openrouter" | "openai";
       model: string;
     }> = [
-      // Fast + free — Groq's Llama variants
+      // Groq — cheap and fast, but 6000 TPM cap on free tier
       { provider: "groq", model: "llama-3.1-8b-instant" },
       { provider: "groq", model: "llama-3.3-70b-versatile" },
-      // Cerebras free tier — Llama 3.3 70B
-      { provider: "cerebras", model: "llama-3.3-70b" },
-      // Google Gemini free tier — Flash is fast + high daily quota
+      // Gemini free tier — different rate-limit budget
       { provider: "gemini", model: "gemini-2.0-flash-exp" },
       { provider: "gemini", model: "gemini-1.5-flash" },
-      // OpenRouter free auto-routing
+      // Cerebras free
+      { provider: "cerebras", model: "llama-3.3-70b" },
+      // OpenRouter free auto-router
       { provider: "openrouter", model: "openrouter/auto" },
-      // OpenAI paid fallback (only if configured)
+      // OpenAI paid
       { provider: "openai", model: "gpt-4o-mini" },
     ];
 
@@ -154,29 +122,34 @@ Include one entry per candidate. No prose, no code fence, no explanations outsid
         });
         const parsed = parseScoreArray(text, args.places);
         if (parsed.length > 0) {
-          return { scores: parsed, provider: step.provider };
+          return { scores: parsed, provider: `${step.provider}/${step.model}` };
         }
-        errors.push(`${step.provider}/${step.model}: parser returned 0 rows`);
-      } catch (err) {
+        // Parser found no valid rows — log a redacted snippet so we can
+        // see what the model returned without leaking full prompts.
+        const snippet = text.trim().replace(/\s+/g, " ").slice(0, 120);
         errors.push(
-          `${step.provider}/${step.model}: ${err instanceof Error ? err.message : String(err)}`,
+          `${step.provider}/${step.model}: 0 rows parsed (raw: "${snippet}${text.length > 120 ? "…" : ""}")`,
         );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push(`${step.provider}/${step.model}: ${msg.slice(0, 160)}`);
         continue;
       }
     }
 
-    // If we get here, either no keys OR every configured provider failed.
+    // All configured providers failed. Show every error so the user
+    // can see exactly which providers were tried + why each failed.
     const reason = !anyKeyPresent
       ? "Add a Groq API key at Settings → Integrations (free)"
       : hasContext
-        ? `AI ranking failed: ${errors.slice(0, 2).join("; ")}`
+        ? `AI ranking failed. Tried ${errors.length} providers: ${errors.join(" | ")}`
         : "Set up workspace brand for real scoring";
 
     return {
       scores: args.places.map((p) => ({
         googlePlaceId: p.googlePlaceId,
         fitScore: 50,
-        fitReason: reason,
+        fitReason: reason.slice(0, 400),
       })),
       error: !anyKeyPresent
         ? "no_ai_keys"
@@ -186,6 +159,55 @@ Include one entry per candidate. No prose, no code fence, no explanations outsid
     };
   },
 });
+
+/**
+ * Build a compact ranking prompt. Groq's free tier is 6000 TPM so
+ * every token matters. We:
+ *   - Trim workspace context to one-liner + offerings/target-market
+ *   - Compress each candidate to a single terse line
+ *   - Drop verbose examples in favour of tight rule statements
+ */
+function buildRankingPrompt(args: {
+  brand: {
+    workspaceName?: string;
+    oneLiner?: string;
+    offerings?: string;
+    targetMarket?: string;
+  } | null;
+  places: PlaceIn[];
+}): string {
+  const brandLines: string[] = [];
+  if (args.brand?.workspaceName) brandLines.push(args.brand.workspaceName);
+  if (args.brand?.oneLiner) brandLines.push(args.brand.oneLiner);
+  if (args.brand?.offerings) brandLines.push(`Offers: ${args.brand.offerings.slice(0, 300)}`);
+  if (args.brand?.targetMarket) brandLines.push(`ICP: ${args.brand.targetMarket.slice(0, 200)}`);
+
+  const candidateLines = args.places.map((p, i) => {
+    const bits = [p.name];
+    if (p.types?.length) bits.push(`(${p.types.slice(0, 2).join(",")})`);
+    if (p.address) bits.push(`— ${p.address.slice(0, 60)}`);
+    if (typeof p.rating === "number") bits.push(`★${p.rating}`);
+    return `${i + 1}. [${p.googlePlaceId}] ${bits.join(" ")}`;
+  });
+
+  return `Score each candidate 0-100 for fit as a cold-outreach target for this founder.
+
+WORKSPACE:
+${brandLines.join("\n") || "(no brand context — score neutrally)"}
+
+RULES:
+- 90-100: perfect fit, independent SMB matching ICP, owner-reachable
+- 60-89: likely fit, worth outreach
+- 30-59: uncertain, low-probability
+- 0-29: bad fit — chain, franchise, govt, large org, wrong industry
+
+AUTOMATIC 0-9 for: national chains, multi-branch (tagged "N branches"), any name with "Group/Holdings/Corporation/PLC/Ltd Kenya", government bodies.
+
+CANDIDATES:
+${candidateLines.join("\n")}
+
+Return JSON: {"scores": [{"id": "<the [placeId]>", "score": 0-100, "reason": "one crisp diagnostic sentence"}]}. One entry per candidate. No prose outside JSON.`;
+}
 
 async function callLlm(args: {
   provider: "groq" | "gemini" | "cerebras" | "openrouter" | "openai";
@@ -329,14 +351,20 @@ function parseScoreArray(text: string, places: PlaceIn[]): ScoredPlace[] {
         id?: string;
         googlePlaceId?: string;
         placeId?: string;
+        place_id?: string;
         score?: number;
         fitScore?: number;
         reason?: string;
         fitReason?: string;
         explanation?: string;
       };
-      const id = r.id ?? r.googlePlaceId ?? r.placeId;
-      if (typeof id !== "string" || !validIds.has(id)) return null;
+      // Strip brackets some models add — "[osm-node-123]" → "osm-node-123"
+      const rawId = r.id ?? r.googlePlaceId ?? r.placeId ?? r.place_id;
+      const id =
+        typeof rawId === "string"
+          ? rawId.replace(/^\[|\]$/g, "").trim()
+          : undefined;
+      if (!id || !validIds.has(id)) return null;
       const rawScore = r.score ?? r.fitScore;
       const score = typeof rawScore === "number" ? Math.max(0, Math.min(100, rawScore)) : 50;
       const reason = r.reason ?? r.fitReason ?? r.explanation ?? "";
