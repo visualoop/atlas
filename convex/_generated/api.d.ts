@@ -29,6 +29,8 @@ import type * as calendarActionsHelpers from "../calendarActionsHelpers.js";
 import type * as campaignRunner from "../campaignRunner.js";
 import type * as campaignRunnerHelpers from "../campaignRunnerHelpers.js";
 import type * as campaigns from "../campaigns.js";
+import type * as cloudflareEmailRoutingActions from "../cloudflareEmailRoutingActions.js";
+import type * as cloudflareEmailRoutingHelpers from "../cloudflareEmailRoutingHelpers.js";
 import type * as companies from "../companies.js";
 import type * as composio from "../composio.js";
 import type * as composioActions from "../composioActions.js";
@@ -129,6 +131,8 @@ declare const fullApi: ApiFromModules<{
   campaignRunner: typeof campaignRunner;
   campaignRunnerHelpers: typeof campaignRunnerHelpers;
   campaigns: typeof campaigns;
+  cloudflareEmailRoutingActions: typeof cloudflareEmailRoutingActions;
+  cloudflareEmailRoutingHelpers: typeof cloudflareEmailRoutingHelpers;
   companies: typeof companies;
   composio: typeof composio;
   composioActions: typeof composioActions;

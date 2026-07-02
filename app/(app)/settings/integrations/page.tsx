@@ -52,7 +52,7 @@ const PROVIDERS: ProviderInfo[] = [
 
   // Email
   { id: "resend", name: "Resend", category: "Email", description: "Workspace outbound email + inbound webhook. System auth OTP uses a separate env-level key.", signupUrl: "https://resend.com/api-keys", docsUrl: "https://resend.com/docs", keyFormatHint: "starts with re_…", deepLink: "/settings/senders", icon: Mail, tier: "freemium" },
-  { id: "cloudflare_email_routing", name: "Cloudflare Email Routing", category: "Email", description: "Free inbound-only forwarding — pairs with Resend for two-way mail", signupUrl: "https://dash.cloudflare.com", docsUrl: "https://developers.cloudflare.com/email-routing", icon: Cloud, tier: "free" },
+  { id: "cloudflare_email_routing", name: "Cloudflare Email Routing", category: "Email", description: "Free inbound-only forwarding — pairs with Resend for two-way mail. Token needs Email Routing Rules + Addresses (Edit) + Zone.DNS (Read).", signupUrl: "https://dash.cloudflare.com/?to=/:account/api-tokens&permissionGroupKeys=%5B%7B%22key%22%3A%22email_routing_addresses%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22email_routing_rules%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%5D&name=Atlas%20Email%20Routing", docsUrl: "https://developers.cloudflare.com/email-routing/get-started/enable-email-routing/", keyFormatHint: "Cloudflare API token (long string)", deepLink: "/settings/email-routing", icon: Cloud, tier: "free" },
 
   // Messaging
   { id: "meta_whatsapp", name: "Meta WhatsApp Cloud", category: "Messaging", description: "Direct Meta Cloud API — no BSP fees. Set up phone numbers in the dedicated page.", signupUrl: "https://business.facebook.com", docsUrl: "https://developers.facebook.com/docs/whatsapp/cloud-api", keyFormatHint: "System user access token (long string)", deepLink: "/settings/whatsapp", icon: MessageSquare, tier: "paid" },
@@ -181,7 +181,7 @@ export default function IntegrationsPage() {
                               href={p.deepLink}
                               className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
                             >
-                              Setup <ExternalLink className="size-2.5" />
+                              {key ? "Manage" : "Setup"} <ExternalLink className="size-2.5" />
                             </Link>
                           )}
                         </div>
