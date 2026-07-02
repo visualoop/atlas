@@ -27,6 +27,7 @@ const PROVIDER = v.union(
   v.literal("meta_whatsapp"),
   v.literal("cloudflare_email_routing"),
   v.literal("google_maps_places"),
+  v.literal("geoapify"),
   v.literal("paystack"),
   v.literal("docuseal"),
   v.literal("composio"),

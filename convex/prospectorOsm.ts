@@ -20,6 +20,62 @@ import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
 
+/**
+ * Category → Geoapify category taxonomy.
+ * Ref: https://apidocs.geoapify.com/docs/places/#categories
+ * If a workspace has a Geoapify key, we try Geoapify FIRST (3000
+ * requests/day free, dedicated infra) and only fall back to
+ * Overpass if Geoapify errors.
+ */
+const GEOAPIFY_CATEGORY_MAP: Record<string, string> = {
+  restaurant: "catering.restaurant,catering.cafe,catering.bar,catering.fast_food,catering.food_court,catering.pub,catering.ice_cream",
+  retail: "commercial",
+  services: "service,office",
+  health: "healthcare",
+  auto: "service.vehicle,commercial.vehicle,service.fuel",
+  hotel: "accommodation",
+  office: "office,commercial.money_lending",
+};
+
+/**
+ * Keyword → Geoapify subcategory. When a user types a common keyword
+ * we can hit an exact category rather than name-searching.
+ */
+const GEOAPIFY_KEYWORD_MAP: Record<string, string> = {
+  pharmacy: "healthcare.pharmacy,commercial.health_and_beauty.pharmacy",
+  chemist: "commercial.health_and_beauty.pharmacy",
+  salon: "commercial.health_and_beauty",
+  beauty: "commercial.health_and_beauty",
+  hairdresser: "commercial.hairdresser",
+  barber: "commercial.hairdresser",
+  cafe: "catering.cafe",
+  coffee: "catering.cafe",
+  bar: "catering.bar,catering.pub",
+  restaurant: "catering.restaurant",
+  hospital: "healthcare.hospital",
+  clinic: "healthcare.clinic_or_praxis",
+  dentist: "healthcare.dentist",
+  hotel: "accommodation.hotel,accommodation.guest_house",
+  gym: "sport.fitness",
+  hardware: "commercial.hardware",
+  bookshop: "commercial.books",
+  butcher: "commercial.food_and_drink.butcher",
+  bakery: "commercial.food_and_drink.bakery",
+  supermarket: "commercial.supermarket",
+  furniture: "commercial.furniture",
+  electronics: "commercial.electronics",
+  boutique: "commercial.clothing",
+  shoes: "commercial.shoes",
+  bank: "service.financial.bank_or_atm",
+  fuel: "service.vehicle.fuel",
+  school: "education.school",
+  church: "religion.place_of_worship",
+  jewellery: "commercial.jewelry",
+  optician: "commercial.health_and_beauty.optician",
+  laundry: "commercial.laundry",
+  grocery: "commercial.supermarket,commercial.convenience",
+};
+
 const OVERPASS_MIRRORS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
@@ -353,7 +409,34 @@ export const searchNearbyOsm = action({
       return { places: cached.places as Place[], cached: true };
     }
 
-    // 2. Fetch from Overpass
+    // 2. Try Geoapify first (3000/day free, dedicated infra, no shared
+    // rate limits with Overpass). Only if the workspace has a key.
+    const geoapifyKey = await ctx.runQuery(
+      internal.prospectorOsmHelpers.getGeoapifyKey,
+      {},
+    );
+    if (geoapifyKey) {
+      const geo = await fetchFromGeoapify({
+        apiKey: geoapifyKey,
+        latitude: args.latitude,
+        longitude: args.longitude,
+        radius,
+        category,
+        keyword,
+      });
+      if (geo.places.length > 0) {
+        const filtered = applyMegaBrandFilter(geo.places);
+        await ctx.runMutation(internal.prospectorOsmHelpers.saveCached, {
+          key,
+          places: filtered,
+        });
+        return { places: filtered, cached: false };
+      }
+      // Geoapify returned empty or errored — fall through to Overpass
+      // as a safety net (some categories still have better OSM coverage)
+    }
+
+    // 3. Fetch from Overpass
     const catQuery = CATEGORY_TAG_QUERIES[category] ?? CATEGORY_TAG_QUERIES.retail;
 
     // Build the union of tag clauses:
@@ -594,3 +677,128 @@ out center tags 60;
     };
   },
 });
+
+/**
+ * Fetch places from Geoapify Places API.
+ * Free tier: 3000 requests/day. Same OSM data as Overpass, but
+ * Geoapify runs their own infra so rate limits are per-key, not
+ * per-IP-shared-with-random-strangers.
+ */
+async function fetchFromGeoapify(args: {
+  apiKey: string;
+  latitude: number;
+  longitude: number;
+  radius: number;
+  category: string;
+  keyword: string;
+}): Promise<{ places: Place[]; error?: string }> {
+  try {
+    // Category resolution:
+    //   1. If keyword matches an alias → use its Geoapify subcategory
+    //   2. Otherwise fall back to the top-level category map
+    const kwLower = args.keyword.toLowerCase().trim();
+    const kwCategory = kwLower ? GEOAPIFY_KEYWORD_MAP[kwLower] : undefined;
+    const categories =
+      kwCategory ??
+      GEOAPIFY_CATEGORY_MAP[args.category] ??
+      GEOAPIFY_CATEGORY_MAP.retail;
+
+    const params = new URLSearchParams({
+      categories,
+      filter: `circle:${args.longitude},${args.latitude},${Math.round(args.radius)}`,
+      bias: `proximity:${args.longitude},${args.latitude}`,
+      limit: "40",
+      apiKey: args.apiKey,
+    });
+    // If there's a keyword we couldn't match to a category, use `name`
+    // as an additional filter (still returns even if name doesn't match
+    // because Geoapify treats it as soft filter)
+    if (args.keyword && !kwCategory) {
+      params.set("name", args.keyword);
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15_000);
+    const res = await fetch(
+      `https://api.geoapify.com/v2/places?${params.toString()}`,
+      {
+        signal: controller.signal,
+        headers: { "User-Agent": USER_AGENT },
+      },
+    );
+    clearTimeout(timer);
+
+    if (!res.ok) {
+      return { places: [], error: `Geoapify HTTP ${res.status}` };
+    }
+    const json = (await res.json()) as {
+      features?: Array<{
+        properties?: {
+          name?: string;
+          formatted?: string;
+          place_id?: string;
+          categories?: string[];
+          website?: string;
+          phone?: string;
+          address_line1?: string;
+          address_line2?: string;
+          lat?: number;
+          lon?: number;
+        };
+        geometry?: { coordinates?: [number, number] };
+      }>;
+    };
+    const places: Place[] = (json.features ?? [])
+      .map((f) => {
+        const p = f.properties ?? {};
+        const [lon, lat] = f.geometry?.coordinates ?? [];
+        if (!p.name || typeof lat !== "number" || typeof lon !== "number") return null;
+        return {
+          googlePlaceId: `geo-${p.place_id ?? `${lat}-${lon}`}`,
+          name: p.name,
+          address: p.formatted ?? [p.address_line1, p.address_line2].filter(Boolean).join(", "),
+          latitude: lat,
+          longitude: lon,
+          phoneRaw: p.phone,
+          website: p.website,
+          googleMapsUri: `https://www.openstreetmap.org/?query=${encodeURIComponent(p.name)}`,
+          types: p.categories ?? [],
+          rating: undefined,
+          ratingCount: undefined,
+          businessStatus: "OPERATIONAL",
+        } as Place;
+      })
+      .filter((x): x is Place => x !== null);
+    return { places };
+  } catch (err) {
+    return { places: [], error: err instanceof Error ? err.message : "network" };
+  }
+}
+
+/**
+ * Apply mega-brand deny-list + collapse same-name duplicates.
+ * Shared between Geoapify and Overpass code paths.
+ */
+function applyMegaBrandFilter(places: Place[]): Place[] {
+  const noMega = places.filter((p) => !isMegaBrand(p.name));
+  const byName = new Map<string, Place & { _dupCount?: number }>();
+  for (const p of noMega) {
+    const nk = p.name.toLowerCase().trim();
+    const existing = byName.get(nk);
+    if (existing) {
+      existing._dupCount = (existing._dupCount ?? 1) + 1;
+    } else {
+      byName.set(nk, p);
+    }
+  }
+  return Array.from(byName.values()).map((p) => {
+    if (p._dupCount && p._dupCount > 1) {
+      return {
+        ...p,
+        types: [...(p.types ?? []), `${p._dupCount} branches`],
+      };
+    }
+    const { _dupCount: _dc, ...rest } = p;
+    return rest as Place;
+  });
+}

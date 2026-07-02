@@ -179,7 +179,16 @@ export function MapBrowseOsm() {
         longitude: center.lng,
         radiusMeters: Math.round(radius),
         category: category || undefined,
-        nameKeyword: keyword.trim() || undefined,
+        nameKeyword:
+          // Ignore keyword if it duplicates the currently-selected
+          // category (e.g. category=Retail + keyword=retail → would
+          // filter to shops LITERALLY named "retail" which is nobody)
+          keyword.trim() &&
+          keyword.trim().toLowerCase() !==
+            (CATEGORIES.find((c) => c.value === category)?.label ?? "").toLowerCase() &&
+          keyword.trim().toLowerCase() !== category
+            ? keyword.trim()
+            : undefined,
       });
 
       // Reset visible slice + scores on every fresh search

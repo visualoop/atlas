@@ -69,6 +69,7 @@ const integrationProvider = v.union(
   // Maps + lead gen
   v.literal("google_maps_places"),
   v.literal("google_maps_browser"),
+  v.literal("geoapify"),
   // Payments
   v.literal("paystack"),
   // Documents

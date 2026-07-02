@@ -18,7 +18,7 @@ type Provider =
   | "github_models" | "openai" | "anthropic" | "together"
   | "deepseek" | "xai" | "perplexity" | "google_vertex"
   | "resend" | "meta_whatsapp" | "cloudflare_email_routing"
-  | "google_maps_places" | "paystack" | "docuseal" | "composio";
+  | "google_maps_places" | "geoapify" | "paystack" | "docuseal" | "composio";
 
 interface ProviderInfo {
   id: Provider;
@@ -59,6 +59,7 @@ const PROVIDERS: ProviderInfo[] = [
 
   // Lead gen
   { id: "google_maps_places", name: "Google Maps Places", category: "Lead gen", description: "Powers Prospector — search businesses by category + location", signupUrl: "https://console.cloud.google.com/apis/credentials", docsUrl: "https://developers.google.com/maps/documentation/places/web-service", keyFormatHint: "starts with AIzaSy…", deepLink: "/prospector", icon: Map, tier: "paid" },
+  { id: "geoapify", name: "Geoapify Places", category: "Lead gen", description: "3000 requests/day free — same OSM business data as OpenStreetMap but with dedicated infrastructure so no shared rate limits. Recommended over OSM-only mode.", signupUrl: "https://myprojects.geoapify.com/", docsUrl: "https://apidocs.geoapify.com/docs/places/", keyFormatHint: "32-char hex string", deepLink: "/prospector", icon: Map, tier: "free" },
 
   // Payments
   { id: "paystack", name: "Paystack", category: "Payments", description: "Card, mobile money, bank transfer; webhooks land in Atlas via HMAC-SHA512", signupUrl: "https://dashboard.paystack.com/#/settings/developers", docsUrl: "https://paystack.com/docs/api", keyFormatHint: "sk_live_… or sk_test_…", icon: CreditCard, tier: "paid" },

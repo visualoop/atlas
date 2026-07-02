@@ -31,6 +31,7 @@ const PROVIDER = v.union(
   v.literal("meta_whatsapp"),
   v.literal("cloudflare_email_routing"),
   v.literal("google_maps_places"),
+  v.literal("geoapify"),
   v.literal("paystack"),
   v.literal("docuseal"),
   v.literal("composio"),
@@ -189,6 +190,21 @@ export const testProvider = action({
           if (!res.ok) return { ok: false, detail: `HTTP ${res.status}` };
           const j = (await res.json()) as { success: boolean };
           return { ok: !!j.success, detail: j.success ? "token active" : "invalid" };
+        }
+        case "geoapify": {
+          // Geoapify: cheap zero-cost verify via a tiny nearby-search
+          // over Nairobi CBD. Returns a 401 on bad key, or a normal
+          // FeatureCollection with 0-1 features on a valid key.
+          const res = await fetch(
+            `https://api.geoapify.com/v2/places?categories=commercial.supermarket&filter=circle:36.8172,-1.2864,500&limit=1&apiKey=${encodeURIComponent(key)}`,
+          );
+          if (res.status === 401) return { ok: false, detail: "invalid key" };
+          if (!res.ok) return { ok: false, detail: `HTTP ${res.status}` };
+          const j = (await res.json()) as { features?: unknown[] };
+          return {
+            ok: true,
+            detail: `authenticated (${j.features?.length ?? 0} sample places)`,
+          };
         }
         case "google_vertex": {
           // Vertex accepts either OAuth access tokens or (rarely) service
