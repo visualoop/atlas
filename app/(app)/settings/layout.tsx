@@ -18,7 +18,7 @@ const ITEMS = [
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   return (
-    <div className="max-w-5xl mx-auto px-8 py-16">
+    <div className="max-w-5xl mx-auto px-4 md:px-8 py-16">
       <p className="eyebrow">Settings</p>
       <h1 className="text-4xl md:text-5xl tracking-tight mt-2">
         Atlas <em className="italic font-display">configuration</em>.

@@ -5,13 +5,14 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useQuery, useMutation, useAction } from "convex/react";
 import {
   Mail, MessageSquare, Inbox as InboxIcon, Star, Archive as ArchiveIcon,
-  Clock, Reply, Pen, Sparkles, Loader2,
+  Clock, Reply, Pen, Sparkles, Loader2, ChevronLeft,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { formatDistanceToNowStrict } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { ComposeSheet } from "./compose-sheet";
 import { ReplyBar } from "./reply-bar";
 
@@ -91,9 +92,9 @@ export default function InboxPage() {
 
   return (
     <>
-      <div className="h-[calc(100vh-3rem)] grid grid-cols-[220px_360px_1fr] gap-0 border-t border-border">
-        {/* Left rail — folders / channels */}
-        <aside className="border-r border-border p-4 space-y-6 overflow-y-auto">
+      <div className="h-[calc(100vh-3rem)] grid grid-cols-1 md:grid-cols-[220px_360px_1fr] lg:grid-cols-[220px_360px_1fr] gap-0 border-t border-border">
+        {/* Left rail — folders / channels — hidden on mobile (use bottom sheet or omit) */}
+        <aside className="hidden md:block border-r border-border p-4 space-y-6 overflow-y-auto">
           <div>
             <button
               onClick={() => setComposeOpen(true)}
@@ -155,7 +156,10 @@ export default function InboxPage() {
         </aside>
 
         {/* Middle pane — thread list */}
-        <div className="border-r border-border flex flex-col min-h-0">
+        <div className={cn(
+          "border-r border-border flex-col min-h-0",
+          activeId ? "hidden md:flex" : "flex",
+        )}>
           <div className="border-b border-border px-4 h-11 flex items-center">
             <input
               value={search}
@@ -186,7 +190,10 @@ export default function InboxPage() {
         </div>
 
         {/* Right pane — thread reader */}
-        <div className="min-h-0 overflow-y-auto">
+        <div className={cn(
+          "min-h-0 overflow-y-auto",
+          activeId ? "block" : "hidden md:block",
+        )}>
           {activeId ? (
             <ThreadReader conversationId={activeId} onClose={() => setActiveId(null)} />
           ) : (
@@ -395,10 +402,19 @@ function ThreadReader({ conversationId, onClose }: {
   return (
     <div className="flex flex-col min-h-full">
       {/* Reader header */}
-      <div className="border-b border-border px-6 py-4 space-y-3">
+      <div className="border-b border-border px-4 md:px-6 py-4 space-y-3">
         <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="font-display italic text-2xl leading-tight truncate">
+          <div className="min-w-0 flex-1 flex items-start gap-2">
+            <button
+              onClick={onClose}
+              className="md:hidden size-8 grid place-items-center text-muted-foreground hover:text-foreground shrink-0 -ml-1"
+              title="Back"
+              aria-label="Back to inbox list"
+            >
+              <ChevronLeft className="size-5" />
+            </button>
+            <div className="min-w-0 flex-1">
+            <h1 className="font-display italic text-xl md:text-2xl leading-tight truncate">
               {conversation.subject || "(no subject)"}
             </h1>
             <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
@@ -420,6 +436,7 @@ function ThreadReader({ conversationId, onClose }: {
                   </span>
                 </>
               )}
+            </div>
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">

@@ -102,8 +102,8 @@ export default function DocumentsPage() {
 
 function DocumentsTable({ documents }: { documents: Doc<"documents">[] }) {
   return (
-    <div className="border border-border">
-      <table className="w-full text-sm">
+    <div className="border border-border overflow-x-auto">
+      <table className="w-full text-sm min-w-[720px]">
         <thead className="text-left">
           <tr className="border-b border-[var(--border-strong)] bg-background sticky top-0">
             <Th>Number</Th>
@@ -168,7 +168,7 @@ function ListSkeleton() {
   return (
     <div className="border border-border divide-y divide-border">
       {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="px-4 py-3 grid grid-cols-6 gap-4 items-center">
+        <div key={i} className="px-4 py-3 grid grid-cols-3 md:grid-cols-6 gap-4 items-center">
           {Array.from({ length: 6 }).map((_, j) => (
             <Skeleton key={j} className="h-4 w-full max-w-[120px]" />
           ))}

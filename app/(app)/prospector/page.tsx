@@ -32,7 +32,7 @@ export default function ProspectorPage() {
   const derivedActive = activeSearchId ?? searches?.[0]?._id ?? null;
 
   return (
-    <div className="max-w-7xl mx-auto px-8 py-12">
+    <div className="max-w-7xl mx-auto px-4 md:px-8 py-12">
       <header className="space-y-2 mb-10">
         <p className="eyebrow">Prospector</p>
         <h1 className="text-4xl md:text-5xl tracking-tight">
@@ -97,7 +97,7 @@ export default function ProspectorPage() {
         onCreated={(id) => setActiveSearchId(id)}
       />
 
-      <div className="mt-10 grid grid-cols-[280px_1fr] gap-8">
+      <div className="mt-10 grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6 md:gap-8">
         {/* Left rail — search list */}
         <div className="space-y-2">
           <p className="eyebrow">Recent searches</p>

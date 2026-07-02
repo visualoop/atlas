@@ -41,7 +41,7 @@ export default function VaultPage() {
 
   return (
     <>
-      <div className="max-w-7xl mx-auto px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
         <header className="mb-8">
           <p className="eyebrow">Sales Enablement Vault</p>
           <h1 className="text-4xl md:text-5xl tracking-tight mt-2">
@@ -53,7 +53,7 @@ export default function VaultPage() {
           </p>
         </header>
 
-        <div className="grid grid-cols-[220px_1fr] gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-6 md:gap-8">
           {/* Left rail — kind filter */}
           <aside className="space-y-1">
             <button

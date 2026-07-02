@@ -136,7 +136,7 @@ export default function SecurityPage() {
           ) : (
             <div className="border border-border divide-y divide-border font-mono text-xs">
               {auditLog.map((a) => (
-                <div key={a._id} className="px-3 py-2 grid grid-cols-[130px_120px_1fr] gap-3 items-baseline">
+                <div key={a._id} className="px-3 py-2 grid grid-cols-1 sm:grid-cols-[130px_120px_1fr] gap-1 sm:gap-3 items-baseline">
                   <span className="text-muted-foreground num">
                     {new Date(a._creationTime).toLocaleString()}
                   </span>

@@ -16,7 +16,7 @@ export default function TodayPage() {
   const loading = queues === undefined;
 
   return (
-    <div className="max-w-5xl mx-auto px-8 py-16 space-y-16">
+    <div className="max-w-5xl mx-auto px-4 md:px-8 py-16 space-y-16">
       <header className="space-y-2">
         <p className="eyebrow">
           Today ·{" "}

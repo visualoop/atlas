@@ -61,7 +61,7 @@ export function ListLayout({
       </header>
 
       <div className="flex items-center gap-4 flex-wrap">
-        <div className="relative flex-1 min-w-[280px] max-w-md">
+        <div className="relative flex-1 min-w-[200px] sm:min-w-[280px] max-w-md w-full">
           <Search className="absolute left-0 top-2 size-4 text-muted-foreground pointer-events-none" />
           <Input
             type="search"

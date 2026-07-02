@@ -21,7 +21,7 @@ export default function CalendarPage() {
   const [tab, setTab] = useState<Tab>("agenda");
 
   return (
-    <div className="max-w-7xl mx-auto px-8 py-8">
+    <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
       <header className="mb-8">
         <p className="eyebrow">Calendar & Meetings</p>
         <h1 className="text-4xl md:text-5xl tracking-tight mt-2">

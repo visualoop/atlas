@@ -55,7 +55,7 @@ export default function DocumentEditorPage({
   if (data === undefined) return <EditorSkeleton />;
   if (data === null) {
     return (
-      <div className="max-w-3xl mx-auto px-8 py-16 text-center">
+      <div className="max-w-3xl mx-auto px-4 md:px-8 py-16 text-center">
         <p className="font-display italic text-2xl text-muted-foreground">Document not found.</p>
         <Link href="/documents" className="text-primary underline text-sm mt-4 inline-block">
           Back to documents
@@ -149,7 +149,7 @@ export default function DocumentEditorPage({
   const isInvoice = doc.kind === "invoice";
 
   return (
-    <div className="max-w-5xl mx-auto px-8 py-8">
+    <div className="max-w-5xl mx-auto px-4 md:px-8 py-8">
       <header className="mb-6 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <Link
@@ -299,7 +299,7 @@ export default function DocumentEditorPage({
         </div>
       )}
 
-      <div className="grid grid-cols-[1fr_320px] gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 lg:gap-8">
         <main className="space-y-8">
           {/* Body */}
           <section>
@@ -1005,9 +1005,9 @@ function escapeHtml(s: string): string {
 
 function EditorSkeleton() {
   return (
-    <div className="max-w-5xl mx-auto px-8 py-8 space-y-6">
+    <div className="max-w-5xl mx-auto px-4 md:px-8 py-8 space-y-6">
       <Skeleton className="h-10 w-96" />
-      <div className="grid grid-cols-[1fr_320px] gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 lg:gap-8">
         <Skeleton className="h-96" />
         <Skeleton className="h-96" />
       </div>

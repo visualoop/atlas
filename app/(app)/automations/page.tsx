@@ -54,7 +54,7 @@ export default function AutomationsPage() {
         </button>
       </header>
 
-      <div className="grid grid-cols-[320px_1fr] gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4 md:gap-6">
         <aside className="space-y-2">
           {automations === undefined ? (
             <>{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14" />)}</>

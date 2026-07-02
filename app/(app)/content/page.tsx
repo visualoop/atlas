@@ -21,7 +21,7 @@ export default function ContentHubPage() {
   const [tab, setTab] = useState<Tab>("newsletter");
 
   return (
-    <div className="max-w-7xl mx-auto px-8 py-8">
+    <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
       <header className="mb-8">
         <p className="eyebrow">Content Hub</p>
         <h1 className="text-4xl md:text-5xl tracking-tight mt-2">
@@ -90,7 +90,7 @@ function NewsletterTab() {
   const [newBroadcastOpen, setNewBroadcastOpen] = useState(false);
 
   return (
-    <div className="grid grid-cols-[280px_1fr] gap-8">
+    <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6 md:gap-8">
       <aside className="space-y-2">
         <div className="flex items-center justify-between">
           <p className="eyebrow">Audiences</p>

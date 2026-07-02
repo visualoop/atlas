@@ -30,7 +30,7 @@ export default function PipelinesPage() {
 
   if (pipelines === undefined) {
     return (
-      <div className="max-w-7xl mx-auto px-8 py-12 space-y-4">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-12 space-y-4">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -39,7 +39,7 @@ export default function PipelinesPage() {
 
   if (pipelines.length === 0) {
     return (
-      <div className="max-w-4xl mx-auto px-8 py-16">
+      <div className="max-w-4xl mx-auto px-4 md:px-8 py-16">
         <header className="space-y-2 mb-10">
           <p className="eyebrow">Pipelines</p>
           <h1 className="text-4xl md:text-5xl tracking-tight">

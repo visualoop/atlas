@@ -27,7 +27,7 @@ export default function SocialPage() {
 
   return (
     <>
-      <div className="max-w-7xl mx-auto px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
         <header className="mb-8 flex items-start justify-between gap-4">
           <div>
             <p className="eyebrow">Social Publishing</p>

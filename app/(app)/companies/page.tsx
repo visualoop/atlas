@@ -176,8 +176,8 @@ function CompaniesTable({
   const someChecked = selected.size > 0 && !allChecked;
 
   return (
-    <div className="border border-border">
-      <table className="w-full text-sm">
+    <div className="border border-border overflow-x-auto">
+      <table className="w-full text-sm min-w-[720px]">
         <thead className="text-left">
           <tr className="border-b border-[var(--border-strong)] bg-background sticky top-0">
             <Th className="w-10">

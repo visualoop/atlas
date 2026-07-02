@@ -244,8 +244,8 @@ export function MapBrowseOsm() {
   }
 
   return (
-    <div className="grid grid-cols-[1fr_380px] gap-0 border border-border" style={{ height: "70vh" }}>
-      <div className="relative bg-muted">
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-0 border border-border" style={{ minHeight: "60vh" }}>
+      <div className="relative bg-muted min-h-[50vh]">
         <div ref={mapContainerRef} className="absolute inset-0" />
         <div className="absolute top-3 left-3 right-3 flex items-center gap-2 z-[400] flex-wrap">
           <select

@@ -23,7 +23,7 @@ export default function TrendsPage() {
 
   return (
     <>
-      <div className="max-w-7xl mx-auto px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
         <header className="mb-8 flex items-start justify-between gap-4">
           <div>
             <p className="eyebrow">Trend & Brand Intelligence</p>
@@ -38,7 +38,7 @@ export default function TrendsPage() {
           </div>
         </header>
 
-        <div className="grid grid-cols-[280px_1fr] gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6 md:gap-8">
           {/* Watches sidebar */}
           <aside className="space-y-2">
             <div className="flex items-center justify-between">
