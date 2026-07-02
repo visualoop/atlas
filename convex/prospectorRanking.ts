@@ -197,11 +197,18 @@ ${brandLines.join("\n") || "(no brand context — score neutrally)"}
 
 RULES:
 - 90-100: perfect fit, independent SMB matching ICP, owner-reachable
-- 60-89: likely fit, worth outreach
-- 30-59: uncertain, low-probability
-- 0-29: bad fit — chain, franchise, govt, large org, wrong industry
+- 60-89: likely fit, small chain (2-5 branches) or clear ICP match
+- 30-59: uncertain, off-target size or unclear buyer
+- 0-29: bad fit — national chain, franchise, govt body, or wrong industry
 
-AUTOMATIC 0-9 for: national chains, multi-branch (tagged "N branches"), any name with "Group/Holdings/Corporation/PLC/Ltd Kenya", government bodies.
+AUTOMATIC 0-9 only for:
+- National chains (10+ branches, e.g. Naivas, KFC, KCB, Safaricom)
+- Government bodies (ministry, county, agency, board)
+- Names with "Group Holdings", "Corporation", "PLC", "Inc.", "Ltd."
+- Multinational subsidiaries
+
+Small independent shops with 2-5 branches are FINE — still owner-run,
+still perfect for cold outreach. Don't auto-fail them.
 
 CANDIDATES:
 ${candidateLines.join("\n")}

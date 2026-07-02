@@ -56,11 +56,12 @@ export function MapBrowseOsm() {
   const [busy, setBusy] = useState(false);
   const [searchStartedAt, setSearchStartedAt] = useState<number | null>(null);
   const [searchElapsed, setSearchElapsed] = useState(0);
+  const [dataSource, setDataSource] = useState<"geoapify" | "overpass" | "nominatim" | null>(null);
   const [ranking, setRanking] = useState(false);
   const [places, setPlaces] = useState<Place[]>([]);
   const [scoresById, setScoresById] = useState<Record<string, { fitScore: number; fitReason: string }>>({});
   const [visibleCount, setVisibleCount] = useState(20);
-  const [hideBadFit, setHideBadFit] = useState(true);
+  const [hideBadFit, setHideBadFit] = useState(false);
   const [selected, setSelected] = useState<Place | null>(null);
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set());
   const [suppressedIds, setSuppressedIds] = useState<Set<string>>(new Set());
@@ -156,7 +157,7 @@ export function MapBrowseOsm() {
     };
   }, [leafletReady, places, selected, importedIds, suppressedIds]);
 
-  async function searchThisArea() {
+  async function searchThisArea(opts?: { refresh?: boolean }) {
     if (!leafletReady || !mapRef.current) return;
     const center = mapRef.current.getCenter();
     const bounds = mapRef.current.getBounds();
@@ -189,11 +190,13 @@ export function MapBrowseOsm() {
           keyword.trim().toLowerCase() !== category
             ? keyword.trim()
             : undefined,
+        refresh: opts?.refresh,
       });
 
       // Reset visible slice + scores on every fresh search
       setVisibleCount(20);
       setScoresById({});
+      setDataSource(res.source ?? null);
 
       // Case A: got fresh or cached results — show them.
       if (res.places.length > 0) {
@@ -368,7 +371,7 @@ export function MapBrowseOsm() {
             className="h-9 px-3 text-sm bg-background border border-border shadow flex-1 min-w-0"
           />
           <button
-            onClick={searchThisArea}
+            onClick={() => searchThisArea()}
             disabled={!leafletReady || busy}
             className="inline-flex items-center justify-center gap-1.5 h-9 px-4 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] shadow disabled:opacity-50 whitespace-nowrap"
           >
@@ -456,6 +459,21 @@ export function MapBrowseOsm() {
                   </p>
                 )}
               </div>
+              {dataSource && (
+                <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
+                  <span>
+                    via <span className="uppercase tracking-[0.12em]">{dataSource}</span>
+                  </span>
+                  <button
+                    onClick={() => searchThisArea({ refresh: true })}
+                    disabled={busy}
+                    className="hover:text-foreground disabled:opacity-40"
+                    title="Bypass cache + re-fetch fresh"
+                  >
+                    ↻ Refresh
+                  </button>
+                </div>
+              )}
               {hiddenCount > 0 && (
                 <button
                   onClick={() => setHideBadFit((v) => !v)}

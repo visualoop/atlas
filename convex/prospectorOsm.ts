@@ -389,11 +389,13 @@ export const searchNearbyOsm = action({
     radiusMeters: v.number(),
     category: v.optional(v.string()),
     nameKeyword: v.optional(v.string()),      // free-text OSM name filter
+    refresh: v.optional(v.boolean()),         // bypass cache
   },
   handler: async (ctx, args): Promise<{
     places: Place[];
     error?: string;
     cached?: boolean;
+    source?: "geoapify" | "overpass" | "nominatim";
   }> => {
     // Overpass performance degrades badly beyond 5km; cap it. Nairobi's
     // CBD is fully covered at 3-5km. If the user has panned way out,
@@ -401,20 +403,29 @@ export const searchNearbyOsm = action({
     const radius = Math.min(Math.max(args.radiusMeters, 300), 5_000);
     const category = args.category ?? "retail";
     const keyword = (args.nameKeyword ?? "").trim();
-    const key = `${gridKey(args.latitude, args.longitude, radius, category)}:${keyword.toLowerCase().slice(0, 40)}`;
 
-    // 1. Serve from cache if fresh
-    const cached = await ctx.runQuery(internal.prospectorOsmHelpers.getCached, { key });
-    if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
-      return { places: cached.places as Place[], cached: true };
-    }
-
-    // 2. Try Geoapify first (3000/day free, dedicated infra, no shared
-    // rate limits with Overpass). Only if the workspace has a key.
+    // 0. Check if workspace has Geoapify — determines cache namespace
+    // so we don't serve Overpass-era results after user upgrades to
+    // Geoapify (different providers = different result sets).
     const geoapifyKey = await ctx.runQuery(
       internal.prospectorOsmHelpers.getGeoapifyKey,
       {},
     );
+    const cacheNs = geoapifyKey ? "geoapify" : "overpass";
+    const key = `${cacheNs}:${gridKey(args.latitude, args.longitude, radius, category)}:${keyword.toLowerCase().slice(0, 40)}`;
+
+    // 1. Serve from cache if fresh (unless refresh explicitly requested)
+    const cached = await ctx.runQuery(internal.prospectorOsmHelpers.getCached, { key });
+    if (!args.refresh && cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+      return {
+        places: cached.places as Place[],
+        cached: true,
+        source: cacheNs as "geoapify" | "overpass",
+      };
+    }
+
+    // 2. Try Geoapify first (3000/day free, dedicated infra, no shared
+    // rate limits with Overpass). Only if the workspace has a key.
     if (geoapifyKey) {
       const geo = await fetchFromGeoapify({
         apiKey: geoapifyKey,
@@ -430,10 +441,21 @@ export const searchNearbyOsm = action({
           key,
           places: filtered,
         });
-        return { places: filtered, cached: false };
+        return { places: filtered, cached: false, source: "geoapify" };
       }
-      // Geoapify returned empty or errored — fall through to Overpass
-      // as a safety net (some categories still have better OSM coverage)
+      // Geoapify returned empty. If it wasn't a hard error, respect
+      // it — don't burn 60s on 4 Overpass mirrors. User can widen the
+      // radius or switch data source. If it WAS an error (401 / network),
+      // fall through to Overpass as a safety net.
+      if (!geo.error) {
+        return {
+          places: [],
+          source: "geoapify",
+          error: `Geoapify found no ${keyword || category} within ${Math.round(radius / 1000)}km. Widen the map, try another keyword, or switch to Places+OSM (Google) above.`,
+        };
+      }
+      // Geoapify actually errored (network, 401, etc.) — fall through
+      // to Overpass as a safety net
     }
 
     // 3. Fetch from Overpass
@@ -596,7 +618,7 @@ out center tags 60;
           places: dedupedPlaces,
         });
 
-        return { places: dedupedPlaces, cached: false };
+        return { places: dedupedPlaces, cached: false, source: "overpass" };
       } catch (err) {
         lastError = err instanceof Error ? err.message : "Network error";
         continue;
@@ -608,7 +630,11 @@ out center tags 60;
     //   2. Nominatim text search — only helps for keyword queries
     //   3. Empty + informative error
     if (cached) {
-      return { places: cached.places as Place[], cached: true };
+      return {
+        places: cached.places as Place[],
+        cached: true,
+        source: cacheNs as "geoapify" | "overpass",
+      };
     }
 
     if (keyword) {
@@ -663,7 +689,7 @@ out center tags 60;
               key,
               places: nomPlaces,
             });
-            return { places: nomPlaces, cached: false };
+            return { places: nomPlaces, cached: false, source: "nominatim" };
           }
         }
       } catch {
