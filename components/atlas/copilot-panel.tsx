@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useAction, useQuery } from "convex/react";
 import Link from "next/link";
-import { Sparkles, Send, X, Trash2, KeyRound, Loader2, Plus } from "lucide-react";
+import { Sparkles, Send, X, Trash2, KeyRound, Loader2, Plus, History } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -20,12 +20,24 @@ interface Props {
 }
 
 const STORAGE_KEY = "atlas_copilot_thread";
+const HISTORY_KEY = "atlas_copilot_history";
+const HISTORY_MAX = 20;
+
+interface Thread {
+  id: string;
+  title: string;
+  updatedAt: number;
+  messages: Message[];
+}
 
 export function CopilotPanel({ open, onOpenChange }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [history, setHistory] = useState<Thread[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const chat = useAction(api.copilot.chat);
@@ -41,22 +53,54 @@ export function CopilotPanel({ open, onOpenChange }: Props) {
     else if (preflight?.ready) setNeedsSetup(false);
   }, [preflight]);
 
-  // Load persisted thread
+  // Load history + current thread on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      try {
-        setMessages(JSON.parse(raw));
-      } catch {}
-    }
+    try {
+      const historyRaw = window.localStorage.getItem(HISTORY_KEY);
+      if (historyRaw) {
+        const parsed = JSON.parse(historyRaw) as Thread[];
+        setHistory(parsed);
+      }
+    } catch {}
+    try {
+      const raw = window.sessionStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { threadId: string; messages: Message[] };
+        if (parsed.threadId && Array.isArray(parsed.messages)) {
+          setThreadId(parsed.threadId);
+          setMessages(parsed.messages);
+        }
+      }
+    } catch {}
   }, []);
 
-  // Persist thread
+  // Persist current thread + upsert into history
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-  }, [messages]);
+    if (!threadId) return;
+    window.sessionStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ threadId, messages }),
+    );
+    if (messages.length === 0) return;
+    // Update history entry
+    setHistory((prev) => {
+      const idx = prev.findIndex((t) => t.id === threadId);
+      const title =
+        messages.find((m) => m.role === "user")?.content.slice(0, 60) ??
+        "New chat";
+      const entry: Thread = { id: threadId, title, updatedAt: Date.now(), messages };
+      const next = idx >= 0 ? [...prev.slice(0, idx), entry, ...prev.slice(idx + 1)] : [entry, ...prev];
+      const trimmed = next
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, HISTORY_MAX);
+      try {
+        window.localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed));
+      } catch {}
+      return trimmed;
+    });
+  }, [messages, threadId]);
 
   // Focus input on open
   useEffect(() => {
@@ -75,6 +119,11 @@ export function CopilotPanel({ open, onOpenChange }: Props) {
   async function send() {
     const text = input.trim();
     if (!text || pending) return;
+
+    // Ensure we have a thread id for this conversation
+    if (!threadId) {
+      setThreadId(crypto.randomUUID());
+    }
 
     const newUserMsg: Message = { role: "user", content: text, timestamp: Date.now() };
     const nextMessages = [...messages, newUserMsg];
@@ -154,13 +203,21 @@ export function CopilotPanel({ open, onOpenChange }: Props) {
             ⌘J
           </span>
           <button
+            onClick={() => setHistoryOpen(true)}
+            title="History"
+            className="ml-auto size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <History className="size-3.5" />
+          </button>
+          <button
             onClick={() => {
               setMessages([]);
               setInput("");
+              setThreadId(crypto.randomUUID());
               inputRef.current?.focus();
             }}
             title="New chat"
-            className="ml-auto size-8 grid place-items-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
+            className="size-8 grid place-items-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
           >
             <Plus className="size-3.5" />
           </button>
@@ -183,8 +240,77 @@ export function CopilotPanel({ open, onOpenChange }: Props) {
 
         <div
           ref={scrollerRef}
-          className="flex-1 overflow-y-auto p-4 space-y-4"
+          className="flex-1 overflow-y-auto p-4 space-y-4 relative"
         >
+          {historyOpen && (
+            <div className="absolute inset-0 z-20 bg-background flex flex-col">
+              <div className="flex items-center px-3 h-11 border-b border-border">
+                <p className="eyebrow">Chat history</p>
+                <button
+                  onClick={() => setHistoryOpen(false)}
+                  className="ml-auto size-8 grid place-items-center text-muted-foreground hover:text-foreground"
+                  aria-label="Close history"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+              {history.length === 0 ? (
+                <div className="flex-1 grid place-items-center px-6 text-center">
+                  <div className="space-y-2">
+                    <History className="size-8 text-muted-foreground mx-auto" />
+                    <p className="font-display italic text-xl text-muted-foreground">
+                      No past chats yet.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Every chat you have with the Copilot is saved on this
+                      device. Up to {HISTORY_MAX} threads.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 overflow-y-auto divide-y divide-border">
+                  {history.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        setThreadId(t.id);
+                        setMessages(t.messages);
+                        setHistoryOpen(false);
+                        setTimeout(() => {
+                          scrollerRef.current?.scrollTo({
+                            top: scrollerRef.current.scrollHeight,
+                            behavior: "instant",
+                          });
+                        }, 50);
+                      }}
+                      className={cn(
+                        "w-full text-left px-4 py-3 hover:bg-muted/40 transition-colors block",
+                        threadId === t.id && "bg-muted/60",
+                      )}
+                    >
+                      <p className="text-sm font-medium truncate">{t.title}</p>
+                      <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                        {t.messages.length} msgs · {new Date(t.updatedAt).toLocaleString()}
+                      </p>
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => {
+                      if (!confirm("Clear all chat history? Cannot be undone.")) return;
+                      setHistory([]);
+                      try {
+                        window.localStorage.removeItem(HISTORY_KEY);
+                      } catch {}
+                    }}
+                    className="w-full text-left px-4 py-3 text-xs font-mono uppercase tracking-[0.12em] text-[var(--destructive)] hover:bg-muted/40 transition-colors"
+                  >
+                    <Trash2 className="size-3 inline mr-1.5" />
+                    Clear all history
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           {needsSetup ? (
             <div className="h-full grid place-items-center">
               <div className="text-center space-y-4 max-w-xs">

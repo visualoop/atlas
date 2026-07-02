@@ -15,16 +15,19 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { MapBrowse } from "./map-browse";
 import { MapBrowseOsm } from "./map-browse-osm";
+import { MapBrowseHybrid } from "./map-browse-hybrid";
 
 export default function ProspectorPage() {
   const searches = useQuery(api.prospector.listSearches, {});
   const [activeSearchId, setActiveSearchId] = useState<Id<"prospectorSearches"> | null>(null);
   const [mode, setMode] = useState<"search" | "map">("search");
-  const [mapProvider, setMapProvider] = useState<"google" | "osm">("osm");
+  const [mapProvider, setMapProvider] = useState<"google" | "osm" | "hybrid">("osm");
   const mapsKey = useQuery(api.prospector.getMapsClientKey, {});
-  // Default to Google if a Maps key is configured, else OSM
+  // Default to hybrid (Google Places data + OSM tiles) when a Places key is
+  // configured — best of both worlds without paying for Maps JS. Fall back
+  // to OSM-only when no key.
   useEffect(() => {
-    if (mapsKey?.key) setMapProvider("google");
+    if (mapsKey?.key) setMapProvider("hybrid");
     else if (mapsKey && !mapsKey.key) setMapProvider("osm");
   }, [mapsKey?.key]);
 
@@ -46,50 +49,73 @@ export default function ProspectorPage() {
       </header>
 
       {/* Mode tabs */}
-      <div className="flex items-center gap-1 mb-6 border-b border-border">
+      <div className="flex items-center gap-1 mb-6 border-b border-border flex-wrap">
         <TabButton active={mode === "search"} onClick={() => setMode("search")} icon={Search} label="Text search" />
         <TabButton active={mode === "map"} onClick={() => setMode("map")} icon={MapIcon} label="Map browse" />
-        <span className="ml-auto text-[11px] text-muted-foreground italic self-center pb-2">
+        <span className="hidden sm:inline-block ml-auto text-[11px] text-muted-foreground italic self-center pb-2">
           {mode === "search" ? "AI-driven query" : "Pan + pick yourself"}
         </span>
       </div>
 
       {mode === "map" ? (
         <div className="space-y-3">
-          <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.12em]">
-            <span className="text-muted-foreground">Data source:</span>
+          <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.12em] flex-wrap">
+            <span className="text-muted-foreground w-full sm:w-auto mb-1 sm:mb-0">Data source:</span>
             <button
-              onClick={() => setMapProvider("google")}
+              onClick={() => setMapProvider("hybrid")}
               disabled={!mapsKey?.key}
               className={cn(
-                "px-3 h-7 border transition-colors",
-                mapProvider === "google"
+                "px-3 h-7 border transition-colors whitespace-nowrap",
+                mapProvider === "hybrid"
                   ? "border-primary text-primary bg-primary/10"
                   : "border-border text-muted-foreground hover:border-foreground",
                 !mapsKey?.key && "opacity-40 cursor-not-allowed",
               )}
             >
-              Google Places
+              Places + OSM
+              {!mapsKey?.key && <span className="ml-1 text-[10px]">(add key)</span>}
+            </button>
+            <button
+              onClick={() => setMapProvider("google")}
+              disabled={!mapsKey?.key}
+              className={cn(
+                "px-3 h-7 border transition-colors whitespace-nowrap",
+                mapProvider === "google"
+                  ? "border-primary text-primary bg-primary/10"
+                  : "border-border text-muted-foreground hover:border-foreground",
+                !mapsKey?.key && "opacity-40 cursor-not-allowed",
+              )}
+              title="Requires Maps JavaScript API billing enabled"
+            >
+              Google Maps JS
               {!mapsKey?.key && <span className="ml-1 text-[10px]">(add key)</span>}
             </button>
             <button
               onClick={() => setMapProvider("osm")}
               className={cn(
-                "px-3 h-7 border transition-colors",
+                "px-3 h-7 border transition-colors whitespace-nowrap",
                 mapProvider === "osm"
                   ? "border-primary text-primary bg-primary/10"
                   : "border-border text-muted-foreground hover:border-foreground",
               )}
             >
-              OpenStreetMap (free)
+              OSM only (free)
             </button>
-            <span className="ml-auto text-muted-foreground italic normal-case tracking-normal">
-              {mapProvider === "google"
-                ? "Full business data, needs Google billing"
-                : "Free, tags-only, community-mapped"}
+            <span className="hidden md:inline-block ml-auto text-muted-foreground italic normal-case tracking-normal">
+              {mapProvider === "hybrid"
+                ? "Google business data, OSM tiles — cheapest path"
+                : mapProvider === "google"
+                ? "Full Google Maps rendering, needs billing"
+                : "Free, community-mapped businesses"}
             </span>
           </div>
-          {mapProvider === "google" ? <MapBrowse /> : <MapBrowseOsm />}
+          {mapProvider === "google" ? (
+            <MapBrowse />
+          ) : mapProvider === "hybrid" ? (
+            <MapBrowseHybrid />
+          ) : (
+            <MapBrowseOsm />
+          )}
         </div>
       ) : (
         <>

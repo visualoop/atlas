@@ -30,7 +30,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 
 const NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/search";
-const USER_AGENT = "Atlas by Blyss — atlas.blyss.co.ke (justinequartz1@gmail.com)";
+const USER_AGENT = "Atlas by Blyss (atlas.blyss.co.ke; justinequartz1@gmail.com)";
 
 interface NominatimResult {
   place_id: number;
