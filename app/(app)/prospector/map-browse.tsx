@@ -53,6 +53,7 @@ export function MapBrowse() {
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const [ready, setReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [category, setCategory] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [places, setPlaces] = useState<Place[]>([]);
@@ -80,6 +81,21 @@ export function MapBrowse() {
     setSuppressedIds(new Set(dedup.suppressed));
   }, [dedup]);
 
+  // Google Maps invokes window.gm_authFailure() when it can't authenticate.
+  // Catch that so we can show a helpful error instead of Google's own banner.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const w = window as unknown as { gm_authFailure?: () => void };
+    w.gm_authFailure = () => {
+      setLoadError(
+        "Google Maps JavaScript API isn't enabled on your project — or the key doesn't cover it. Use 'Places + OSM' mode instead: it renders on free OpenStreetMap tiles but still uses your Google Places key for business data.",
+      );
+    };
+    return () => {
+      w.gm_authFailure = undefined;
+    };
+  }, []);
+
   // Load the Maps JS SDK once we have a key
   useEffect(() => {
     if (!mapsKey?.key || !mapRef.current || mapInstanceRef.current) return;
@@ -88,22 +104,30 @@ export function MapBrowse() {
       v: "weekly",
     });
     (async () => {
-      const [{ Map }] = await Promise.all([
-        importLibrary("maps"),
-        importLibrary("marker"),
-        importLibrary("places"),
-      ]);
-      if (!mapRef.current) return;
-      const map = new Map(mapRef.current, {
-        center: DEFAULT_CENTER,
-        zoom: DEFAULT_ZOOM,
-        mapId: "atlas-prospector",
-        streetViewControl: false,
-        mapTypeControl: false,
-        fullscreenControl: false,
-      });
-      mapInstanceRef.current = map;
-      setReady(true);
+      try {
+        const [{ Map }] = await Promise.all([
+          importLibrary("maps"),
+          importLibrary("marker"),
+          importLibrary("places"),
+        ]);
+        if (!mapRef.current) return;
+        const map = new Map(mapRef.current, {
+          center: DEFAULT_CENTER,
+          zoom: DEFAULT_ZOOM,
+          mapId: "atlas-prospector",
+          streetViewControl: false,
+          mapTypeControl: false,
+          fullscreenControl: false,
+        });
+        mapInstanceRef.current = map;
+        setReady(true);
+      } catch (err) {
+        setLoadError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load Google Maps JavaScript API",
+        );
+      }
     })();
   }, [mapsKey?.key]);
 
@@ -278,6 +302,28 @@ export function MapBrowse() {
         >
           Add key
         </Link>
+      </div>
+    );
+  }
+
+  // Maps JS load failed (usually because Maps JavaScript API isn't enabled)
+  if (loadError) {
+    return (
+      <div className="border border-dashed border-[var(--warning)] p-10 text-center space-y-4">
+        <KeyRound className="size-8 text-[var(--warning)] mx-auto" />
+        <p className="font-display italic text-2xl text-muted-foreground">
+          Google Maps JS can't load.
+        </p>
+        <p className="text-sm text-muted-foreground max-w-prose mx-auto">
+          {loadError}
+        </p>
+        <p className="text-xs text-muted-foreground max-w-prose mx-auto">
+          Fastest fix: switch the data-source toggle to{" "}
+          <strong className="text-primary">Places + OSM</strong> — it uses your
+          existing Google Places API key on free OpenStreetMap tiles. No
+          extra billing needed. No 'This page can't load Google Maps
+          correctly' banner.
+        </p>
       </div>
     );
   }

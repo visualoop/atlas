@@ -123,20 +123,48 @@ export const testProvider = action({
           return { ok: true, detail: "authenticated" };
         }
         case "google_maps_places": {
-          const res = await fetch(
-            "https://places.googleapis.com/v1/places:searchText",
-            {
-              method: "POST",
-              headers: {
-                "X-Goog-Api-Key": key,
-                "X-Goog-FieldMask": "places.id",
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ textQuery: "coffee in Nairobi", pageSize: 1 }),
-            },
+          // Try Legacy Places API first — what Atlas actually uses in production
+          // (and what most projects have enabled by default). Fall back to
+          // Places API (New) if Legacy returns REQUEST_DENIED with the
+          // 'not enabled' hint.
+          const legacy = await fetch(
+            `https://maps.googleapis.com/maps/api/place/textsearch/json?query=coffee+in+Nairobi&key=${encodeURIComponent(key)}`,
           );
-          if (!res.ok) return { ok: false, detail: `HTTP ${res.status}` };
-          return { ok: true, detail: "authenticated" };
+          if (legacy.ok) {
+            const j = (await legacy.json()) as {
+              status?: string;
+              error_message?: string;
+              results?: unknown[];
+            };
+            if (j.status === "OK" || j.status === "ZERO_RESULTS") {
+              return { ok: true, detail: `Legacy Places API · ${j.results?.length ?? 0} results` };
+            }
+            if (j.status === "REQUEST_DENIED") {
+              // Try Places API (New)
+              const modern = await fetch(
+                "https://places.googleapis.com/v1/places:searchText",
+                {
+                  method: "POST",
+                  headers: {
+                    "X-Goog-Api-Key": key,
+                    "X-Goog-FieldMask": "places.id",
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({ textQuery: "coffee in Nairobi", pageSize: 1 }),
+                },
+              );
+              if (modern.ok) {
+                return { ok: true, detail: "Places API (New) — Legacy blocked" };
+              }
+              const modernErr = await modern.text();
+              return {
+                ok: false,
+                detail: `Legacy: ${j.error_message ?? j.status}. New: ${modernErr.slice(0, 80)}`,
+              };
+            }
+            return { ok: false, detail: j.error_message ?? j.status ?? "unknown" };
+          }
+          return { ok: false, detail: `HTTP ${legacy.status}` };
         }
         case "meta_whatsapp": {
           // Cheapest verification: hit the debug_token endpoint
