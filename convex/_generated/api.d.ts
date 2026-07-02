@@ -77,6 +77,8 @@ import type * as pipelines from "../pipelines.js";
 import type * as pipelinesActions from "../pipelinesActions.js";
 import type * as prospector from "../prospector.js";
 import type * as prospectorActions from "../prospectorActions.js";
+import type * as prospectorEnrich from "../prospectorEnrich.js";
+import type * as prospectorEnrichHelpers from "../prospectorEnrichHelpers.js";
 import type * as prospectorHelpers from "../prospectorHelpers.js";
 import type * as prospectorOsm from "../prospectorOsm.js";
 import type * as prospectorOsmHelpers from "../prospectorOsmHelpers.js";
@@ -179,6 +181,8 @@ declare const fullApi: ApiFromModules<{
   pipelinesActions: typeof pipelinesActions;
   prospector: typeof prospector;
   prospectorActions: typeof prospectorActions;
+  prospectorEnrich: typeof prospectorEnrich;
+  prospectorEnrichHelpers: typeof prospectorEnrichHelpers;
   prospectorHelpers: typeof prospectorHelpers;
   prospectorOsm: typeof prospectorOsm;
   prospectorOsmHelpers: typeof prospectorOsmHelpers;

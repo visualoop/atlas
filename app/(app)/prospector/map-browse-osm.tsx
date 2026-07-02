@@ -535,11 +535,36 @@ export function MapBrowseOsm() {
                     {p.address && (
                       <p className="text-xs text-muted-foreground truncate">{p.address}</p>
                     )}
-                    {p.types && p.types.length > 0 && (
-                      <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
-                        {p.types.slice(0, 2).join(" · ")}
-                      </p>
-                    )}
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {p.types && p.types.length > 0 && (
+                        <p className="text-[10px] font-mono text-muted-foreground truncate">
+                          {p.types.slice(0, 2).join(" · ")}
+                        </p>
+                      )}
+                      <div className="ml-auto flex items-center gap-1 shrink-0">
+                        {p.phoneRaw && (
+                          <span
+                            title={p.phoneRaw}
+                            className="text-[10px] font-mono text-emerald-600 inline-flex items-center gap-0.5"
+                          >
+                            <Phone className="size-2.5" />
+                          </span>
+                        )}
+                        {p.website && (
+                          <span
+                            title={p.website}
+                            className="text-[10px] font-mono text-emerald-600 inline-flex items-center gap-0.5"
+                          >
+                            <Globe className="size-2.5" />
+                          </span>
+                        )}
+                        {!p.phoneRaw && !p.website && (
+                          <span className="text-[9px] font-mono text-muted-foreground/60 uppercase tracking-wider">
+                            no contact
+                          </span>
+                        )}
+                      </div>
+                    </div>
                     {score && score.fitReason && (
                       <p className="text-[11px] italic text-muted-foreground mt-0.5 line-clamp-2">
                         {score.fitReason}

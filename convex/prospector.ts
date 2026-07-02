@@ -14,6 +14,7 @@
 
 import { v, ConvexError } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requireWorkspaceContext } from "./lib/workspaceContext";
 import { recordAudit } from "./lib/authHelpers";
 import { recordTimelineEvent } from "./lib/timeline";
@@ -530,6 +531,16 @@ export const importMapPlace = internalMutation({
       payload: { source: "prospector_map", googlePlaceId: args.googlePlaceId },
     });
 
+    // Schedule background enrichment — fetches phone/website/hours
+    await ctx.scheduler.runAfter(
+      0,
+      internal.prospectorEnrich.enrichCompany,
+      {
+        companyId,
+        googlePlaceId: args.googlePlaceId,
+      },
+    );
+
     return { companyId, duplicated: false };
   },
 });
@@ -784,6 +795,18 @@ export const bulkImportMapPlaces = mutation({
         subjectId: companyId,
         payload: { source: "prospector_map_bulk", googlePlaceId: p.googlePlaceId },
       });
+
+      // Schedule background enrichment — fetch phone/website/hours
+      // from Geoapify Place Details (or Google Place Details fallback)
+      // and patch the company. Runs in ~1s per company.
+      await ctx.scheduler.runAfter(
+        0,
+        internal.prospectorEnrich.enrichCompany,
+        {
+          companyId,
+          googlePlaceId: p.googlePlaceId,
+        },
+      );
 
       imported++;
       budget--;
