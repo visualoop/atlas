@@ -275,10 +275,13 @@ export const chat = action({
     }
 
     // Prepend system prompt if the caller didn't already include one
-    const messages: ChatMessage[] = [
+    const rawMessages: ChatMessage[] = [
       { role: "system", content: buildSystemPrompt(setup.brand) },
       ...args.messages.filter((m) => m.role !== "system"),
     ];
+
+    // Compact old turns if the conversation is getting long.
+    const messages = await maybeCompact(rawMessages, setup.keys);
 
     const chain: Array<{
       provider: "groq" | "openrouter" | "gemini" | "cerebras" | "openai";
@@ -336,12 +339,20 @@ export const chat = action({
             ];
             for (const tc of choice.message.tool_calls) {
               const result = await handleAtlasTool(ctx, setup.workspaceId, tc.function.name, tc.function.arguments);
+              // Cap tool result payload to prevent one big search response
+              // (e.g. 40 places) from blowing the context.
+              const resultStr = JSON.stringify(result);
+              const truncated = resultStr.length > 8000
+                ? resultStr.slice(0, 8000) + '..."/*truncated*/'
+                : resultStr;
               workingMessages.push({
                 role: "tool",
-                content: JSON.stringify(result),
+                content: truncated,
                 tool_call_id: tc.id,
               });
             }
+            // Compact mid-loop if tool results have piled up
+            workingMessages = await maybeCompact(workingMessages, setup.keys);
             continue;
           }
 
@@ -494,6 +505,125 @@ async function callGemini(args: {
       },
     ],
   };
+}
+
+/* ============================================================ */
+/* Context compaction                                             */
+/* ============================================================ */
+
+// Rough token count via char/4 heuristic. Good enough — actual
+// tokenization varies per model but this is the standard estimator.
+function estimateTokens(messages: ChatMessage[]): number {
+  let total = 0;
+  for (const m of messages) {
+    total += (m.content?.length ?? 0) / 4;
+    // tool_calls JSON payloads
+    if (m.tool_calls) {
+      try {
+        total += JSON.stringify(m.tool_calls).length / 4;
+      } catch {}
+    }
+  }
+  return Math.ceil(total);
+}
+
+const COMPACT_TRIGGER_TOKENS = 6000;     // start compacting past this
+const COMPACT_KEEP_RECENT = 6;           // preserve most-recent N turns raw
+const COMPACT_MIN_MESSAGES = 12;         // don't compact until there's a real backlog
+
+/**
+ * If the conversation is long, replace the oldest turns with a single
+ * compact summary system message so the model keeps context without
+ * running out of TPM.
+ *
+ * Approach: keep the actual system prompt + the last N user/assistant
+ * exchanges verbatim, ask a small fast model to summarize everything
+ * in between into 1-2 paragraphs, splice the summary in as a system
+ * message.
+ */
+async function maybeCompact(
+  messages: ChatMessage[],
+  keys: {
+    groq?: string;
+    openrouter?: string;
+    gemini?: string;
+    cerebras?: string;
+    openai?: string;
+  },
+): Promise<ChatMessage[]> {
+  const est = estimateTokens(messages);
+  if (est < COMPACT_TRIGGER_TOKENS) return messages;
+  if (messages.length < COMPACT_MIN_MESSAGES) return messages;
+
+  // Find the boundary — keep system prompt + last N non-system messages
+  const systemMsgs = messages.filter((m) => m.role === "system");
+  const nonSystem = messages.filter((m) => m.role !== "system");
+  const cutoff = nonSystem.length - COMPACT_KEEP_RECENT;
+  if (cutoff <= 0) return messages;
+
+  const toCompact = nonSystem.slice(0, cutoff);
+  const recent = nonSystem.slice(cutoff);
+
+  // Cheapest possible summarizer: Groq's smallest model, then Cerebras,
+  // then Gemini flash. No tools, tight token budget.
+  const summarizerChain: Array<{
+    provider: "groq" | "cerebras" | "gemini" | "openrouter";
+    model: string;
+  }> = [
+    { provider: "groq", model: "llama-3.1-8b-instant" },
+    { provider: "cerebras", model: "llama-3.3-70b" },
+    { provider: "gemini", model: "gemini-2.0-flash-exp" },
+    { provider: "openrouter", model: "openrouter/auto" },
+  ];
+
+  const transcript = toCompact
+    .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
+    .join("\n\n");
+
+  const prompt = `Summarize the following Atlas Copilot conversation history into ONE dense paragraph (max 200 words) capturing:
+- Key facts + decisions established
+- Any records the user referenced (contact/company/deal IDs)
+- Open questions or context needed for the next turn
+
+Do not add commentary. Do not restate obvious things. Do not use bullet points.
+
+TRANSCRIPT:
+${transcript}`;
+
+  let summary = "";
+  for (const step of summarizerChain) {
+    const apiKey = keys[step.provider];
+    if (!apiKey) continue;
+    try {
+      const resp = await callChat({
+        provider: step.provider,
+        model: step.model,
+        apiKey,
+        messages: [{ role: "user", content: prompt }],
+      });
+      const text = resp.choices[0]?.message?.content ?? "";
+      if (text.trim().length > 20) {
+        summary = text.trim();
+        break;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  if (!summary) {
+    // Summarizer failed — fall back to trimming (keep system + recent, drop the rest)
+    return [...systemMsgs, ...recent];
+  }
+
+  return [
+    ...systemMsgs,
+    {
+      role: "system",
+      content: `## Earlier conversation (compacted)\n\n${summary}`,
+    },
+    ...recent,
+  ];
 }
 
 /* ============================================================ */
