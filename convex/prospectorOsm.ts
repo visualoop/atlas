@@ -82,6 +82,7 @@ export const searchNearbyOsm = action({
     longitude: v.number(),
     radiusMeters: v.number(),
     category: v.optional(v.string()),
+    nameKeyword: v.optional(v.string()),      // free-text OSM name filter
   },
   handler: async (ctx, args): Promise<{
     places: Place[];
@@ -93,7 +94,8 @@ export const searchNearbyOsm = action({
     // they need to zoom in for meaningful business density anyway.
     const radius = Math.min(Math.max(args.radiusMeters, 300), 5_000);
     const category = args.category ?? "retail";
-    const key = gridKey(args.latitude, args.longitude, radius, category);
+    const keyword = (args.nameKeyword ?? "").trim();
+    const key = `${gridKey(args.latitude, args.longitude, radius, category)}:${keyword.toLowerCase().slice(0, 40)}`;
 
     // 1. Serve from cache if fresh
     const cached = await ctx.runQuery(internal.prospectorOsmHelpers.getCached, { key });
@@ -103,14 +105,23 @@ export const searchNearbyOsm = action({
 
     // 2. Fetch from Overpass
     const catQuery = CATEGORY_TAG_QUERIES[category] ?? CATEGORY_TAG_QUERIES.retail;
+    // If keyword provided, wrap each tag clause with a name-contains filter.
+    // Otherwise just use the tag clauses as-is.
+    const clauses = catQuery
+      .split(";")
+      .filter((q) => q.trim())
+      .map((q) => {
+        const base = q.trim();
+        const nameFilter = keyword
+          ? `["name"~"${keyword.replace(/["\\]/g, "")}",i]`
+          : "";
+        return `${base}${nameFilter}(around:${radius},${args.latitude},${args.longitude});`;
+      });
+
     const overpassQL = `
 [out:json][timeout:15];
 (
-  ${catQuery
-    .split(";")
-    .filter((q) => q.trim())
-    .map((q) => `${q.trim()}(around:${radius},${args.latitude},${args.longitude});`)
-    .join("\n  ")}
+  ${clauses.join("\n  ")}
 );
 out center tags 60;
 `.trim();

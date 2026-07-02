@@ -249,8 +249,8 @@ export function MapBrowseHybrid() {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-0 border border-border" style={{ minHeight: "60vh" }}>
-      <div className="relative bg-muted min-h-[50vh]">
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-0 border border-border h-[calc(100vh-14rem)] max-h-[900px]">
+      <div className="relative bg-muted min-h-[50vh] lg:min-h-0">
         <div ref={mapContainerRef} className="absolute inset-0" />
 
         {/* Controls — mobile-first stacked with backdrop */}

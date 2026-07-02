@@ -329,7 +329,7 @@ export function MapBrowse() {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-0 border border-border" style={{ minHeight: "60vh" }}>
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-0 border border-border h-[calc(100vh-14rem)] max-h-[900px]">
       {/* Map */}
       <div className="relative bg-muted min-h-[50vh]">
         <div ref={mapRef} className="absolute inset-0" />

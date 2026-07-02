@@ -45,14 +45,19 @@ export function MapBrowseOsm() {
   const searchNearby = useAction(api.prospectorOsm.searchNearbyOsm);
   const importOne = useAction(api.prospectorActions.importOneFromMap);
   const bulkImport = useMutation(api.prospector.bulkImportMapPlaces);
+  const rankProspects = useAction(api.prospectorRanking.rankProspects);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
   const markersLayerRef = useRef<import("leaflet").LayerGroup | null>(null);
   const [leafletReady, setLeafletReady] = useState(false);
   const [category, setCategory] = useState<string>("retail");
+  const [keyword, setKeyword] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const [ranking, setRanking] = useState(false);
   const [places, setPlaces] = useState<Place[]>([]);
+  const [scoresById, setScoresById] = useState<Record<string, { fitScore: number; fitReason: string }>>({});
+  const [visibleCount, setVisibleCount] = useState(20);
   const [selected, setSelected] = useState<Place | null>(null);
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set());
   const [suppressedIds, setSuppressedIds] = useState<Set<string>>(new Set());
@@ -161,7 +166,12 @@ export function MapBrowseOsm() {
         longitude: center.lng,
         radiusMeters: Math.round(radius),
         category: category || undefined,
+        nameKeyword: keyword.trim() || undefined,
       });
+
+      // Reset visible slice + scores on every fresh search
+      setVisibleCount(20);
+      setScoresById({});
 
       // Case A: got fresh or cached results — show them.
       if (res.places.length > 0) {
@@ -171,6 +181,8 @@ export function MapBrowseOsm() {
         } else if (res.cached) {
           toast.info(`${res.places.length} results (cached — fast).`);
         }
+        // Kick off AI ranking in the background
+        void rankNow(res.places);
         return;
       }
 
@@ -213,12 +225,55 @@ export function MapBrowseOsm() {
     }
   }
 
+  async function rankNow(list: Place[]) {
+    setRanking(true);
+    try {
+      const res = await rankProspects({
+        places: list.map((p) => ({
+          googlePlaceId: p.googlePlaceId,
+          name: p.name,
+          address: p.address,
+          types: p.types,
+          rating: p.rating,
+          ratingCount: p.ratingCount,
+        })),
+      });
+      const map: Record<string, { fitScore: number; fitReason: string }> = {};
+      for (const s of res.scores) {
+        map[s.googlePlaceId] = { fitScore: s.fitScore, fitReason: s.fitReason };
+      }
+      setScoresById(map);
+      if (res.error === "no_workspace_context") {
+        toast.info("Fill in Settings → Workspace so the AI can score fit properly.");
+      }
+    } catch {
+      // silent — leave results unranked
+    } finally {
+      setRanking(false);
+    }
+  }
+
   const candidates = useMemo(
     () =>
       places
         .filter((p) => !importedIds.has(p.googlePlaceId) && !suppressedIds.has(p.googlePlaceId))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [places, importedIds, suppressedIds],
+        .sort((a, b) => {
+          const sa = scoresById[a.googlePlaceId]?.fitScore ?? 50;
+          const sb = scoresById[b.googlePlaceId]?.fitScore ?? 50;
+          if (sa !== sb) return sb - sa;
+          return a.name.localeCompare(b.name);
+        }),
+    [places, importedIds, suppressedIds, scoresById],
+  );
+
+  const sortedPlaces = useMemo(
+    () =>
+      [...places].sort((a, b) => {
+        const sa = scoresById[a.googlePlaceId]?.fitScore ?? 50;
+        const sb = scoresById[b.googlePlaceId]?.fitScore ?? 50;
+        return sb - sa;
+      }),
+    [places, scoresById],
   );
 
   async function bulkImportTopN() {
@@ -250,10 +305,10 @@ export function MapBrowseOsm() {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-0 border border-border" style={{ minHeight: "60vh" }}>
-      <div className="relative bg-muted min-h-[50vh]">
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-0 border border-border h-[calc(100vh-14rem)] max-h-[900px]">
+      <div className="relative bg-muted min-h-[50vh] lg:min-h-0">
         <div ref={mapContainerRef} className="absolute inset-0" />
-        <div className="absolute top-3 left-3 right-3 flex items-center gap-2 z-[400] flex-wrap">
+        <div className="absolute top-2 left-2 right-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 z-[400]">
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -265,36 +320,46 @@ export function MapBrowseOsm() {
               </option>
             ))}
           </select>
+          <input
+            type="text"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="Keyword (optional) — e.g. pharmacy, salon"
+            onKeyDown={(e) => e.key === "Enter" && searchThisArea()}
+            className="h-9 px-3 text-sm bg-background border border-border shadow flex-1 min-w-0"
+          />
           <button
             onClick={searchThisArea}
             disabled={!leafletReady || busy}
-            className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] shadow disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-4 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] shadow disabled:opacity-50 whitespace-nowrap"
           >
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Search className="size-3.5" />}
-            Search this area
+            Search
           </button>
           <button
             onClick={() => {
               if (!mapRef.current) return;
               const c = mapRef.current.getCenter();
-              const q = category ? CATEGORIES.find((x) => x.value === category)?.label : "businesses";
+              const q =
+                keyword.trim() ||
+                (category ? CATEGORIES.find((x) => x.value === category)?.label : "businesses");
               window.open(
                 `https://www.google.com/maps/search/${encodeURIComponent(q ?? "businesses")}/@${c.lat},${c.lng},15z`,
                 "_blank",
                 "noopener,noreferrer",
               );
             }}
-            className="inline-flex items-center gap-1 h-9 px-3 text-xs font-mono uppercase tracking-[0.12em] bg-background border border-border shadow hover:border-foreground"
+            className="inline-flex items-center justify-center gap-1 h-9 px-3 text-xs font-mono uppercase tracking-[0.12em] bg-background border border-border shadow hover:border-foreground"
             title="Open this area on Google Maps in a new tab — no API needed"
           >
             <ExternalLink className="size-3" />
-            Google Maps
+            <span className="hidden sm:inline">Google Maps</span>
           </button>
         </div>
 
-        <div className="absolute bottom-3 left-3 z-[400] text-[10px] font-mono text-muted-foreground bg-background/70 backdrop-blur px-2 py-1 flex items-center gap-1.5">
+        <div className="absolute bottom-2 left-2 z-[400] text-[10px] font-mono text-muted-foreground bg-background/80 backdrop-blur px-2 py-1 flex items-center gap-1.5">
           <Info className="size-3" />
-          OSM · free · limited business data
+          {ranking ? "AI ranking…" : "OSM · free · limited business data"}
         </div>
 
         {!leafletReady && (
@@ -374,37 +439,76 @@ export function MapBrowseOsm() {
               )}
             </div>
             <div className="divide-y divide-border">
-              {places.map((p) => (
-                <button
-                  key={p.googlePlaceId}
-                  onClick={() => setSelected(p)}
-                  className={cn(
-                    "w-full text-left px-4 py-3 hover:bg-muted/40 transition-colors",
-                    importedIds.has(p.googlePlaceId) && "opacity-60",
-                    suppressedIds.has(p.googlePlaceId) && "opacity-40",
-                  )}
-                >
-                  <div className="flex items-baseline justify-between gap-2">
-                    <p className="text-sm font-medium truncate">{p.name}</p>
-                    {importedIds.has(p.googlePlaceId) && (
-                      <Check className="size-3.5 text-[var(--success)] shrink-0" />
+              {sortedPlaces.slice(0, visibleCount).map((p) => {
+                const score = scoresById[p.googlePlaceId];
+                return (
+                  <button
+                    key={p.googlePlaceId}
+                    onClick={() => setSelected(p)}
+                    className={cn(
+                      "w-full text-left px-4 py-3 hover:bg-muted/40 transition-colors",
+                      importedIds.has(p.googlePlaceId) && "opacity-60",
+                      suppressedIds.has(p.googlePlaceId) && "opacity-40",
                     )}
-                  </div>
-                  {p.address && (
-                    <p className="text-xs text-muted-foreground truncate">{p.address}</p>
-                  )}
-                  {p.types && p.types.length > 0 && (
-                    <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
-                      {p.types.slice(0, 2).join(" · ")}
-                    </p>
-                  )}
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className="text-sm font-medium truncate">{p.name}</p>
+                      {score && (
+                        <FitScorePill score={score.fitScore} />
+                      )}
+                      {importedIds.has(p.googlePlaceId) && (
+                        <Check className="size-3.5 text-[var(--success)] shrink-0" />
+                      )}
+                    </div>
+                    {p.address && (
+                      <p className="text-xs text-muted-foreground truncate">{p.address}</p>
+                    )}
+                    {p.types && p.types.length > 0 && (
+                      <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
+                        {p.types.slice(0, 2).join(" · ")}
+                      </p>
+                    )}
+                    {score && score.fitReason && (
+                      <p className="text-[11px] italic text-muted-foreground mt-0.5 line-clamp-2">
+                        {score.fitReason}
+                      </p>
+                    )}
+                  </button>
+                );
+              })}
+              {visibleCount < sortedPlaces.length && (
+                <button
+                  onClick={() => setVisibleCount((n) => n + 20)}
+                  className="w-full py-3 text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                >
+                  Load {Math.min(20, sortedPlaces.length - visibleCount)} more · {sortedPlaces.length - visibleCount} left
                 </button>
-              ))}
+              )}
             </div>
           </div>
         )}
       </aside>
     </div>
+  );
+}
+
+function FitScorePill({ score }: { score: number }) {
+  const styles =
+    score >= 80
+      ? "text-[var(--success)] border-[var(--success)]"
+      : score >= 55
+      ? "text-[var(--warning)] border-[var(--warning)]"
+      : "text-muted-foreground border-border";
+  return (
+    <span
+      className={cn(
+        "text-[10px] font-mono border px-1 py-[1px] shrink-0",
+        styles,
+      )}
+      title="AI fit score against your workspace's ideal customer"
+    >
+      {score}
+    </span>
   );
 }
 
