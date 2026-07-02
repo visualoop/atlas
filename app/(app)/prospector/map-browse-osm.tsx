@@ -54,6 +54,8 @@ export function MapBrowseOsm() {
   const [category, setCategory] = useState<string>("retail");
   const [keyword, setKeyword] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const [searchStartedAt, setSearchStartedAt] = useState<number | null>(null);
+  const [searchElapsed, setSearchElapsed] = useState(0);
   const [ranking, setRanking] = useState(false);
   const [places, setPlaces] = useState<Place[]>([]);
   const [scoresById, setScoresById] = useState<Record<string, { fitScore: number; fitReason: string }>>({});
@@ -69,6 +71,14 @@ export function MapBrowseOsm() {
     api.prospector.checkMapPlaces,
     places.length > 0 ? { googlePlaceIds: places.map((p) => p.googlePlaceId) } : "skip",
   );
+
+  useEffect(() => {
+    if (!busy || !searchStartedAt) return;
+    const iv = setInterval(() => {
+      setSearchElapsed(Math.floor((Date.now() - searchStartedAt) / 100) / 10);
+    }, 100);
+    return () => clearInterval(iv);
+  }, [busy, searchStartedAt]);
 
   useEffect(() => {
     if (!dedup) return;
@@ -161,6 +171,8 @@ export function MapBrowseOsm() {
     const radius = Math.min(50_000, R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 0.7);
 
     setBusy(true);
+    setSearchStartedAt(Date.now());
+    setSearchElapsed(0);
     try {
       const res = await searchNearby({
         latitude: center.lat,
@@ -352,7 +364,7 @@ export function MapBrowseOsm() {
             className="inline-flex items-center justify-center gap-1.5 h-9 px-4 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] shadow disabled:opacity-50 whitespace-nowrap"
           >
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Search className="size-3.5" />}
-            Search
+            {busy ? `${searchElapsed.toFixed(1)}s` : "Search"}
           </button>
           <button
             onClick={() => {

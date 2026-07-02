@@ -252,4 +252,25 @@
       transition-duration: 0.01ms !important;
     }
   }
+
+  /* Loading-page progress bar — used by app/loading.tsx.
+     Keyframes defined here (rather than inline) so the CSS is
+     included in the initial paint before React hydrates.  */
+  @keyframes atlasProgress {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(400%);
+    }
+  }
+
+  @keyframes atlasSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .atlas-progress {
+    animation: atlasProgress 1.4s ease-in-out infinite;
+  }
 }
