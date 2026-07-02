@@ -65,6 +65,7 @@ export function MapBrowseHybrid() {
   const markersLayerRef = useRef<import("leaflet").LayerGroup | null>(null);
   const [leafletReady, setLeafletReady] = useState(false);
   const [category, setCategory] = useState<string>("retail");
+  const [keyword, setKeyword] = useState("");
   const [busy, setBusy] = useState(false);
   const [places, setPlaces] = useState<Place[]>([]);
   const [selected, setSelected] = useState<Place | null>(null);
@@ -175,6 +176,7 @@ export function MapBrowseHybrid() {
         radiusMeters: Math.round(radius),
         category: category || undefined,
         useLegacy: true,
+        nameKeyword: keyword.trim() || undefined,
       });
       if (res.error) {
         toast.error(res.error);
@@ -266,6 +268,16 @@ export function MapBrowseHybrid() {
               </option>
             ))}
           </select>
+          <input
+            type="text"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !busy) searchThisArea();
+            }}
+            placeholder="Keyword (pharmacy, salon…)"
+            className="h-9 px-3 text-sm bg-background border border-border shadow flex-1 min-w-0"
+          />
           <button
             onClick={searchThisArea}
             disabled={!leafletReady || busy || (mapsUsage && mapsUsage.remaining === 0)}

@@ -55,6 +55,7 @@ export function MapBrowse() {
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [category, setCategory] = useState<string>("");
+  const [keyword, setKeyword] = useState("");
   const [busy, setBusy] = useState(false);
   const [places, setPlaces] = useState<Place[]>([]);
   const [selected, setSelected] = useState<Place | null>(null);
@@ -206,6 +207,7 @@ export function MapBrowse() {
         longitude: center.lng(),
         radiusMeters: Math.round(radius),
         category: category || undefined,
+        nameKeyword: keyword.trim() || undefined,
       });
       if (res.error) {
         toast.error(res.error);
@@ -347,6 +349,16 @@ export function MapBrowse() {
               </option>
             ))}
           </select>
+          <input
+            type="text"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !busy) searchThisArea();
+            }}
+            placeholder="Keyword (pharmacy, salon…)"
+            className="h-9 px-3 text-sm bg-background border border-border shadow flex-1 min-w-0"
+          />
           <button
             onClick={searchThisArea}
             disabled={!ready || busy || (mapsUsage && mapsUsage.remaining === 0)}

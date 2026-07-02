@@ -63,27 +63,20 @@ export const rankProspects = action({
         gemini?: string;
         cerebras?: string;
         openrouter?: string;
+        openai?: string;
       };
     } | null = await ctx.runQuery(internal.copilotHelpers.prepare, {});
 
     if (!setup) return { scores: [], error: "not_in_workspace" };
 
-    // If workspace has zero brand context, we skip AI ranking entirely
-    // and just return neutral scores. The panel will show a nudge to fill
-    // /settings/workspace.
+    // If workspace has zero brand context, we still score — but note
+    // the ranking will be less workspace-tuned. Panel shows a nudge
+    // separately to fill /settings/workspace.
     const hasContext = Boolean(
-      setup.brand?.oneLiner || setup.brand?.offerings || setup.brand?.targetMarket,
+      setup.brand?.oneLiner ||
+        setup.brand?.offerings ||
+        setup.brand?.targetMarket,
     );
-    if (!hasContext) {
-      return {
-        scores: args.places.map((p) => ({
-          googlePlaceId: p.googlePlaceId,
-          fitScore: 50,
-          fitReason: "Set up workspace brand for real scoring",
-        })),
-        error: "no_workspace_context",
-      };
-    }
 
     const prompt = `You are helping a founder pick which businesses to prospect via WhatsApp / email.
 
@@ -123,18 +116,35 @@ ${args.places
   )
   .join("\n")}
 
-Return ONLY a JSON array with objects: {"id": "<googlePlaceId>", "score": 0-100, "reason": "one crisp diagnostic sentence"}. No prose, no code fence.`;
+Return ONLY a JSON object with this exact shape:
+{"scores": [{"id": "<googlePlaceId>", "score": 0-100, "reason": "one crisp diagnostic sentence"}, ...]}
 
-    const chain: Array<{ provider: "groq" | "gemini" | "cerebras" | "openrouter"; model: string }> = [
+Include one entry per candidate. No prose, no code fence, no explanations outside the JSON object.`;
+
+    const chain: Array<{
+      provider: "groq" | "gemini" | "cerebras" | "openrouter" | "openai";
+      model: string;
+    }> = [
+      // Fast + free — Groq's Llama variants
       { provider: "groq", model: "llama-3.1-8b-instant" },
+      { provider: "groq", model: "llama-3.3-70b-versatile" },
+      // Cerebras free tier — Llama 3.3 70B
       { provider: "cerebras", model: "llama-3.3-70b" },
+      // Google Gemini free tier — Flash is fast + high daily quota
       { provider: "gemini", model: "gemini-2.0-flash-exp" },
+      { provider: "gemini", model: "gemini-1.5-flash" },
+      // OpenRouter free auto-routing
       { provider: "openrouter", model: "openrouter/auto" },
+      // OpenAI paid fallback (only if configured)
+      { provider: "openai", model: "gpt-4o-mini" },
     ];
 
+    const errors: string[] = [];
+    let anyKeyPresent = false;
     for (const step of chain) {
       const apiKey = setup.keys[step.provider];
       if (!apiKey) continue;
+      anyKeyPresent = true;
       try {
         const text = await callLlm({
           provider: step.provider,
@@ -146,25 +156,39 @@ Return ONLY a JSON array with objects: {"id": "<googlePlaceId>", "score": 0-100,
         if (parsed.length > 0) {
           return { scores: parsed, provider: step.provider };
         }
-      } catch {
+        errors.push(`${step.provider}/${step.model}: parser returned 0 rows`);
+      } catch (err) {
+        errors.push(
+          `${step.provider}/${step.model}: ${err instanceof Error ? err.message : String(err)}`,
+        );
         continue;
       }
     }
 
-    // All providers failed — return neutral
+    // If we get here, either no keys OR every configured provider failed.
+    const reason = !anyKeyPresent
+      ? "Add a Groq API key at Settings → Integrations (free)"
+      : hasContext
+        ? `AI ranking failed: ${errors.slice(0, 2).join("; ")}`
+        : "Set up workspace brand for real scoring";
+
     return {
       scores: args.places.map((p) => ({
         googlePlaceId: p.googlePlaceId,
         fitScore: 50,
-        fitReason: "AI ranking unavailable",
+        fitReason: reason,
       })),
-      error: "ai_unavailable",
+      error: !anyKeyPresent
+        ? "no_ai_keys"
+        : hasContext
+          ? "ai_unavailable"
+          : "no_workspace_context",
     };
   },
 });
 
 async function callLlm(args: {
-  provider: "groq" | "gemini" | "cerebras" | "openrouter";
+  provider: "groq" | "gemini" | "cerebras" | "openrouter" | "openai";
   model: string;
   apiKey: string;
   prompt: string;
@@ -176,10 +200,17 @@ async function callLlm(args: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: args.prompt }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 2000 },
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 4000,
+          responseMimeType: "application/json",
+        },
       }),
     });
-    if (!res.ok) throw new Error(`gemini ${res.status}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`gemini ${res.status} ${body.slice(0, 200)}`);
+    }
     const j = (await res.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
     };
@@ -190,21 +221,39 @@ async function callLlm(args: {
     groq: "https://api.groq.com/openai/v1/chat/completions",
     cerebras: "https://api.cerebras.ai/v1/chat/completions",
     openrouter: "https://openrouter.ai/api/v1/chat/completions",
+    openai: "https://api.openai.com/v1/chat/completions",
   };
+
+  // JSON response mode — works on Groq, OpenAI, OpenRouter.
+  // Cerebras doesn't support it yet, so we omit for that provider.
+  const supportsJsonMode = args.provider !== "cerebras";
+
+  const body: Record<string, unknown> = {
+    model: args.model,
+    messages: [
+      {
+        role: "system",
+        content: "You return valid JSON only. No prose. No markdown fences.",
+      },
+      { role: "user", content: args.prompt },
+    ],
+    temperature: 0.2,
+    max_tokens: 4000,
+  };
+  if (supportsJsonMode) body.response_format = { type: "json_object" };
+
   const res = await fetch(endpoints[args.provider], {
     method: "POST",
     headers: {
       Authorization: `Bearer ${args.apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: args.model,
-      messages: [{ role: "user", content: args.prompt }],
-      temperature: 0.2,
-      max_tokens: 2000,
-    }),
+    body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`${args.provider} ${res.status}`);
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    throw new Error(`${args.provider} ${res.status} ${errBody.slice(0, 200)}`);
+  }
   const j = (await res.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
   };
@@ -217,35 +266,84 @@ function parseScoreArray(text: string, places: PlaceIn[]): ScoredPlace[] {
     .replace(/^```(?:json)?/i, "")
     .replace(/```$/i, "")
     .trim();
-  let arr: unknown;
+  let parsed: unknown;
   try {
-    arr = JSON.parse(jsonStr);
+    parsed = JSON.parse(jsonStr);
   } catch {
-    const start = jsonStr.indexOf("[");
-    const end = jsonStr.lastIndexOf("]");
-    if (start >= 0 && end > start) {
-      try {
-        arr = JSON.parse(jsonStr.slice(start, end + 1));
-      } catch {
+    // Try to extract a JSON object or array from the middle of the text
+    const objStart = jsonStr.indexOf("{");
+    const objEnd = jsonStr.lastIndexOf("}");
+    const arrStart = jsonStr.indexOf("[");
+    const arrEnd = jsonStr.lastIndexOf("]");
+    const useObj = objStart >= 0 && objEnd > objStart && (arrStart < 0 || objStart < arrStart);
+    try {
+      if (useObj) {
+        parsed = JSON.parse(jsonStr.slice(objStart, objEnd + 1));
+      } else if (arrStart >= 0 && arrEnd > arrStart) {
+        parsed = JSON.parse(jsonStr.slice(arrStart, arrEnd + 1));
+      } else {
         return [];
       }
-    } else {
+    } catch {
       return [];
     }
   }
+
+  // Unwrap common shapes:
+  //   [{...}, {...}]                — bare array
+  //   {scores: [...]}, {results: [...]}, {ranked: [...]}, {rankings: [...]}
+  //   {data: [...]}
+  let arr: unknown = parsed;
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const obj = parsed as Record<string, unknown>;
+    for (const key of ["scores", "results", "ranked", "rankings", "data", "items", "candidates"]) {
+      if (Array.isArray(obj[key])) {
+        arr = obj[key];
+        break;
+      }
+    }
+    // Some models return {[id]: {score, reason}} — flatten to array
+    if (!Array.isArray(arr)) {
+      const entries = Object.entries(obj);
+      const looksLikeMap = entries.every(
+        ([k, v]) =>
+          places.some((p) => p.googlePlaceId === k) ||
+          (typeof v === "object" && v !== null && ("score" in v || "reason" in v)),
+      );
+      if (looksLikeMap && entries.length > 0) {
+        arr = entries.map(([id, v]) => ({
+          id,
+          ...(typeof v === "object" && v ? v : {}),
+        }));
+      }
+    }
+  }
+
   if (!Array.isArray(arr)) return [];
 
   const validIds = new Set(places.map((p) => p.googlePlaceId));
   return arr
     .map((row: unknown): ScoredPlace | null => {
       if (typeof row !== "object" || !row) return null;
-      const r = row as { id?: string; score?: number; reason?: string };
-      if (typeof r.id !== "string" || !validIds.has(r.id)) return null;
-      const score = typeof r.score === "number" ? Math.max(0, Math.min(100, r.score)) : 50;
+      const r = row as {
+        id?: string;
+        googlePlaceId?: string;
+        placeId?: string;
+        score?: number;
+        fitScore?: number;
+        reason?: string;
+        fitReason?: string;
+        explanation?: string;
+      };
+      const id = r.id ?? r.googlePlaceId ?? r.placeId;
+      if (typeof id !== "string" || !validIds.has(id)) return null;
+      const rawScore = r.score ?? r.fitScore;
+      const score = typeof rawScore === "number" ? Math.max(0, Math.min(100, rawScore)) : 50;
+      const reason = r.reason ?? r.fitReason ?? r.explanation ?? "";
       return {
-        googlePlaceId: r.id,
+        googlePlaceId: id,
         fitScore: Math.round(score),
-        fitReason: (r.reason ?? "").slice(0, 200),
+        fitReason: reason.slice(0, 200),
       };
     })
     .filter((x): x is ScoredPlace => x !== null);

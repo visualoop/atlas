@@ -272,6 +272,7 @@ export const searchNearby = action({
     category: v.optional(v.string()),                     // key of INCLUDED_TYPE_MAP
     includedType: v.optional(v.string()),                 // explicit override
     useLegacy: v.optional(v.boolean()),                   // default true — Legacy Places API
+    nameKeyword: v.optional(v.string()),                  // free-text keyword (name/type/address)
   },
   handler: async (ctx, args): Promise<{
     places: Array<{
@@ -317,6 +318,10 @@ export const searchNearby = action({
         key: setup.apiKey,
       });
       if (type) params.set("type", type);
+      // Google Legacy Nearby Search's `keyword` matches business
+      // name, type, and address content.
+      const kw = args.nameKeyword?.trim();
+      if (kw) params.set("keyword", kw);
 
       try {
         const res = await fetch(`${LEGACY_NEARBY_ENDPOINT}?${params.toString()}`);
@@ -345,26 +350,46 @@ export const searchNearby = action({
       }
     }
 
-    // Fallback: Places API (New) — only when explicitly requested
+    // Fallback: Places API (New)
+    //   - If a keyword is provided, use `places:searchText` — the New
+    //     API's text search that combines free-text with location bias.
+    //   - Otherwise, use `places:searchNearby` — pure nearby by radius.
+    const kwNew = args.nameKeyword?.trim();
     const includedTypes = args.includedType
       ? [args.includedType]
       : args.category
       ? INCLUDED_TYPE_MAP[args.category]
       : undefined;
 
-    const body: Record<string, unknown> = {
-      maxResultCount: 20,
-      locationRestriction: {
-        circle: {
-          center: { latitude: args.latitude, longitude: args.longitude },
-          radius: Math.min(Math.max(args.radiusMeters, 1), 50_000),
-        },
-      },
-    };
-    if (includedTypes) body.includedTypes = includedTypes;
+    const endpointNew = kwNew
+      ? "https://places.googleapis.com/v1/places:searchText"
+      : NEARBY_ENDPOINT_NEW;
+
+    const body: Record<string, unknown> = kwNew
+      ? {
+          textQuery: kwNew,
+          maxResultCount: 20,
+          locationBias: {
+            circle: {
+              center: { latitude: args.latitude, longitude: args.longitude },
+              radius: Math.min(Math.max(args.radiusMeters, 1), 50_000),
+            },
+          },
+        }
+      : {
+          maxResultCount: 20,
+          locationRestriction: {
+            circle: {
+              center: { latitude: args.latitude, longitude: args.longitude },
+              radius: Math.min(Math.max(args.radiusMeters, 1), 50_000),
+            },
+          },
+        };
+    if (!kwNew && includedTypes) body.includedTypes = includedTypes;
+    if (kwNew && includedTypes) body.includedType = includedTypes[0];
 
     try {
-      const res = await fetch(NEARBY_ENDPOINT_NEW, {
+      const res = await fetch(endpointNew, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

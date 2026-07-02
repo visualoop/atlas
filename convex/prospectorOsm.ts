@@ -55,6 +55,202 @@ const CATEGORY_TAG_QUERIES: Record<string, string> = {
 };
 
 /**
+ * Keyword aliases → additional OSM tag queries.
+ *
+ * The problem: if a user types "pharmacy" under the "Retail" category,
+ * we'd search `shop` with `name~pharmacy`, missing places tagged
+ * `amenity=pharmacy` (which is where pharmacies actually live in OSM).
+ *
+ * Solution: for known common keywords, expand the search to also
+ * include the tag queries that ACTUALLY host that business type in OSM.
+ * The user's chosen category is still respected — we UNION with the
+ * alias queries so both surface.
+ */
+const KEYWORD_ALIASES: Record<string, string[]> = {
+  pharmacy: [
+    'nwr["amenity"="pharmacy"]',
+    'nwr["shop"="chemist"]',
+    'nwr["healthcare"="pharmacy"]',
+  ],
+  chemist: [
+    'nwr["amenity"="pharmacy"]',
+    'nwr["shop"="chemist"]',
+  ],
+  salon: [
+    'nwr["shop"="beauty"]',
+    'nwr["shop"="hairdresser"]',
+  ],
+  beauty: [
+    'nwr["shop"="beauty"]',
+    'nwr["shop"="cosmetics"]',
+  ],
+  barber: [
+    'nwr["shop"="hairdresser"]',
+  ],
+  hairdresser: [
+    'nwr["shop"="hairdresser"]',
+    'nwr["shop"="beauty"]',
+  ],
+  cafe: [
+    'nwr["amenity"="cafe"]',
+  ],
+  coffee: [
+    'nwr["amenity"="cafe"]',
+    'nwr["shop"="coffee"]',
+  ],
+  bar: [
+    'nwr["amenity"="bar"]',
+    'nwr["amenity"="pub"]',
+    'nwr["amenity"="nightclub"]',
+  ],
+  restaurant: [
+    'nwr["amenity"="restaurant"]',
+  ],
+  hospital: [
+    'nwr["amenity"="hospital"]',
+  ],
+  clinic: [
+    'nwr["amenity"="clinic"]',
+    'nwr["amenity"="doctors"]',
+    'nwr["healthcare"="clinic"]',
+  ],
+  dentist: [
+    'nwr["amenity"="dentist"]',
+    'nwr["healthcare"="dentist"]',
+  ],
+  hotel: [
+    'nwr["tourism"="hotel"]',
+    'nwr["tourism"="guest_house"]',
+    'nwr["tourism"="hostel"]',
+  ],
+  gym: [
+    'nwr["leisure"="fitness_centre"]',
+    'nwr["leisure"="sports_centre"]',
+  ],
+  fitness: [
+    'nwr["leisure"="fitness_centre"]',
+  ],
+  laundry: [
+    'nwr["shop"="laundry"]',
+    'nwr["shop"="dry_cleaning"]',
+  ],
+  hardware: [
+    'nwr["shop"="hardware"]',
+    'nwr["shop"="doityourself"]',
+    'nwr["shop"="paint"]',
+  ],
+  bookshop: [
+    'nwr["shop"="books"]',
+    'nwr["shop"="stationery"]',
+  ],
+  bookstore: [
+    'nwr["shop"="books"]',
+  ],
+  butcher: [
+    'nwr["shop"="butcher"]',
+  ],
+  bakery: [
+    'nwr["shop"="bakery"]',
+    'nwr["shop"="pastry"]',
+  ],
+  supermarket: [
+    'nwr["shop"="supermarket"]',
+    'nwr["shop"="convenience"]',
+  ],
+  furniture: [
+    'nwr["shop"="furniture"]',
+  ],
+  electronics: [
+    'nwr["shop"="electronics"]',
+    'nwr["shop"="mobile_phone"]',
+    'nwr["shop"="computer"]',
+  ],
+  phone: [
+    'nwr["shop"="mobile_phone"]',
+  ],
+  boutique: [
+    'nwr["shop"="clothes"]',
+    'nwr["shop"="boutique"]',
+  ],
+  clothes: [
+    'nwr["shop"="clothes"]',
+  ],
+  clothing: [
+    'nwr["shop"="clothes"]',
+  ],
+  fashion: [
+    'nwr["shop"="clothes"]',
+    'nwr["shop"="boutique"]',
+    'nwr["shop"="shoes"]',
+  ],
+  shoes: [
+    'nwr["shop"="shoes"]',
+  ],
+  bank: [
+    'nwr["amenity"="bank"]',
+  ],
+  atm: [
+    'nwr["amenity"="atm"]',
+  ],
+  school: [
+    'nwr["amenity"="school"]',
+    'nwr["amenity"="kindergarten"]',
+    'nwr["amenity"="college"]',
+  ],
+  garage: [
+    'nwr["shop"="car_repair"]',
+    'nwr["shop"="car_parts"]',
+    'nwr["amenity"="car_wash"]',
+  ],
+  mechanic: [
+    'nwr["shop"="car_repair"]',
+  ],
+  fuel: [
+    'nwr["amenity"="fuel"]',
+  ],
+  petrol: [
+    'nwr["amenity"="fuel"]',
+  ],
+  church: [
+    'nwr["amenity"="place_of_worship"]',
+  ],
+  mosque: [
+    'nwr["amenity"="place_of_worship"]',
+  ],
+  supermart: [
+    'nwr["shop"="supermarket"]',
+  ],
+  grocery: [
+    'nwr["shop"="supermarket"]',
+    'nwr["shop"="convenience"]',
+    'nwr["shop"="greengrocer"]',
+  ],
+  jewellery: [
+    'nwr["shop"="jewelry"]',
+  ],
+  jewelry: [
+    'nwr["shop"="jewelry"]',
+  ],
+  optician: [
+    'nwr["shop"="optician"]',
+  ],
+  eyeglasses: [
+    'nwr["shop"="optician"]',
+  ],
+};
+
+function keywordAliasQueries(keyword: string): string[] {
+  const lc = keyword.toLowerCase().trim();
+  // Direct hit
+  if (KEYWORD_ALIASES[lc]) return KEYWORD_ALIASES[lc];
+  // Fuzzy — does any alias key appear as a whole word in the keyword?
+  for (const [alias, queries] of Object.entries(KEYWORD_ALIASES)) {
+    if (lc.includes(alias)) return queries;
+  }
+  return [];
+}
+
+/**
  * Kenyan mega-brand deny-list. These businesses have enterprise
  * procurement, existing POS/CRM systems, and multi-quarter sales
  * cycles. They almost never respond to a founder's cold outreach.
@@ -157,18 +353,37 @@ export const searchNearbyOsm = action({
 
     // 2. Fetch from Overpass
     const catQuery = CATEGORY_TAG_QUERIES[category] ?? CATEGORY_TAG_QUERIES.retail;
-    // If keyword provided, wrap each tag clause with a name-contains filter.
-    // Otherwise just use the tag clauses as-is.
-    const clauses = catQuery
-      .split(";")
-      .filter((q) => q.trim())
-      .map((q) => {
-        const base = q.trim();
-        const nameFilter = keyword
-          ? `["name"~"${keyword.replace(/["\\]/g, "")}",i]`
-          : "";
-        return `${base}${nameFilter}(around:${radius},${args.latitude},${args.longitude});`;
-      });
+
+    // Build the union of tag clauses:
+    //  - If no keyword: use just the category tag queries
+    //  - If keyword matches an alias: use category + alias tag queries + name-filtered category
+    //  - If keyword is arbitrary: use category with name-contains filter
+    let clauses: string[] = [];
+    if (!keyword) {
+      clauses = catQuery
+        .split(";")
+        .filter((q) => q.trim())
+        .map((q) => `${q.trim()}(around:${radius},${args.latitude},${args.longitude});`);
+    } else {
+      const aliasQueries = keywordAliasQueries(keyword);
+      const safeKw = keyword.replace(/["\\]/g, "");
+      const nameFilter = `["name"~"${safeKw}",i]`;
+
+      // Alias-matched tag queries (broad — everyone with amenity=pharmacy shows up)
+      for (const q of aliasQueries) {
+        clauses.push(`${q}(around:${radius},${args.latitude},${args.longitude});`);
+      }
+      // Also try name-in-category (catches things like "Ridge Pharmacy" tagged as shop=cosmetics)
+      for (const q of catQuery.split(";").filter((s) => s.trim())) {
+        clauses.push(
+          `${q.trim()}${nameFilter}(around:${radius},${args.latitude},${args.longitude});`,
+        );
+      }
+      // Fallback: any place with keyword in its name (covers non-standard tags)
+      clauses.push(
+        `nwr${nameFilter}(around:${radius},${args.latitude},${args.longitude});`,
+      );
+    }
 
     const overpassQL = `
 [out:json][timeout:15];
@@ -213,7 +428,15 @@ out center tags 60;
           continue;
         }
 
-        const places = (json.elements ?? [])
+        // Dedupe: multiple tag clauses can return the same OSM feature.
+        const seenIds = new Set<string>();
+        const rawPlaces = (json.elements ?? [])
+          .filter((el) => {
+            const key = `${el.type}:${el.id}`;
+            if (seenIds.has(key)) return false;
+            seenIds.add(key);
+            return true;
+          })
           .map((el) => {
             const lat = el.lat ?? el.center?.lat;
             const lon = el.lon ?? el.center?.lon;
@@ -256,7 +479,7 @@ out center tags 60;
 
         // Filter out Kenyan mega-brands (Naivas, Safaricom, Bata, etc.)
         // — they don't respond to founder cold outreach.
-        const noMega = places.filter((p) => !isMegaBrand(p.name));
+        const noMega = rawPlaces.filter((p) => !isMegaBrand(p.name));
 
         // Collapse duplicates by exact name — if OSM has 5 branches of
         // "Prestige Bookshop", keep just the first with a hint that
