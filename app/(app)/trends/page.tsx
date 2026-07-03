@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import {
   Plus, Loader2, ExternalLink, MessageSquare, Sparkles, X, Check,
-  TrendingUp, Eye, Radio,
+  TrendingUp, Eye, Radio, MoreHorizontal, Pencil, Trash2, Pause, Play,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
@@ -12,6 +12,23 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNowStrict } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function TrendsPage() {
   const watches = useQuery(api.trends.listWatches, {});
@@ -115,29 +132,118 @@ export default function TrendsPage() {
 /* ------------------------------------------------------------------ */
 
 function WatchRow({ watch: w }: { watch: Doc<"brandWatches"> }) {
+  const [editing, setEditing] = useState(false);
   const KIND_META: Record<string, { label: string; color: string }> = {
     brand: { label: "Brand", color: "text-primary" },
     competitor: { label: "Comp", color: "text-[var(--warning)]" },
     topic: { label: "Topic", color: "text-[var(--info)]" },
   };
   const meta = KIND_META[w.kind];
+  const archive = useMutation(api.trends.archiveWatch);
+  const update = useMutation(api.trends.updateWatch);
+
+  async function toggleActive() {
+    try {
+      await update({ id: w._id, patch: { active: !w.active } });
+      toast.success(w.active ? "Paused." : "Resumed.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed.");
+    }
+  }
+
+  async function handleArchive() {
+    if (!window.confirm(`Delete watch "${w.label}"? Mentions will be preserved.`)) return;
+    try {
+      await archive({ id: w._id });
+      toast.success("Deleted.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed.");
+    }
+  }
+
   return (
-    <li className="px-3 py-2.5">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-sm font-medium truncate">{w.label}</p>
-        <span className={cn("text-[10px] font-mono uppercase tracking-[0.12em] shrink-0", meta?.color)}>
-          {meta?.label}
-        </span>
-      </div>
-      <div className="flex items-baseline justify-between mt-1 text-[10px] font-mono text-muted-foreground num">
-        <span>{w.mentionCount} mentions</span>
-        {w.lastScanAt ? (
-          <span>{formatDistanceToNowStrict(new Date(w.lastScanAt), { addSuffix: true })}</span>
-        ) : (
-          <span className="text-[var(--warning)]">never scanned</span>
+    <>
+      <li className="px-3 py-2.5 group hover:bg-muted/30 transition-colors">
+        <div className="flex items-baseline justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-sm font-medium truncate text-left hover:underline min-w-0 flex-1"
+          >
+            {w.label}
+          </button>
+          <span
+            className={cn(
+              "text-[10px] font-mono uppercase tracking-[0.12em] shrink-0",
+              meta?.color,
+            )}
+          >
+            {meta?.label}
+          </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className={cn(
+                "size-6 grid place-items-center text-muted-foreground hover:text-foreground rounded transition-opacity",
+                "opacity-0 group-hover:opacity-100 focus:opacity-100 data-[state=open]:opacity-100",
+              )}
+              aria-label="Watch options"
+            >
+              <MoreHorizontal className="size-3.5" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setEditing(true)}>
+                <Pencil className="size-3.5" /> Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={toggleActive}>
+                {w.active ? (
+                  <>
+                    <Pause className="size-3.5" /> Pause scans
+                  </>
+                ) : (
+                  <>
+                    <Play className="size-3.5" /> Resume scans
+                  </>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleArchive}
+                className="text-destructive"
+              >
+                <Trash2 className="size-3.5" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <div className="flex items-baseline justify-between mt-1 text-[10px] font-mono text-muted-foreground num">
+          <span>
+            {w.mentionCount} mention{w.mentionCount === 1 ? "" : "s"}
+            {!w.active && (
+              <span className="ml-2 text-[var(--warning)]">paused</span>
+            )}
+          </span>
+          {w.lastScanAt ? (
+            <span>
+              {formatDistanceToNowStrict(new Date(w.lastScanAt), {
+                addSuffix: true,
+              })}
+            </span>
+          ) : (
+            <span className="text-[var(--warning)]">never scanned</span>
+          )}
+        </div>
+        {w.queries.length > 0 && (
+          <p className="text-[10px] font-mono text-muted-foreground/70 mt-1 truncate">
+            {w.queries.join(" · ")}
+          </p>
         )}
-      </div>
-    </li>
+      </li>
+      {editing && (
+        <WatchDialog
+          existing={w}
+          onClose={() => setEditing(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -259,12 +365,21 @@ function SentimentPill({ sentiment }: { sentiment: string }) {
 /* New watch dialog                                                     */
 /* ------------------------------------------------------------------ */
 
-function NewWatchDialog({ onClose }: { onClose: () => void }) {
-  const [label, setLabel] = useState("");
-  const [kind, setKind] = useState<"brand" | "competitor" | "topic">("brand");
-  const [queries, setQueries] = useState("");
+function WatchDialog({
+  existing,
+  onClose,
+}: {
+  existing?: Doc<"brandWatches">;
+  onClose: () => void;
+}) {
+  const [label, setLabel] = useState(existing?.label ?? "");
+  const [kind, setKind] = useState<"brand" | "competitor" | "topic">(
+    existing?.kind ?? "brand",
+  );
+  const [queries, setQueries] = useState(existing?.queries.join(", ") ?? "");
   const [saving, setSaving] = useState(false);
   const create = useMutation(api.trends.createWatch);
+  const update = useMutation(api.trends.updateWatch);
 
   const KINDS = [
     { value: "brand" as const, label: "Brand" },
@@ -279,12 +394,24 @@ function NewWatchDialog({ onClose }: { onClose: () => void }) {
     }
     setSaving(true);
     try {
-      await create({
-        label: label.trim(),
-        kind,
-        queries: queries.split(",").map((q) => q.trim()).filter(Boolean),
-      });
-      toast.success("Watch added.");
+      const parsedQueries = queries
+        .split(",")
+        .map((q) => q.trim())
+        .filter(Boolean);
+      if (existing) {
+        await update({
+          id: existing._id,
+          patch: { label: label.trim(), queries: parsedQueries },
+        });
+        toast.success("Updated.");
+      } else {
+        await create({
+          label: label.trim(),
+          kind,
+          queries: parsedQueries,
+        });
+        toast.success("Watch added.");
+      }
       onClose();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed.");
@@ -294,79 +421,95 @@ function NewWatchDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center pointer-events-none">
-      <div
-        onClick={() => !saving && onClose()}
-        className="absolute inset-0 bg-background/70 backdrop-blur-sm pointer-events-auto"
-      />
-      <div className="relative pointer-events-auto bg-background border border-border w-full max-w-lg shadow-2xl">
-        <header className="px-6 pt-5 pb-3 border-b border-border">
-          <p className="eyebrow font-mono text-muted-foreground">New watch</p>
-          <h2 className="font-display italic text-2xl mt-1">What should we <em>listen for</em>?</h2>
-        </header>
-        <div className="px-6 py-4 space-y-3">
-          <label className="block space-y-1.5">
-            <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Label</span>
-            <input
+    <Dialog open onOpenChange={(o) => !o && !saving && onClose()}>
+      <DialogContent className="max-w-lg gap-0 p-0">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b space-y-1.5">
+          <p className="text-[11px] font-mono uppercase tracking-[0.14em] text-muted-foreground">
+            {existing ? "Edit watch" : "New watch"}
+          </p>
+          <DialogTitle className="text-xl font-semibold">
+            {existing ? existing.label : "What should we listen for?"}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            {existing ? "Update this watch" : "Create a new brand or topic watch"}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="px-6 py-4 space-y-4">
+          <div className="space-y-1.5">
+            <Label>Label</Label>
+            <Input
               autoFocus
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="e.g. Omnix POS"
-              className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
+              placeholder="Omnix POS"
             />
-          </label>
-          <div className="space-y-1.5">
-            <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Kind</span>
-            <div className="flex gap-1">
-              {KINDS.map((k) => (
-                <button
-                  key={k.value}
-                  onClick={() => setKind(k.value)}
-                  className={cn(
-                    "h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] transition-colors",
-                    kind === k.value
-                      ? "bg-foreground text-background"
-                      : "border border-border text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {k.label}
-                </button>
-              ))}
-            </div>
           </div>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
-              Queries <span className="normal-case tracking-normal text-muted-foreground/60">— comma-separated</span>
-            </span>
-            <input
+          {!existing && (
+            <div className="space-y-1.5">
+              <Label>Kind</Label>
+              <div className="flex gap-1.5">
+                {KINDS.map((k) => (
+                  <button
+                    key={k.value}
+                    onClick={() => setKind(k.value)}
+                    className={cn(
+                      "h-9 px-4 rounded-md text-sm font-medium transition-colors",
+                      kind === k.value
+                        ? "bg-primary text-primary-foreground"
+                        : "border bg-background text-muted-foreground hover:text-foreground hover:bg-muted",
+                    )}
+                  >
+                    {k.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label className="flex items-baseline gap-2">
+              Queries
+              <span className="text-muted-foreground/60 text-[10px] font-normal">
+                comma-separated
+              </span>
+            </Label>
+            <Input
               value={queries}
               onChange={(e) => setQueries(e.target.value)}
               placeholder='"Omnix POS", "Blyss Omnix", "@blyss_ke"'
-              className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+              className="font-mono"
             />
-          </label>
+            <p className="text-[11px] text-muted-foreground">
+              Each query runs OR-matched. Include your brand as an @handle,
+              hashtags, product names, and common misspellings.
+            </p>
+          </div>
         </div>
-        <footer className="border-t border-border px-6 py-3 flex items-center gap-2 justify-end">
-          <button
+        <DialogFooter className="border-t px-6 py-3 flex-row items-center justify-end gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onClose}
             disabled={saving}
-            className="inline-flex items-center h-8 px-4 text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground transition-colors"
           >
             Cancel
-          </button>
-          <button
-            onClick={submit}
-            disabled={saving}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-8 px-5 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
+          </Button>
+          <Button onClick={submit} disabled={saving} size="sm" className="gap-1.5">
+            {saving ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : existing ? (
+              <Check className="size-3.5" />
+            ) : (
+              <Radio className="size-3.5" />
             )}
-          >
-            {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Radio className="size-3.5" />}
-            Add watch
-          </button>
-        </footer>
-      </div>
-    </div>
+            {existing ? "Save" : "Add watch"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
+}
+
+// Backwards-compat wrapper used by the page's create-flow state.
+function NewWatchDialog({ onClose }: { onClose: () => void }) {
+  return <WatchDialog onClose={onClose} />;
 }
