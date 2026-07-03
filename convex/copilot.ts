@@ -48,25 +48,18 @@ const CHAT_MSG = v.object({
   tool_calls: v.optional(v.any()),
 });
 
-const BASE_SYSTEM = `You are Atlas Copilot, an agentic assistant for a founder.
+const BASE_SYSTEM = `You are Atlas Copilot, an agent that helps a solo founder run their business. Use the tools provided to answer every question about their workspace. Do not describe what you're going to do — just do it.
 
-You have tools to query the founder's workspace. **Use them proactively.** Don't ask permission — call the tool, then answer with the data.
+Tone: Direct, dense, Kenyan English. No preamble. No AI-slop phrases like "delve", "hope this finds you", "in today's fast-paced world", "let me help you with that", "I'll check". No em-dash filler.
 
-Behavior rules:
-- On any vague greeting or open-ended question ("hi", "what should I do today", "catch me up"), call \`workspace_snapshot\` FIRST.
-- To answer questions about specific records (contacts, companies, deals, conversations, tasks, activity), call the appropriate lookup tool.
-- To answer "who did I speak to yesterday" call \`list_recent_messages\` with sinceHoursAgo: 48.
-- To answer "my top open deals" call \`list_deals\` with state: "open", sortBy: "amount".
-- To answer "what's on my list today" call \`list_tasks\` with filter: "today".
-- To answer "how's the pipeline" call \`workspace_kpis\`.
-- Never claim you don't have context without first calling a tool to check.
-- Never say "I need to check your workspace" — just check.
+Rules:
+- For any question about contacts, companies, deals, conversations, messages, activity, tasks, KPIs, or the workspace in general — call the appropriate tool. Never guess. Never say "I don't have access" without checking first.
+- For vague greetings or open-ended questions like "hi", "what should I do today", "catch me up", call the workspace snapshot tool first.
+- For "who did I speak to" or "any replies" or "yesterday's messages", use the recent messages tool with an appropriate sinceHoursAgo (yesterday = 48, today = 24, last week = 168).
+- When referencing a workspace record, include its ID in square brackets so the user can click through: [contact:jd7abc123].
+- Never invent data. If a tool returns nothing, say so plainly.
 
-Style:
-- Kenyan English. No AI slop ("delve", "hope this finds you", "in today's fast-paced world"). No em-dash filler.
-- Short and dense. Numbers, names, next actions.
-- When citing a workspace record, include its ID in brackets so the founder can click through: [contact:jd7abc123].
-- Never invent data. If a tool returns nothing, say "no results" and suggest what to check.`;
+Length: 1-3 short sentences, or a tight bulleted list. Never more unless the user asks for detail.`;
 
 function buildSystemPrompt(brand: {
   workspaceName?: string;
@@ -333,18 +326,71 @@ interface ChatInputMessage {
  * Convert legacy ChatInputMessage (from client) to AI SDK ModelMessage.
  * We flatten tool history into the user/assistant text stream — AI SDK
  * will re-emit its own tool_calls in its own format on next iteration.
+ *
+ * Sanitization: assistant messages from OLD sessions may contain
+ * literal tool-name text like backticked names or `<function>` XML
+ * from before AI SDK was wired. Those poison future turns because
+ * the model learns to imitate them. Strip them here.
+ *
+ * Windowing: keep only the last 6 turns (3 exchanges) so ancient
+ * broken exchanges fall out of context entirely.
  */
 function toModelMessages(input: ChatInputMessage[]): ModelMessage[] {
-  return input
+  const cleaned = input
     .filter((m) => m.role !== "system") // system is passed separately
-    .filter((m) => m.role !== "tool")   // tool history is model-managed
+    .filter((m) => m.role !== "tool") // tool history is model-managed
     .filter((m) => m.content?.trim())
     .map((m): ModelMessage => {
-      if (m.role === "user") return { role: "user", content: m.content };
-      if (m.role === "assistant") return { role: "assistant", content: m.content };
-      // Shouldn't reach here, but fallback
-      return { role: "user", content: m.content };
+      // Scrub tool-call syntax leakage from assistant messages so the
+      // model doesn't imitate broken past responses
+      let content = m.content;
+      if (m.role === "assistant") {
+        content = sanitizeAssistantText(content);
+      }
+      if (m.role === "user") return { role: "user", content };
+      if (m.role === "assistant") return { role: "assistant", content };
+      return { role: "user", content };
     });
+
+  // Keep last 6 messages max — protects against context poisoning
+  // from long broken threads. If user needs more history they can
+  // clear + re-ask.
+  const WINDOW = 6;
+  return cleaned.slice(-WINDOW);
+}
+
+/**
+ * Strip anything that looks like tool-call syntax leakage.
+ * Common failure modes we've seen:
+ *   - Backticked tool names: `workspace_snapshot`
+ *   - XML function tags: <function>...</function>
+ *   - Raw JSON tool_call blobs at end of message
+ *   - Trailing "I need to check your workspace" placeholder
+ */
+function sanitizeAssistantText(text: string): string {
+  let cleaned = text;
+
+  // Strip <function>...</function> tags (Groq compound leakage)
+  cleaned = cleaned.replace(/<function>[\s\S]*?<\/function>/gi, "");
+  cleaned = cleaned.replace(/<\/?function[^>]*>/gi, "");
+
+  // Strip backticked tool names — but only when they appear alone on
+  // a line (typical failure pattern). Preserve inline code refs.
+  cleaned = cleaned.replace(
+    /^`(workspace_snapshot|workspace_kpis|search_contacts|search_companies|search_deals|list_deals|list_recent_conversations|list_recent_messages|list_recent_activity|list_tasks)[^`]*`\s*$/gm,
+    "",
+  );
+
+  // Strip pseudo tool-call syntax like `tool_name>{...}
+  cleaned = cleaned.replace(/`\w+>\{[^`]*`/g, "");
+
+  // Collapse multiple blank lines
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
+
+  // If we scrubbed everything, return a placeholder so the model
+  // doesn't see an empty assistant message
+  if (!cleaned) return "(previous response omitted)";
+  return cleaned;
 }
 
 export const chat = action({
