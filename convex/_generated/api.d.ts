@@ -38,6 +38,8 @@ import type * as composioHelpers from "../composioHelpers.js";
 import type * as contacts from "../contacts.js";
 import type * as content from "../content.js";
 import type * as copilot from "../copilot.js";
+import type * as copilotAgent from "../copilotAgent.js";
+import type * as copilotAgentKeys from "../copilotAgentKeys.js";
 import type * as copilotHelpers from "../copilotHelpers.js";
 import type * as crons from "../crons.js";
 import type * as demoRecordings from "../demoRecordings.js";
@@ -142,6 +144,8 @@ declare const fullApi: ApiFromModules<{
   contacts: typeof contacts;
   content: typeof content;
   copilot: typeof copilot;
+  copilotAgent: typeof copilotAgent;
+  copilotAgentKeys: typeof copilotAgentKeys;
   copilotHelpers: typeof copilotHelpers;
   crons: typeof crons;
   demoRecordings: typeof demoRecordings;
