@@ -11,6 +11,7 @@ import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 interface Props {
   campaignId: Id<"campaigns">;
@@ -374,23 +375,21 @@ function StepRow({
 }
 
 function SheetShell({
-  children, onClose,
-}: { children: React.ReactNode; onClose: () => void }) {
+  children,
+  onClose,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
   return (
-    <div className="fixed inset-0 z-50 flex justify-end pointer-events-none">
-      <div
-        onClick={onClose}
-        className="absolute inset-0 bg-background/60 backdrop-blur-sm pointer-events-auto"
-      />
-      <div className="relative pointer-events-auto bg-background border-l border-border w-full max-w-2xl h-full overflow-y-auto shadow-2xl">
-        <button
-          onClick={onClose}
-          className="absolute right-4 top-4 size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors z-10"
-        >
-          <X className="size-4" />
-        </button>
+    <Sheet open onOpenChange={(o) => !o && onClose()}>
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-2xl p-0 overflow-y-auto"
+      >
+        <SheetTitle className="sr-only">Campaign detail</SheetTitle>
         {children}
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }

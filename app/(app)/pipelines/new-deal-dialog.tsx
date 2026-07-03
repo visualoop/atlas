@@ -4,9 +4,26 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { X, Plus, Loader2, User, Building2 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
-import type { Id, Doc } from "@/convex/_generated/dataModel";
+import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Props {
   pipelineId: Id<"pipelines">;
@@ -14,7 +31,7 @@ interface Props {
 }
 
 export function NewDealDialog({ pipelineId, onClose }: Props) {
-  const stages = useQuery(api.pipelines.listStages, { pipelineId });
+  useQuery(api.pipelines.listStages, { pipelineId }); // prefetch stages
   const [name, setName] = useState("");
   const [amount, setAmount] = useState<string>("");
   const [currency, setCurrency] = useState("KES");
@@ -68,112 +85,120 @@ export function NewDealDialog({ pipelineId, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center pointer-events-none">
-      <div
-        onClick={() => !saving && onClose()}
-        className="absolute inset-0 bg-background/70 backdrop-blur-sm pointer-events-auto"
-      />
-      <div className="relative pointer-events-auto bg-background border border-border w-full max-w-lg shadow-2xl">
-        <header className="px-6 pt-5 pb-3 border-b border-border flex items-start justify-between">
-          <div>
-            <p className="eyebrow font-mono text-muted-foreground">New deal</p>
-            <h2 className="font-display italic text-2xl mt-1">What's the <em>opportunity</em>?</h2>
-          </div>
-          <button
-            onClick={() => !saving && onClose()}
-            className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          >
-            <X className="size-4" />
-          </button>
-        </header>
-        <div className="px-6 py-4 space-y-3">
-          <Field label="Name">
-            <input
+    <Dialog open onOpenChange={(o) => !o && !saving && onClose()}>
+      <DialogContent className="max-w-lg gap-0 p-0">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b space-y-1.5">
+          <p className="text-[11px] font-mono uppercase tracking-[0.14em] text-muted-foreground">
+            New deal
+          </p>
+          <DialogTitle className="text-xl font-semibold">
+            What&apos;s the opportunity?
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Create a new deal in the current pipeline.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="px-6 py-4 space-y-4">
+          <div className="space-y-1.5">
+            <Label>Name</Label>
+            <Input
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Java House Nairobi — Omnix rollout"
+              placeholder="Java House Nairobi — Omnix rollout"
               onKeyDown={(e) => e.key === "Enter" && submit()}
-              className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
             />
-          </Field>
+          </div>
 
-          <div className="grid grid-cols-[1fr_100px] gap-3">
-            <Field label="Amount">
-              <input
+          <div className="grid grid-cols-[1fr_120px] gap-3">
+            <div className="space-y-1.5">
+              <Label>Amount</Label>
+              <Input
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0"
                 inputMode="decimal"
                 onKeyDown={(e) => e.key === "Enter" && submit()}
-                className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono num"
+                className="font-mono num"
               />
-            </Field>
-            <Field label="Currency">
-              <select
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                className="w-full h-9 px-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
-              >
-                <option value="KES">KES</option>
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-                <option value="GBP">GBP</option>
-              </select>
-            </Field>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Currency</Label>
+              <Select value={currency} onValueChange={(v) => v && setCurrency(v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="KES">KES</SelectItem>
+                  <SelectItem value="USD">USD</SelectItem>
+                  <SelectItem value="EUR">EUR</SelectItem>
+                  <SelectItem value="GBP">GBP</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          <Field label="Expected close">
-            <input
+          <div className="space-y-1.5">
+            <Label>Expected close</Label>
+            <Input
               type="date"
               value={expectedClose}
               onChange={(e) => setExpectedClose(e.target.value)}
-              className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
             />
-          </Field>
+          </div>
 
-          <Field label="Contact">
-            <PickerInput
-              value={contactId ? "Selected" : contactQuery}
+          <div className="space-y-1.5">
+            <Label>Contact</Label>
+            <PickerField
+              value={contactId ? "✓ selected" : contactQuery}
               onChange={setContactQuery}
               placeholder="Search contacts…"
               icon={<User className="size-3.5" />}
-              selected={contactId ? contactId : undefined}
+              hasSelection={!!contactId}
               onClear={() => setContactId(undefined)}
             />
             {contactQuery.length >= 2 && contacts && contacts.length > 0 && !contactId && (
-              <ul className="mt-1 border border-border bg-background max-h-40 overflow-y-auto text-sm">
+              <ul className="rounded-md border bg-popover max-h-40 overflow-y-auto text-sm shadow-sm">
                 {contacts.map((c) => (
                   <li key={c._id}>
                     <button
                       type="button"
-                      onClick={() => { setContactId(c._id); setContactQuery(""); }}
+                      onClick={() => {
+                        setContactId(c._id);
+                        setContactQuery("");
+                      }}
                       className="w-full text-left px-3 py-2 hover:bg-muted"
                     >
-                      {c.firstName}{c.lastName ? ` ${c.lastName}` : ""} — {c.email}
+                      {c.firstName}
+                      {c.lastName ? ` ${c.lastName}` : ""} — {c.email}
                     </button>
                   </li>
                 ))}
               </ul>
             )}
-          </Field>
+          </div>
 
-          <Field label="Company">
-            <PickerInput
-              value={companyId ? "Selected" : companyQuery}
+          <div className="space-y-1.5">
+            <Label>Company</Label>
+            <PickerField
+              value={companyId ? "✓ selected" : companyQuery}
               onChange={setCompanyQuery}
               placeholder="Search companies…"
               icon={<Building2 className="size-3.5" />}
-              selected={companyId ? companyId : undefined}
+              hasSelection={!!companyId}
               onClear={() => setCompanyId(undefined)}
             />
             {companyQuery.length >= 2 && companies && companies.length > 0 && !companyId && (
-              <ul className="mt-1 border border-border bg-background max-h-40 overflow-y-auto text-sm">
+              <ul className="rounded-md border bg-popover max-h-40 overflow-y-auto text-sm shadow-sm">
                 {companies.map((c) => (
                   <li key={c._id}>
                     <button
                       type="button"
-                      onClick={() => { setCompanyId(c._id); setCompanyQuery(""); }}
+                      onClick={() => {
+                        setCompanyId(c._id);
+                        setCompanyQuery("");
+                      }}
                       className="w-full text-left px-3 py-2 hover:bg-muted"
                     >
                       {c.name}
@@ -182,70 +207,64 @@ export function NewDealDialog({ pipelineId, onClose }: Props) {
                 ))}
               </ul>
             )}
-          </Field>
+          </div>
         </div>
-        <footer className="border-t border-border px-6 py-3 flex items-center gap-2 justify-end">
-          <button
+
+        <DialogFooter className="border-t px-6 py-3 flex-row items-center justify-end gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => !saving && onClose()}
             disabled={saving}
-            className="inline-flex items-center h-8 px-4 text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground transition-colors"
           >
             Cancel
-          </button>
-          <button
-            onClick={submit}
-            disabled={saving}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-8 px-5 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
+          </Button>
+          <Button onClick={submit} disabled={saving} size="sm" className="gap-1.5">
+            {saving ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Plus className="size-3.5" />
             )}
-          >
-            {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
             Create
-          </button>
-        </footer>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block space-y-1.5">
-      <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-function PickerInput({
-  value, onChange, placeholder, icon, selected, onClear,
+function PickerField({
+  value,
+  onChange,
+  placeholder,
+  icon,
+  hasSelection,
+  onClear,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   icon?: React.ReactNode;
-  selected?: string;
+  hasSelection?: boolean;
   onClear?: () => void;
 }) {
   return (
     <div className="relative">
-      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
         {icon}
       </div>
-      <input
-        value={selected ? "✓ selected" : value}
+      <Input
+        value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full h-9 pl-9 pr-9 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
+        className="pl-9 pr-9"
       />
-      {selected && (
+      {hasSelection && (
         <button
           type="button"
           onClick={onClear}
           className="absolute right-2 top-1/2 -translate-y-1/2 size-6 grid place-items-center text-muted-foreground hover:text-foreground"
+          aria-label="Clear selection"
         >
           <X className="size-3.5" />
         </button>

@@ -2,11 +2,22 @@
 
 import { useState } from "react";
 import { useMutation } from "convex/react";
-import { X, Loader2, Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 interface Props {
   onClose: () => void;
@@ -43,59 +54,56 @@ export function NewCampaignDialog({ onClose, onCreated }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center pointer-events-none">
-      <div
-        onClick={() => !saving && onClose()}
-        className="absolute inset-0 bg-background/70 backdrop-blur-sm pointer-events-auto"
-      />
-      <div className="relative pointer-events-auto bg-background border border-border w-full max-w-lg shadow-2xl">
-        <header className="px-6 pt-5 pb-3 border-b border-border flex items-start justify-between">
-          <div>
-            <p className="eyebrow font-mono text-muted-foreground">New campaign</p>
-            <h2 className="font-display italic text-2xl mt-1">What are you <em>reaching out</em> about?</h2>
-          </div>
-          <button
-            onClick={() => !saving && onClose()}
-            className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          >
-            <X className="size-4" />
-          </button>
-        </header>
-        <div className="px-6 py-4 space-y-3">
-          <label className="block space-y-1.5">
-            <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Name</span>
-            <input
+    <Dialog open onOpenChange={(o) => !o && !saving && onClose()}>
+      <DialogContent className="max-w-lg gap-0 p-0">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b space-y-1.5">
+          <p className="text-[11px] font-mono uppercase tracking-[0.14em] text-muted-foreground">
+            New campaign
+          </p>
+          <DialogTitle className="text-xl font-semibold">
+            What are you reaching out about?
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Create a new outbound campaign.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="px-6 py-4 space-y-4">
+          <div className="space-y-1.5">
+            <Label>Name</Label>
+            <Input
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Omnix — March demo push"
-              className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
+              placeholder="Omnix — March demo push"
               onKeyDown={(e) => e.key === "Enter" && submit()}
             />
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
-              Description <span className="normal-case tracking-normal text-muted-foreground/60">— optional</span>
-            </span>
-            <input
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="flex items-baseline gap-2">
+              Description
+              <span className="text-muted-foreground/60 text-[10px] font-normal">optional</span>
+            </Label>
+            <Input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Why does this exist?"
-              className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
             />
-          </label>
+          </div>
+
           <div className="space-y-1.5">
-            <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Channel</span>
-            <div className="flex gap-1">
+            <Label>Channel</Label>
+            <div className="flex gap-1.5">
               {(["email", "whatsapp", "multi"] as const).map((ch) => (
                 <button
                   key={ch}
                   onClick={() => setChannel(ch)}
                   className={cn(
-                    "h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] transition-colors capitalize",
+                    "h-9 px-4 rounded-md text-sm font-medium transition-colors capitalize",
                     channel === ch
-                      ? "bg-foreground text-background"
-                      : "border border-border text-muted-foreground hover:text-foreground",
+                      ? "bg-primary text-primary-foreground"
+                      : "border bg-background text-muted-foreground hover:text-foreground hover:bg-muted",
                   )}
                 >
                   {ch}
@@ -104,27 +112,26 @@ export function NewCampaignDialog({ onClose, onCreated }: Props) {
             </div>
           </div>
         </div>
-        <footer className="border-t border-border px-6 py-3 flex items-center gap-2 justify-end">
-          <button
+
+        <DialogFooter className="border-t px-6 py-3 flex-row items-center justify-end gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => !saving && onClose()}
             disabled={saving}
-            className="inline-flex items-center h-8 px-4 text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground transition-colors"
           >
             Cancel
-          </button>
-          <button
-            onClick={submit}
-            disabled={saving}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-8 px-5 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
+          </Button>
+          <Button onClick={submit} disabled={saving} size="sm" className="gap-1.5">
+            {saving ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Plus className="size-3.5" />
             )}
-          >
-            {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
             Create
-          </button>
-        </footer>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
