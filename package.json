@@ -18,6 +18,10 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@ai-sdk/cerebras": "^3.0.5",
+    "@ai-sdk/google": "^4.0.8",
+    "@ai-sdk/groq": "^4.0.5",
+    "@ai-sdk/openai": "^4.0.7",
     "@base-ui/react": "^1.6.0",
     "@convex-dev/auth": "^0.0.91",
     "@convex-dev/resend": "^0.1.13",
@@ -34,6 +38,7 @@
     "@tiptap/react": "^3.27.1",
     "@tiptap/starter-kit": "^3.27.1",
     "@types/leaflet": "^1.9.21",
+    "ai": "^7.0.14",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.4",
@@ -57,7 +62,7 @@
     "sonner": "^1.7.1",
     "tailwind-merge": "^2.5.5",
     "vaul": "^1.1.2",
-    "zod": "^3.24.1"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

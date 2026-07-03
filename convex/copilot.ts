@@ -1,37 +1,48 @@
 "use node";
 
 /**
- * ⌘J AI Copilot — agentic side panel.
+ * ⌘J Atlas Copilot — agentic assistant, rebuilt with Vercel AI SDK.
  *
- * Uses Groq Compound (compound-beta) which has native web-search,
- * code-execution, and browser tools. Layered on top: Atlas-specific
- * function tools that let the AI query the workspace + take actions:
+ * Architecture mirrors opencode's session.run pattern:
+ *   1. Load workspace + AI keys via internal query
+ *   2. Build a tool set — every workspace query is exposed as an
+ *      AI SDK Tool with zod inputSchema + execute
+ *   3. Fall through provider chain (Groq → Cerebras → Gemini → OpenAI
+ *      → OpenRouter). AI SDK's generateText normalizes tool-calling
+ *      across all of them — no manual per-provider loop code.
+ *   4. stopWhen: stepCountIs(10) — model can chain up to 10 tool calls
+ *   5. Compaction on very long threads via a separate helper action
  *
- *   - search_contacts(query, limit)
- *   - search_companies(query, limit)
- *   - search_deals(query, limit)
- *   - list_recent_conversations(limit)
- *   - get_contact(id)
- *   - get_deal(id)
- *   - draft_email_reply(conversationId, intent)
- *   - create_task(title, dueDate, relatedContactId)
+ * The old version had two fatal bugs:
+ *   - Gemini fallback path had useTools: false, so when Groq was rate-
+ *     limited the model got no tool schema. It would emit tool names as
+ *     text ("call workspace_snapshot") because the system prompt told
+ *     it to but no way to actually call.
+ *   - Manual tool-call loop was fragile — text emitted alongside
+ *     tool_calls got lost between iterations.
  *
- * Chat state is client-side (React) for now. Each turn sends the full
- * history back so the model can maintain context.
- *
- * Falls back through the model chain: compound-beta → llama-3.3-70b
- * (Groq) → gemini-2.0-flash → openrouter/auto. If everything fails
- * the user sees "AI is unavailable — try again later".
+ * AI SDK handles both correctly out of the box.
  */
 
 import { v, ConvexError } from "convex/values";
+import { z } from "zod";
 import { action } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { generateText, tool, stepCountIs, type ModelMessage } from "ai";
+import { createGroq } from "@ai-sdk/groq";
+import { createCerebras } from "@ai-sdk/cerebras";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createOpenAI } from "@ai-sdk/openai";
 
 const CHAT_MSG = v.object({
-  role: v.union(v.literal("user"), v.literal("assistant"), v.literal("system"), v.literal("tool")),
+  role: v.union(
+    v.literal("user"),
+    v.literal("assistant"),
+    v.literal("system"),
+    v.literal("tool"),
+  ),
   content: v.string(),
   tool_call_id: v.optional(v.string()),
   tool_calls: v.optional(v.any()),
@@ -39,20 +50,23 @@ const CHAT_MSG = v.object({
 
 const BASE_SYSTEM = `You are Atlas Copilot, an agentic assistant for a founder.
 
-You have access to the founder's workspace via tools. Use them:
-- On any vague greeting or open-ended question ("hi", "what should I do today", "catch me up"), ALWAYS call \`workspace_snapshot\` FIRST. Never say "I don't have context" without checking.
-- To look up any record the founder mentions (contact, company, deal, conversation, task)
-- To search the web when the question needs external info (Groq Compound web_search)
-- To draft emails, create tasks, and take small actions when asked
+You have tools to query the founder's workspace. **Use them proactively.** Don't ask permission — call the tool, then answer with the data.
 
-Rules of engagement:
-- Kenyan English. Never AI-slop ("delve", "hope this finds you", em-dash filler, "in today's fast-paced world"). Never marketing voice.
-- Short, dense answers. One idea per paragraph.
-- If a task requires info you don't have, call a tool. Don't guess.
-- When you cite a workspace record, include its ID so the founder can click through: [contact:jd7...].
-- Don't invent facts. If you're unsure, say so.
-- Do exactly what's asked, not more.
-- If \`workspace_snapshot\` returns \`hint\`, weave that suggestion into your answer once (never repeat it in the same session).`;
+Behavior rules:
+- On any vague greeting or open-ended question ("hi", "what should I do today", "catch me up"), call \`workspace_snapshot\` FIRST.
+- To answer questions about specific records (contacts, companies, deals, conversations, tasks, activity), call the appropriate lookup tool.
+- To answer "who did I speak to yesterday" call \`list_recent_messages\` with sinceHoursAgo: 48.
+- To answer "my top open deals" call \`list_deals\` with state: "open", sortBy: "amount".
+- To answer "what's on my list today" call \`list_tasks\` with filter: "today".
+- To answer "how's the pipeline" call \`workspace_kpis\`.
+- Never claim you don't have context without first calling a tool to check.
+- Never say "I need to check your workspace" — just check.
+
+Style:
+- Kenyan English. No AI slop ("delve", "hope this finds you", "in today's fast-paced world"). No em-dash filler.
+- Short and dense. Numbers, names, next actions.
+- When citing a workspace record, include its ID in brackets so the founder can click through: [contact:jd7abc123].
+- Never invent data. If a tool returns nothing, say "no results" and suggest what to check.`;
 
 function buildSystemPrompt(brand: {
   workspaceName?: string;
@@ -66,7 +80,7 @@ function buildSystemPrompt(brand: {
   pricingSummary?: string;
 } | null): string {
   const now = new Date();
-  const dateLine = `Current UTC time: ${now.toISOString()}. When user says "yesterday" pass sinceHoursAgo=48 to be safe, "last week" pass 168, "today" pass 24.`;
+  const dateLine = `Current UTC time: ${now.toISOString()}. When user says "yesterday" pass sinceHoursAgo=48. "last week" → 168. "today" → 24.`;
 
   if (!brand) return `${BASE_SYSTEM}\n\n${dateLine}`;
   const parts: string[] = [BASE_SYSTEM, "", "## About this workspace"];
@@ -83,187 +97,264 @@ function buildSystemPrompt(brand: {
   return parts.join("\n");
 }
 
-const ATLAS_TOOLS = [
-  {
-    type: "function",
-    function: {
-      name: "search_contacts",
-      description: "Search the founder's contacts by name or email substring. Returns up to `limit` matches with their basic info.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "Case-insensitive substring; matches first name, last name, or email" },
-          limit: { type: "number", description: "Max results (default 10)" },
-        },
-        required: ["query"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "search_companies",
-      description: "Search the founder's companies by name or domain substring.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: { type: "string" },
-          limit: { type: "number" },
-        },
-        required: ["query"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "search_deals",
-      description: "Search deals by name substring. Returns amount + stage + linked contact/company. If you want to LIST deals by state (open / won / lost), use `list_deals` instead.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: { type: "string" },
-          limit: { type: "number" },
-        },
-        required: ["query"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "list_deals",
-      description: "List deals filtered by state — 'open' (not yet won or lost), 'won', or 'lost'. Sortable by amount desc (default), lastActivityAt desc, or recentlyCreated. Best for questions like 'my top 3 open deals', 'biggest win last month', 'what's stuck in the pipeline'.",
-      parameters: {
-        type: "object",
-        properties: {
-          state: {
-            type: "string",
-            enum: ["open", "won", "lost", "any"],
-            description: "Deal state. Default 'open'.",
-          },
-          sortBy: {
-            type: "string",
-            enum: ["amount", "activity", "recent"],
-            description: "amount = highest value first (default), activity = most recently touched, recent = newest first.",
-          },
-          limit: { type: "number", description: "Max results (default 10)" },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "list_recent_conversations",
-      description: "List the most recent email + WhatsApp threads in the inbox, regardless of state (open/snoozed/archived). Sorted by last message time desc.",
-      parameters: {
-        type: "object",
-        properties: {
-          limit: { type: "number", description: "Max results (default 10)" },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "list_recent_messages",
-      description: "Every message (email + WhatsApp, inbound + outbound) in the last N hours, sorted by time desc. Use to answer 'who did I speak to yesterday' — pass sinceHoursAgo: 48. Returns sender, subject, and 200-char preview.",
-      parameters: {
-        type: "object",
-        properties: {
-          limit: { type: "number", description: "Max results (default 20)" },
-          sinceHoursAgo: { type: "number", description: "Only messages from this many hours ago. E.g. 24 for last day, 168 for last week." },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "list_recent_activity",
-      description: "Recent workspace-wide activity across every entity — deals moved, contacts created, invoices sent, tasks completed, meetings booked. Best for open-ended 'what happened recently' questions.",
-      parameters: {
-        type: "object",
-        properties: {
-          limit: { type: "number" },
-          sinceHoursAgo: { type: "number" },
-          eventTypes: {
-            type: "array",
-            items: { type: "string" },
-            description: "Optional filter: only these event types (e.g. ['deal_won','email_received']).",
-          },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "workspace_kpis",
-      description: "Snapshot of pipeline value, deals won this month, outstanding invoices, and cash runway.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "list_tasks",
-      description: "List open (uncompleted) tasks. Best for questions like 'what should I do today', 'what's on my list', 'anything overdue'. Sortable by dueDate (soonest first) or recentlyCreated.",
-      parameters: {
-        type: "object",
-        properties: {
-          filter: {
-            type: "string",
-            enum: ["all", "today", "overdue", "week"],
-            description: "'today' = due today, 'overdue' = due date passed, 'week' = due this week, 'all' = every open task. Default 'all'.",
-          },
-          limit: { type: "number" },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "workspace_snapshot",
-      description: "One-shot overview when the user greets you or asks a vague question like 'what should we do today' or 'catch me up'. Returns: workspace brand summary (or a warning if empty), today's queue counts, top 3 open deals by amount, 3 most recent messages, and 3 rotting deals. Use this FIRST when the user's intent is unclear.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-] as const;
+/* ============================================================ */
+/* Tool definitions                                              */
+/* ============================================================ */
 
-interface ChatMessage {
+/**
+ * Build the Atlas toolset bound to a workspace + ActionCtx.
+ * Each tool has:
+ *   - description — how the model decides when to call it
+ *   - inputSchema — zod schema for arguments
+ *   - execute — server-side runQuery to Convex helpers
+ */
+function buildAtlasTools(ctx: ActionCtx, workspaceId: Id<"workspaces">) {
+  return {
+    workspace_snapshot: tool({
+      description:
+        "One-shot workspace overview. Call this FIRST for vague greetings or open-ended questions like 'what should I do today', 'catch me up', 'hi'. Returns brand summary, today's queue counts, top 3 open deals, 3 recent messages, 3 rotting deals.",
+      inputSchema: z.object({}),
+      execute: async () =>
+        await ctx.runQuery(internal.copilotHelpers.workspaceSnapshot, {
+          workspaceId,
+        }),
+    }),
+
+    workspace_kpis: tool({
+      description:
+        "Snapshot of pipeline value (all open deals summed), deals won this month, outstanding invoices amount, and cash runway. Use for 'how's the pipeline', 'how are we doing this month', 'cash flow' questions.",
+      inputSchema: z.object({}),
+      execute: async () =>
+        await ctx.runQuery(internal.copilotHelpers.kpiSummary, {
+          workspaceId,
+        }),
+    }),
+
+    search_contacts: tool({
+      description:
+        "Search contacts by name or email substring. Case-insensitive. Returns firstName, lastName, email, phone, company link, lifecycle stage.",
+      inputSchema: z.object({
+        query: z.string().describe("Name or email substring"),
+        limit: z.number().optional().default(10),
+      }),
+      execute: async ({ query, limit }) =>
+        await ctx.runQuery(internal.copilotHelpers.searchContacts, {
+          workspaceId,
+          query,
+          limit: limit ?? 10,
+        }),
+    }),
+
+    search_companies: tool({
+      description:
+        "Search companies by name or domain substring. Returns name, domain, industry, size, city, website, phone, tags, lifecycle stage.",
+      inputSchema: z.object({
+        query: z.string(),
+        limit: z.number().optional().default(10),
+      }),
+      execute: async ({ query, limit }) =>
+        await ctx.runQuery(internal.copilotHelpers.searchCompanies, {
+          workspaceId,
+          query,
+          limit: limit ?? 10,
+        }),
+    }),
+
+    search_deals: tool({
+      description:
+        "Search deals by name substring. Returns amount, stage, linked contact/company. For 'my top deals' or 'biggest wins' use list_deals instead.",
+      inputSchema: z.object({
+        query: z.string(),
+        limit: z.number().optional().default(10),
+      }),
+      execute: async ({ query, limit }) =>
+        await ctx.runQuery(internal.copilotHelpers.searchDeals, {
+          workspaceId,
+          query,
+          limit: limit ?? 10,
+        }),
+    }),
+
+    list_deals: tool({
+      description:
+        "List deals by state (open/won/lost/any). Sort by amount (biggest first), activity (most recently touched), or recent (newly created). Best for 'top 3 open deals', 'biggest win this month', 'what's stuck in the pipeline'.",
+      inputSchema: z.object({
+        state: z
+          .enum(["open", "won", "lost", "any"])
+          .optional()
+          .default("open")
+          .describe("Deal state to filter by"),
+        sortBy: z
+          .enum(["amount", "activity", "recent"])
+          .optional()
+          .default("amount"),
+        limit: z.number().optional().default(10),
+      }),
+      execute: async ({ state, sortBy, limit }) =>
+        await ctx.runQuery(internal.copilotHelpers.listDeals, {
+          workspaceId,
+          state: state ?? "open",
+          sortBy: sortBy ?? "amount",
+          limit: limit ?? 10,
+        }),
+    }),
+
+    list_recent_conversations: tool({
+      description:
+        "Most recent email + WhatsApp threads in the inbox. Sorted by last message time. Returns thread id, channel, subject, participants, message count, last message preview.",
+      inputSchema: z.object({
+        limit: z.number().optional().default(10),
+      }),
+      execute: async ({ limit }) =>
+        await ctx.runQuery(internal.copilotHelpers.recentConversations, {
+          workspaceId,
+          limit: limit ?? 10,
+        }),
+    }),
+
+    list_recent_messages: tool({
+      description:
+        "Every message (email + WhatsApp, inbound + outbound) in the last N hours. **Use this for 'who did I speak to yesterday' — pass sinceHoursAgo: 48.** Returns sender name, channel, direction, subject, 200-char preview, timestamp.",
+      inputSchema: z.object({
+        limit: z.number().optional().default(20),
+        sinceHoursAgo: z
+          .number()
+          .optional()
+          .describe(
+            "Only messages from this many hours ago. yesterday=48, today=24, last week=168.",
+          ),
+      }),
+      execute: async ({ limit, sinceHoursAgo }) =>
+        await ctx.runQuery(internal.copilotHelpers.recentMessages, {
+          workspaceId,
+          limit: limit ?? 20,
+          sinceHoursAgo,
+        }),
+    }),
+
+    list_recent_activity: tool({
+      description:
+        "Workspace-wide timeline of activity — deals moved, contacts created, invoices sent, tasks completed, meetings booked. Best for 'what happened this week', 'catch me up on the pipeline'.",
+      inputSchema: z.object({
+        limit: z.number().optional().default(25),
+        sinceHoursAgo: z.number().optional(),
+        eventTypes: z.array(z.string()).optional(),
+      }),
+      execute: async ({ limit, sinceHoursAgo, eventTypes }) =>
+        await ctx.runQuery(internal.copilotHelpers.recentTimelineEvents, {
+          workspaceId,
+          limit: limit ?? 25,
+          sinceHoursAgo,
+          eventTypes,
+        }),
+    }),
+
+    list_tasks: tool({
+      description:
+        "Open (uncompleted) tasks. Best for 'what should I do today', 'anything overdue', 'what's on my list'. Filter: today = due today, overdue = due date passed, week = due this week, all = every open task.",
+      inputSchema: z.object({
+        filter: z
+          .enum(["all", "today", "overdue", "week"])
+          .optional()
+          .default("all"),
+        limit: z.number().optional().default(20),
+      }),
+      execute: async ({ filter, limit }) =>
+        await ctx.runQuery(internal.copilotHelpers.listTasks, {
+          workspaceId,
+          filter: filter ?? "all",
+          limit: limit ?? 20,
+        }),
+    }),
+  };
+}
+
+/* ============================================================ */
+/* Provider chain                                                */
+/* ============================================================ */
+
+interface ProviderStep {
+  provider: "groq" | "cerebras" | "gemini" | "openai" | "openrouter";
+  model: string;
+  supportsTools: boolean;
+}
+
+const PROVIDER_CHAIN: ProviderStep[] = [
+  // Groq — free tier, fast, native tool calling on llama models
+  { provider: "groq", model: "llama-3.3-70b-versatile", supportsTools: true },
+  { provider: "groq", model: "llama-3.1-8b-instant", supportsTools: true },
+  // Cerebras — free tier llama 3.3 70b
+  { provider: "cerebras", model: "llama-3.3-70b", supportsTools: true },
+  // Gemini free tier — Flash supports tool calling in AI SDK
+  { provider: "gemini", model: "gemini-2.0-flash-exp", supportsTools: true },
+  { provider: "gemini", model: "gemini-1.5-flash", supportsTools: true },
+  // OpenAI paid fallback
+  { provider: "openai", model: "gpt-4o-mini", supportsTools: true },
+  // OpenRouter free auto (some free models don't support tools reliably)
+  { provider: "openrouter", model: "openai/gpt-oss-20b:free", supportsTools: true },
+];
+
+function buildLanguageModel(step: ProviderStep, apiKey: string) {
+  switch (step.provider) {
+    case "groq":
+      return createGroq({ apiKey })(step.model);
+    case "cerebras":
+      return createCerebras({ apiKey })(step.model);
+    case "gemini":
+      return createGoogleGenerativeAI({ apiKey })(step.model);
+    case "openai":
+      return createOpenAI({ apiKey })(step.model);
+    case "openrouter":
+      // OpenRouter is OpenAI-compatible — use OpenAI provider with base URL
+      return createOpenAI({
+        apiKey,
+        baseURL: "https://openrouter.ai/api/v1",
+        // OpenRouter requires attribution headers
+        headers: {
+          "HTTP-Referer": process.env.SITE_URL ?? "https://atlas.blyss.co.ke",
+          "X-Title": "Atlas Copilot",
+        },
+      })(step.model);
+  }
+}
+
+/* ============================================================ */
+/* Chat entrypoint                                                */
+/* ============================================================ */
+
+interface ChatInputMessage {
   role: "user" | "assistant" | "system" | "tool";
   content: string;
   tool_call_id?: string;
   tool_calls?: unknown;
 }
 
-interface GroqChoice {
-  message: {
-    role: string;
-    content: string | null;
-    tool_calls?: Array<{
-      id: string;
-      type: string;
-      function: { name: string; arguments: string };
-    }>;
-  };
-  finish_reason: string;
-}
-
-interface GroqResponse {
-  choices: GroqChoice[];
-  usage?: { prompt_tokens?: number; completion_tokens?: number };
+/**
+ * Convert legacy ChatInputMessage (from client) to AI SDK ModelMessage.
+ * We flatten tool history into the user/assistant text stream — AI SDK
+ * will re-emit its own tool_calls in its own format on next iteration.
+ */
+function toModelMessages(input: ChatInputMessage[]): ModelMessage[] {
+  return input
+    .filter((m) => m.role !== "system") // system is passed separately
+    .filter((m) => m.role !== "tool")   // tool history is model-managed
+    .filter((m) => m.content?.trim())
+    .map((m): ModelMessage => {
+      if (m.role === "user") return { role: "user", content: m.content };
+      if (m.role === "assistant") return { role: "assistant", content: m.content };
+      // Shouldn't reach here, but fallback
+      return { role: "user", content: m.content };
+    });
 }
 
 export const chat = action({
   args: {
     messages: v.array(CHAT_MSG),
   },
-  handler: async (ctx, args): Promise<{
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
     reply: string;
     provider: string;
     model: string;
@@ -271,104 +362,63 @@ export const chat = action({
   }> => {
     const setup = await ctx.runQuery(internal.copilotHelpers.prepare, {});
     if (!setup) {
-      throw new ConvexError({ code: "NO_WORKSPACE", message: "Not in a workspace." });
+      throw new ConvexError({
+        code: "NO_WORKSPACE",
+        message: "Not in a workspace.",
+      });
     }
 
-    // Prepend system prompt if the caller didn't already include one
-    const rawMessages: ChatMessage[] = [
-      { role: "system", content: buildSystemPrompt(setup.brand) },
-      ...args.messages.filter((m) => m.role !== "system"),
-    ];
+    const system = buildSystemPrompt(setup.brand);
+    const messages = toModelMessages(args.messages);
+    if (messages.length === 0) {
+      throw new ConvexError({
+        code: "EMPTY_MESSAGES",
+        message: "Send a message first.",
+      });
+    }
 
-    // Compact old turns if the conversation is getting long.
-    const messages = await maybeCompact(rawMessages, setup.keys);
+    const tools = buildAtlasTools(ctx, setup.workspaceId);
 
-    const chain: Array<{
-      provider: "groq" | "openrouter" | "gemini" | "cerebras" | "openai";
-      model: string;
-      useTools: boolean;
-    }> = [
-      // Primary: Groq Compound with native web search + code
-      { provider: "groq", model: "compound-beta", useTools: true },
-      // Second Groq attempt with smaller model — much higher TPM headroom
-      { provider: "groq", model: "llama-3.1-8b-instant", useTools: true },
-      // Groq llama-3.3-70b — highest quality Groq, most tokens
-      { provider: "groq", model: "llama-3.3-70b-versatile", useTools: true },
-      // Gemini — free 1M-context tier, generous rate limits
-      { provider: "gemini", model: "gemini-2.0-flash-exp", useTools: false },
-      // Cerebras — free tier, blazing fast inference
-      { provider: "cerebras", model: "llama-3.3-70b", useTools: false },
-      // OpenAI if configured
-      { provider: "openai", model: "gpt-4o-mini", useTools: true },
-      // OpenRouter free auto-router as final safety net
-      { provider: "openrouter", model: "openrouter/auto", useTools: false },
-    ];
-
-    let toolCallsCount = 0;
-    let lastError = "";
     let anyKeyConfigured = false;
-    for (const step of chain) {
+    const errors: string[] = [];
+
+    for (const step of PROVIDER_CHAIN) {
       const apiKey = setup.keys[step.provider];
       if (!apiKey) continue;
       anyKeyConfigured = true;
 
       try {
-        // Multi-turn tool-call loop, up to 5 iterations
-        let workingMessages = messages;
-        for (let iteration = 0; iteration < 5; iteration++) {
-          const resp = await callChat({
-            provider: step.provider,
-            model: step.model,
-            apiKey,
-            messages: workingMessages,
-            tools: step.useTools ? ATLAS_TOOLS : undefined,
-          });
-          const choice = resp.choices[0];
-          if (!choice) throw new Error("no_choice");
+        const result = await generateText({
+          model: buildLanguageModel(step, apiKey),
+          system,
+          messages,
+          tools,
+          stopWhen: stepCountIs(10),
+          temperature: 0.4,
+        });
 
-          if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
-            toolCallsCount += choice.message.tool_calls.length;
-            // Append assistant + tool responses, loop
-            workingMessages = [
-              ...workingMessages,
-              {
-                role: "assistant",
-                content: choice.message.content ?? "",
-                tool_calls: choice.message.tool_calls,
-              },
-            ];
-            for (const tc of choice.message.tool_calls) {
-              const result = await handleAtlasTool(ctx, setup.workspaceId, tc.function.name, tc.function.arguments);
-              // Cap tool result payload to prevent one big search response
-              // (e.g. 40 places) from blowing the context.
-              const resultStr = JSON.stringify(result);
-              const truncated = resultStr.length > 8000
-                ? resultStr.slice(0, 8000) + '..."/*truncated*/'
-                : resultStr;
-              workingMessages.push({
-                role: "tool",
-                content: truncated,
-                tool_call_id: tc.id,
-              });
-            }
-            // Compact mid-loop if tool results have piled up
-            workingMessages = await maybeCompact(workingMessages, setup.keys);
-            continue;
-          }
+        // AI SDK returns .text for final response, .steps for tool history.
+        // If the model chose no tools + no text (rare), retry next provider.
+        const reply = result.text?.trim() ?? "";
+        const toolCalls = result.steps?.reduce(
+          (n, s) => n + (s.toolCalls?.length ?? 0),
+          0,
+        ) ?? 0;
 
-          // Final text response
-          return {
-            reply: choice.message.content ?? "",
-            provider: step.provider,
-            model: step.model,
-            toolCalls: toolCallsCount,
-          };
+        if (!reply && toolCalls === 0) {
+          errors.push(`${step.provider}/${step.model}: empty response`);
+          continue;
         }
 
-        // Exhausted tool-call iterations
-        throw new Error("max_iterations_reached");
+        return {
+          reply: reply || "(no answer)",
+          provider: step.provider,
+          model: step.model,
+          toolCalls,
+        };
       } catch (err) {
-        lastError = err instanceof Error ? err.message : "unknown";
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push(`${step.provider}/${step.model}: ${msg.slice(0, 200)}`);
         continue;
       }
     }
@@ -377,346 +427,17 @@ export const chat = action({
       throw new ConvexError({
         code: "NO_AI_KEY",
         message:
-          "No AI provider is configured for this workspace. Add a Groq or OpenRouter key at Settings → Integrations to use Copilot.",
+          "No AI provider is configured for this workspace. Add a Groq or Gemini key at Settings → Integrations to use Copilot (both free).",
       });
     }
 
-    // Rate-limited across every provider we have configured
-    if (lastError.includes("429") || lastError.toLowerCase().includes("rate limit")) {
-      throw new ConvexError({
-        code: "RATE_LIMITED",
-        message:
-          "All AI providers are currently rate-limited. Wait 60 seconds and retry, or add more providers at Settings → Integrations (Gemini + Cerebras have generous free tiers).",
-      });
-    }
-
+    // Every configured provider failed
+    const isRateLimit = errors.some((e) => /429|rate.?limit|quota/i.test(e));
     throw new ConvexError({
-      code: "AI_UNAVAILABLE",
-      message: `AI is temporarily unavailable. Last error: ${lastError || "unknown"}`,
+      code: isRateLimit ? "RATE_LIMITED" : "AI_UNAVAILABLE",
+      message: isRateLimit
+        ? `All AI providers are currently rate-limited. Wait 60 seconds and retry. Details: ${errors[0]}`
+        : `AI temporarily unavailable. Tried ${errors.length} providers. First error: ${errors[0]}`,
     });
   },
 });
-
-/* ============================================================ */
-/* Provider chat call                                             */
-/* ============================================================ */
-
-async function callChat(args: {
-  provider: "groq" | "openrouter" | "gemini" | "cerebras" | "openai";
-  model: string;
-  apiKey: string;
-  messages: ChatMessage[];
-  tools?: readonly unknown[];
-}): Promise<GroqResponse> {
-  // Gemini uses its own REST shape — normalize to the OpenAI-compat shape
-  if (args.provider === "gemini") {
-    return await callGemini(args);
-  }
-
-  const endpoints: Record<string, string> = {
-    groq: "https://api.groq.com/openai/v1/chat/completions",
-    openrouter: "https://openrouter.ai/api/v1/chat/completions",
-    cerebras: "https://api.cerebras.ai/v1/chat/completions",
-    openai: "https://api.openai.com/v1/chat/completions",
-  };
-  const body: Record<string, unknown> = {
-    model: args.model,
-    messages: args.messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-      ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
-      ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
-    })),
-    temperature: 0.4,
-    max_tokens: 2500,
-  };
-  if (args.tools) body.tools = args.tools;
-
-  const extraHeaders: Record<string, string> = {};
-  if (args.provider === "openrouter") {
-    extraHeaders["HTTP-Referer"] = process.env.SITE_URL ?? "https://atlas.blyss.co.ke";
-    extraHeaders["X-Title"] = "Atlas Copilot";
-  }
-
-  const res = await fetch(endpoints[args.provider], {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${args.apiKey}`,
-      "Content-Type": "application/json",
-      ...extraHeaders,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    throw new Error(`${args.provider} ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  }
-  return (await res.json()) as GroqResponse;
-}
-
-/**
- * Gemini uses generativelanguage.googleapis.com with a different
- * message shape. We fold system + user + tool messages into a single
- * text prompt (tools aren't supported in the free tier's generate
- * endpoint the same way), then wrap the response in the OpenAI-compat
- * shape our caller expects.
- */
-async function callGemini(args: {
-  model: string;
-  apiKey: string;
-  messages: ChatMessage[];
-}): Promise<GroqResponse> {
-  const systemMsg = args.messages.find((m) => m.role === "system")?.content ?? "";
-  const contents = args.messages
-    .filter((m) => m.role !== "system")
-    .map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
-    }));
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-    args.model,
-  )}:generateContent?key=${encodeURIComponent(args.apiKey)}`;
-
-  const body: Record<string, unknown> = {
-    contents,
-    generationConfig: { temperature: 0.4, maxOutputTokens: 2500 },
-  };
-  if (systemMsg) {
-    body.systemInstruction = { parts: [{ text: systemMsg }] };
-  }
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    throw new Error(`gemini ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  }
-  const j = (await res.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
-  const text = j.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-  return {
-    choices: [
-      {
-        message: { role: "assistant", content: text },
-        finish_reason: "stop",
-      },
-    ],
-  };
-}
-
-/* ============================================================ */
-/* Context compaction                                             */
-/* ============================================================ */
-
-// Rough token count via char/4 heuristic. Good enough — actual
-// tokenization varies per model but this is the standard estimator.
-function estimateTokens(messages: ChatMessage[]): number {
-  let total = 0;
-  for (const m of messages) {
-    total += (m.content?.length ?? 0) / 4;
-    // tool_calls JSON payloads
-    if (m.tool_calls) {
-      try {
-        total += JSON.stringify(m.tool_calls).length / 4;
-      } catch {}
-    }
-  }
-  return Math.ceil(total);
-}
-
-const COMPACT_TRIGGER_TOKENS = 6000;     // start compacting past this
-const COMPACT_KEEP_RECENT = 6;           // preserve most-recent N turns raw
-const COMPACT_MIN_MESSAGES = 12;         // don't compact until there's a real backlog
-
-/**
- * If the conversation is long, replace the oldest turns with a single
- * compact summary system message so the model keeps context without
- * running out of TPM.
- *
- * Approach: keep the actual system prompt + the last N user/assistant
- * exchanges verbatim, ask a small fast model to summarize everything
- * in between into 1-2 paragraphs, splice the summary in as a system
- * message.
- */
-async function maybeCompact(
-  messages: ChatMessage[],
-  keys: {
-    groq?: string;
-    openrouter?: string;
-    gemini?: string;
-    cerebras?: string;
-    openai?: string;
-  },
-): Promise<ChatMessage[]> {
-  const est = estimateTokens(messages);
-  if (est < COMPACT_TRIGGER_TOKENS) return messages;
-  if (messages.length < COMPACT_MIN_MESSAGES) return messages;
-
-  // Find the boundary — keep system prompt + last N non-system messages
-  const systemMsgs = messages.filter((m) => m.role === "system");
-  const nonSystem = messages.filter((m) => m.role !== "system");
-  const cutoff = nonSystem.length - COMPACT_KEEP_RECENT;
-  if (cutoff <= 0) return messages;
-
-  const toCompact = nonSystem.slice(0, cutoff);
-  const recent = nonSystem.slice(cutoff);
-
-  // Cheapest possible summarizer: Groq's smallest model, then Cerebras,
-  // then Gemini flash. No tools, tight token budget.
-  const summarizerChain: Array<{
-    provider: "groq" | "cerebras" | "gemini" | "openrouter";
-    model: string;
-  }> = [
-    { provider: "groq", model: "llama-3.1-8b-instant" },
-    { provider: "cerebras", model: "llama-3.3-70b" },
-    { provider: "gemini", model: "gemini-2.0-flash-exp" },
-    { provider: "openrouter", model: "openrouter/auto" },
-  ];
-
-  const transcript = toCompact
-    .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
-    .join("\n\n");
-
-  const prompt = `Summarize the following Atlas Copilot conversation history into ONE dense paragraph (max 200 words) capturing:
-- Key facts + decisions established
-- Any records the user referenced (contact/company/deal IDs)
-- Open questions or context needed for the next turn
-
-Do not add commentary. Do not restate obvious things. Do not use bullet points.
-
-TRANSCRIPT:
-${transcript}`;
-
-  let summary = "";
-  for (const step of summarizerChain) {
-    const apiKey = keys[step.provider];
-    if (!apiKey) continue;
-    try {
-      const resp = await callChat({
-        provider: step.provider,
-        model: step.model,
-        apiKey,
-        messages: [{ role: "user", content: prompt }],
-      });
-      const text = resp.choices[0]?.message?.content ?? "";
-      if (text.trim().length > 20) {
-        summary = text.trim();
-        break;
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  if (!summary) {
-    // Summarizer failed — fall back to trimming (keep system + recent, drop the rest)
-    return [...systemMsgs, ...recent];
-  }
-
-  return [
-    ...systemMsgs,
-    {
-      role: "system",
-      content: `## Earlier conversation (compacted)\n\n${summary}`,
-    },
-    ...recent,
-  ];
-}
-
-/* ============================================================ */
-/* Atlas tool executor                                            */
-/* ============================================================ */
-
-async function handleAtlasTool(
-  ctx: ActionCtx,
-  workspaceId: Id<"workspaces">,
-  name: string,
-  argsJson: string,
-): Promise<unknown> {
-  let parsed: Record<string, unknown> = {};
-  try {
-    parsed = JSON.parse(argsJson) as Record<string, unknown>;
-  } catch {
-    return { error: "invalid_arguments" };
-  }
-
-  try {
-    switch (name) {
-      case "search_contacts":
-        return await ctx.runQuery(internal.copilotHelpers.searchContacts, {
-          workspaceId,
-          query: String(parsed.query ?? ""),
-          limit: Number(parsed.limit ?? 10),
-        });
-      case "search_companies":
-        return await ctx.runQuery(internal.copilotHelpers.searchCompanies, {
-          workspaceId,
-          query: String(parsed.query ?? ""),
-          limit: Number(parsed.limit ?? 10),
-        });
-      case "search_deals":
-        return await ctx.runQuery(internal.copilotHelpers.searchDeals, {
-          workspaceId,
-          query: String(parsed.query ?? ""),
-          limit: Number(parsed.limit ?? 10),
-        });
-      case "list_deals":
-        return await ctx.runQuery(internal.copilotHelpers.listDeals, {
-          workspaceId,
-          state: (parsed.state as string) ?? "open",
-          sortBy: (parsed.sortBy as string) ?? "amount",
-          limit: Number(parsed.limit ?? 10),
-        });
-      case "list_recent_conversations":
-        return await ctx.runQuery(internal.copilotHelpers.recentConversations, {
-          workspaceId,
-          limit: Number(parsed.limit ?? 10),
-        });
-      case "list_recent_messages":
-        return await ctx.runQuery(internal.copilotHelpers.recentMessages, {
-          workspaceId,
-          limit: Number(parsed.limit ?? 20),
-          sinceHoursAgo:
-            typeof parsed.sinceHoursAgo === "number" ? parsed.sinceHoursAgo : undefined,
-        });
-      case "list_recent_activity":
-        return await ctx.runQuery(internal.copilotHelpers.recentTimelineEvents, {
-          workspaceId,
-          limit: Number(parsed.limit ?? 25),
-          sinceHoursAgo:
-            typeof parsed.sinceHoursAgo === "number" ? parsed.sinceHoursAgo : undefined,
-          eventTypes: Array.isArray(parsed.eventTypes) ? (parsed.eventTypes as string[]) : undefined,
-        });
-      case "workspace_kpis":
-        return await ctx.runQuery(internal.copilotHelpers.kpiSummary, {
-          workspaceId,
-        });
-      case "list_tasks":
-        return await ctx.runQuery(internal.copilotHelpers.listTasks, {
-          workspaceId,
-          filter: (parsed.filter as string) ?? "all",
-          limit: Number(parsed.limit ?? 20),
-        });
-      case "workspace_snapshot":
-        return await ctx.runQuery(internal.copilotHelpers.workspaceSnapshot, {
-          workspaceId,
-        });
-      default:
-        return { error: `unknown_tool:${name}` };
-    }
-  } catch (err) {
-    return {
-      error: err instanceof Error ? err.message : "tool_execution_failed",
-    };
-  }
-}
-
-
-/* ============================================================ */
-/* Preflight — can the Copilot actually respond?                 */
-/* (Public wrapper lives in copilotHelpers.ts because this        */
-/*  module is "use node".)                                        */
-/* ============================================================ */
