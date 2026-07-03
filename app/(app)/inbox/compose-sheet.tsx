@@ -6,6 +6,15 @@ import { X, Send, Loader2 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Id, Doc } from "@/convex/_generated/dataModel";
 import { RichComposer } from "@/components/atlas/rich-composer";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -92,33 +101,24 @@ export function ComposeSheet({ open, onOpenChange, prefill }: ComposeSheetProps)
   const noSender = senderIdentities && senderIdentities.length === 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-end pointer-events-none">
-      <div
-        onClick={() => !sending && onOpenChange(false)}
-        className="absolute inset-0 bg-background/70 backdrop-blur-sm pointer-events-auto"
-      />
-      <div
-        role="dialog"
-        aria-label="Compose email"
-        className="relative pointer-events-auto bg-background border border-border w-full max-w-2xl h-full sm:h-auto sm:max-h-[90vh] flex flex-col shadow-2xl"
+    <Sheet open={open} onOpenChange={(o) => !sending && onOpenChange(o)}>
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-2xl p-0 gap-0 flex flex-col"
       >
-        <header className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <div>
-            <p className="eyebrow font-mono text-muted-foreground">Compose</p>
-            <h2 className="font-display italic text-2xl leading-none mt-1">New message.</h2>
-          </div>
-          <button
-            onClick={() => !sending && onOpenChange(false)}
-            className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            aria-label="Close"
-          >
-            <X className="size-4" />
-          </button>
-        </header>
+        <SheetHeader className="px-6 py-4 border-b space-y-1 shrink-0">
+          <p className="text-[11px] font-mono uppercase tracking-[0.14em] text-muted-foreground">
+            Compose
+          </p>
+          <SheetTitle className="text-xl font-semibold">New message</SheetTitle>
+          <SheetDescription className="sr-only">
+            Compose a new email
+          </SheetDescription>
+        </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
           {noSender && (
-            <div className="border border-[var(--warning)] p-3 text-xs text-[var(--warning)]">
+            <div className="rounded-md border border-[var(--warning)] p-3 text-xs text-[var(--warning)]">
               <p className="font-medium">No sender identity configured.</p>
               <p className="mt-1 text-muted-foreground">
                 Add one in Settings → Sender identities to send email.
@@ -201,24 +201,22 @@ export function ComposeSheet({ open, onOpenChange, prefill }: ComposeSheetProps)
           </div>
         </div>
 
-        <footer className="border-t border-border px-6 py-3 flex items-center gap-3">
-          <span className="text-[11px] text-muted-foreground ml-auto">
+        <SheetFooter className="border-t px-6 py-3 flex-row items-center gap-3 sm:justify-between">
+          <span className="text-[11px] text-muted-foreground">
             {noSender ? "Queued — needs sender identity" : ""}
           </span>
-          <button
+          <Button
             onClick={handleSend}
             disabled={sending || to.length === 0}
-            className={cn(
-              "inline-flex items-center gap-2 h-9 px-6 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-              "disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100",
-            )}
+            size="sm"
+            className="gap-2"
           >
             {sending ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
             Send
-          </button>
-        </footer>
-      </div>
-    </div>
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 

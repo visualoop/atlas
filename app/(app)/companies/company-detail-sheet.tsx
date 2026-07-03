@@ -1,17 +1,26 @@
 "use client";
 
 import { useQuery, useMutation } from "convex/react";
-import { Mail, Phone, Globe, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Mail, Phone, Globe, MoreHorizontal, Archive, ExternalLink, MessageSquare } from "lucide-react";
 import { RecordSheet } from "@/components/atlas/record-sheet";
 import { TimelineFeed } from "@/components/atlas/timeline-feed";
 import { NotesTab } from "@/components/atlas/notes-tab";
 import { TasksTab } from "@/components/atlas/tasks-tab";
 import { FilesTab } from "@/components/atlas/files-tab";
 import { DealsTab } from "@/components/atlas/deals-tab";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 export function CompanyDetailSheet({
   companyId,
@@ -62,14 +71,18 @@ export function CompanyDetailSheet({
     }
   }
 
+  // WhatsApp deep-link — Kenyan numbers usually stored as +254...
+  const waNumber = (company.whatsapp ?? company.phone)?.replace(/[^\d]/g, "");
+
   return (
     <RecordSheet
       open={open}
       onOpenChange={onOpenChange}
-      eyebrow={`Company · ${company.lifecycleStage}`}
+      eyebrow="Company"
       title={company.name}
       subtitle={company.industry || company.domain || undefined}
       initials={initials || "?"}
+      status={company.lifecycleStage}
       actions={
         <>
           {company.website && (
@@ -77,51 +90,101 @@ export function CompanyDetailSheet({
               href={company.website}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center h-8 px-4 text-xs border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
             >
-              <Globe className="size-3.5 mr-1.5" /> Website
+              <Globe className="size-3.5" />
+              Website
+              <ExternalLink className="size-3 opacity-60" />
             </a>
           )}
           {company.emailPrimary && (
             <a
               href={`mailto:${company.emailPrimary}`}
-              className="inline-flex items-center h-8 px-4 text-xs border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
             >
-              <Mail className="size-3.5 mr-1.5" /> Email
+              <Mail className="size-3.5" />
+              Email
             </a>
           )}
           {company.phone && (
             <a
               href={`tel:${company.phone}`}
-              className="inline-flex items-center h-8 px-4 text-xs border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
             >
-              <Phone className="size-3.5 mr-1.5" /> Call
+              <Phone className="size-3.5" />
+              Call
             </a>
           )}
-          <Button variant="ghost" size="sm" onClick={handleArchive}>
-            <Trash2 className="size-3.5 mr-1.5" /> Archive
-          </Button>
+          {waNumber && (
+            <a
+              href={`https://wa.me/${waNumber}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <MessageSquare className="size-3.5" />
+              WhatsApp
+            </a>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "ml-auto",
+              )}
+            >
+              <MoreHorizontal className="size-3.5" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleArchive} className="text-destructive">
+                <Archive className="size-3.5" /> Archive
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </>
       }
       meta={
-        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
-          {company.domain && <Meta label="Domain" value={company.domain} />}
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+          {company.domain && <Meta label="Domain" value={company.domain} mono />}
           {company.industry && <Meta label="Industry" value={company.industry} />}
           {company.size && <Meta label="Size" value={company.size} />}
           {(company.city || company.country) && (
-            <Meta label="Location" value={[company.city, company.country].filter(Boolean).join(", ")} />
+            <Meta
+              label="Location"
+              value={[company.city, company.country].filter(Boolean).join(", ")}
+            />
           )}
           {company.phone && <Meta label="Phone" value={company.phone} mono />}
-          {company.emailPrimary && <Meta label="Email" value={company.emailPrimary} />}
-          {company.tags.length > 0 && <Meta label="Tags" value={company.tags.join(" · ")} />}
-        </div>
+          {company.emailPrimary && (
+            <Meta label="Email" value={company.emailPrimary} mono />
+          )}
+          {company.tags.length > 0 && (
+            <div className="col-span-full flex items-baseline gap-3 min-w-0">
+              <dt className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground shrink-0 w-20">
+                Tags
+              </dt>
+              <dd className="flex flex-wrap gap-1">
+                {company.tags.map((t) => (
+                  <Badge key={t} variant="outline" className="text-[10px]">
+                    {t}
+                  </Badge>
+                ))}
+              </dd>
+            </div>
+          )}
+        </dl>
       }
       tabs={[
         {
           id: "timeline",
           label: "Timeline",
           count: timeline.length,
-          content: <TimelineFeed events={timeline} emptyLabel="No activity yet for this company." />,
+          content: (
+            <TimelineFeed
+              events={timeline}
+              emptyLabel="No activity yet for this company."
+            />
+          ),
         },
         {
           id: "contacts",
@@ -154,20 +217,36 @@ export function CompanyDetailSheet({
   );
 }
 
-function ContactsList({ contacts }: { contacts: Array<{ _id: Id<"contacts">; firstName: string; lastName?: string; title?: string; email?: string }> }) {
+function ContactsList({
+  contacts,
+}: {
+  contacts: Array<{
+    _id: Id<"contacts">;
+    firstName: string;
+    lastName?: string;
+    title?: string;
+    email?: string;
+  }>;
+}) {
   if (contacts.length === 0) {
-    return <p className="text-sm text-muted-foreground italic">No contacts at this company yet.</p>;
+    return (
+      <p className="text-sm text-muted-foreground italic">
+        No contacts at this company yet.
+      </p>
+    );
   }
   return (
-    <ul className="border border-border divide-y divide-border">
+    <ul className="rounded-md border divide-y">
       {contacts.map((c) => (
         <li key={c._id} className="px-4 py-3 flex items-center gap-3">
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium">
+            <p className="text-sm font-medium truncate">
               {c.firstName}
               {c.lastName ? ` ${c.lastName}` : ""}
             </p>
-            <p className="text-xs text-muted-foreground truncate">{c.title ?? c.email ?? ""}</p>
+            <p className="text-xs text-muted-foreground truncate">
+              {c.title ?? c.email ?? ""}
+            </p>
           </div>
         </li>
       ))}
@@ -175,14 +254,21 @@ function ContactsList({ contacts }: { contacts: Array<{ _id: Id<"contacts">; fir
   );
 }
 
-function Meta({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Meta({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
   return (
-    <div className="flex gap-3 min-w-0">
-      <span className="eyebrow text-muted-foreground shrink-0 w-20">{label}</span>
-      <span className={`truncate ${mono ? "font-mono" : ""}`}>{value}</span>
+    <div className="flex items-baseline gap-3 min-w-0">
+      <dt className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground shrink-0 w-20">
+        {label}
+      </dt>
+      <dd className={`truncate ${mono ? "font-mono" : ""}`}>{value}</dd>
     </div>
   );
 }
-
-// PlaceholderTab removed — DealsTab replaces its only use.
-

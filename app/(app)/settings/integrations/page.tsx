@@ -12,6 +12,17 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 type Provider =
   | "gemini" | "groq" | "openrouter" | "mistral" | "cohere" | "cerebras"
@@ -330,25 +341,22 @@ function ProviderKeyDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center pointer-events-none">
-      <div
-        onClick={() => !saving && onClose()}
-        className="absolute inset-0 bg-background/70 backdrop-blur-sm pointer-events-auto"
-      />
-      <div
-        role="dialog"
-        className="relative pointer-events-auto bg-background border border-border w-full max-w-md shadow-2xl"
-      >
-        <header className="px-6 pt-5 pb-3 border-b border-border">
-          <p className="eyebrow font-mono text-muted-foreground">{providerInfo.category} · integration</p>
-          <h2 className="font-display italic text-2xl mt-1">{providerInfo.name}.</h2>
-          <p className="text-xs text-muted-foreground mt-1">{providerInfo.description}</p>
+    <Dialog open onOpenChange={(o) => !o && !saving && onClose()}>
+      <DialogContent className="max-w-md p-0 gap-0">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b space-y-1.5">
+          <p className="text-[11px] font-mono uppercase tracking-[0.14em] text-muted-foreground">
+            {providerInfo.category} · integration
+          </p>
+          <DialogTitle className="text-xl font-semibold">
+            {providerInfo.name}
+          </DialogTitle>
+          <DialogDescription>{providerInfo.description}</DialogDescription>
           {existing && (
             <p className="text-xs text-muted-foreground mt-2 font-mono">
               Current: ••••{existing.lastFour} · v{existing.keyVersion}
             </p>
           )}
-        </header>
+        </DialogHeader>
         <div className="px-6 py-4 space-y-4">
           <div className="flex items-center gap-3 text-xs">
             <a
@@ -369,54 +377,65 @@ function ProviderKeyDialog({
             </a>
           </div>
 
-          <label className="block space-y-1.5">
-            <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
               {existing ? "New key value" : "Key value"}
-            </span>
-            <input
+            </Label>
+            <Input
               autoFocus
               type="password"
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder={providerInfo.keyFormatHint ?? "Paste key…"}
-              className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+              className="font-mono"
               onKeyDown={(e) => e.key === "Enter" && submit()}
             />
-          </label>
+          </div>
           <p className="text-xs text-muted-foreground">
             Encrypted with AES-GCM before storage. Never leaves the server after this point.
           </p>
         </div>
-        <footer className="border-t border-border px-6 py-3 flex items-center gap-2">
-          {existing && (
-            <button
+        <DialogFooter className="border-t px-6 py-3 flex-row items-center gap-2 sm:justify-between">
+          {existing ? (
+            <Button
               onClick={revoke}
               disabled={saving}
-              className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] text-[var(--danger)] hover:bg-[var(--danger)]/10 transition-colors"
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive"
             >
               <Trash2 className="size-3.5" /> Revoke
-            </button>
+            </Button>
+          ) : (
+            <span />
           )}
-          <button
-            onClick={onClose}
-            disabled={saving}
-            className="ml-auto inline-flex items-center h-8 px-4 text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={submit}
-            disabled={saving || value.trim().length === 0}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-8 px-5 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-              "disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100",
-            )}
-          >
-            {saving ? <Loader2 className="size-3.5 animate-spin" /> : existing ? <RotateCw className="size-3.5" /> : <KeyRound className="size-3.5" />}
-            {existing ? "Rotate" : "Save"}
-          </button>
-        </footer>
-      </div>
-    </div>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={onClose}
+              disabled={saving}
+              variant="ghost"
+              size="sm"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={submit}
+              disabled={saving || value.trim().length === 0}
+              size="sm"
+              className="gap-1.5"
+            >
+              {saving ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : existing ? (
+                <RotateCw className="size-3.5" />
+              ) : (
+                <KeyRound className="size-3.5" />
+              )}
+              {existing ? "Rotate" : "Save"}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

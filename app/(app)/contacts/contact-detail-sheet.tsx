@@ -1,17 +1,25 @@
 "use client";
 
 import { useQuery, useMutation } from "convex/react";
-import { Mail, Phone, MessageSquare, Trash2 } from "lucide-react";
+import { Mail, Phone, MessageSquare, MoreHorizontal, Archive, Linkedin, Twitter } from "lucide-react";
 import { RecordSheet } from "@/components/atlas/record-sheet";
 import { TimelineFeed } from "@/components/atlas/timeline-feed";
 import { NotesTab } from "@/components/atlas/notes-tab";
 import { TasksTab } from "@/components/atlas/tasks-tab";
 import { FilesTab } from "@/components/atlas/files-tab";
 import { DealsTab } from "@/components/atlas/deals-tab";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 export function ContactDetailSheet({
   contactId,
@@ -33,14 +41,25 @@ export function ContactDetailSheet({
         eyebrow="Contact"
         title="Loading…"
         initials="…"
-        tabs={[{ id: "timeline", label: "Timeline", content: <p className="text-sm text-muted-foreground">Loading…</p> }]}
+        tabs={[
+          {
+            id: "timeline",
+            label: "Timeline",
+            content: <p className="text-sm text-muted-foreground">Loading…</p>,
+          },
+        ]}
       />
     );
   }
 
   const { contact, company, timeline } = data;
   const fullName = [contact.firstName, contact.lastName].filter(Boolean).join(" ");
-  const initials = fullName.split(/\s+/).map((s) => s[0]).slice(0, 2).join("").toUpperCase();
+  const initials = fullName
+    .split(/\s+/)
+    .map((s) => s[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
   async function handleArchive() {
     try {
@@ -56,18 +75,20 @@ export function ContactDetailSheet({
     <RecordSheet
       open={open}
       onOpenChange={onOpenChange}
-      eyebrow={`Contact · ${contact.lifecycleStage}`}
+      eyebrow="Contact"
       title={fullName}
       subtitle={contact.title || company?.name || undefined}
       initials={initials || "?"}
+      status={contact.lifecycleStage}
       actions={
         <>
           {contact.email && (
             <a
               href={`mailto:${contact.email}`}
-              className="inline-flex items-center h-8 px-4 text-xs border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
             >
-              <Mail className="size-3.5 mr-1.5" /> Email
+              <Mail className="size-3.5" />
+              Email
             </a>
           )}
           {contact.whatsapp && (
@@ -75,43 +96,93 @@ export function ContactDetailSheet({
               href={`https://wa.me/${contact.whatsapp.replace(/[^0-9]/g, "")}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center h-8 px-4 text-xs border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
             >
-              <MessageSquare className="size-3.5 mr-1.5" /> WhatsApp
+              <MessageSquare className="size-3.5" />
+              WhatsApp
             </a>
           )}
           {contact.phone && (
             <a
               href={`tel:${contact.phone}`}
-              className="inline-flex items-center h-8 px-4 text-xs border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
             >
-              <Phone className="size-3.5 mr-1.5" /> Call
+              <Phone className="size-3.5" />
+              Call
             </a>
           )}
-          <Button variant="ghost" size="sm" onClick={handleArchive}>
-            <Trash2 className="size-3.5 mr-1.5" /> Archive
-          </Button>
+          {contact.linkedin && (
+            <a
+              href={
+                contact.linkedin.startsWith("http")
+                  ? contact.linkedin
+                  : `https://linkedin.com/in/${contact.linkedin}`
+              }
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <Linkedin className="size-3.5" />
+              LinkedIn
+            </a>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "ml-auto",
+              )}
+            >
+              <MoreHorizontal className="size-3.5" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={handleArchive}
+                className="text-destructive"
+              >
+                <Archive className="size-3.5" /> Archive
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </>
       }
       meta={
-        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
-          {contact.email && <Meta label="Email" value={contact.email} />}
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+          {contact.email && <Meta label="Email" value={contact.email} mono />}
           {contact.phone && <Meta label="Phone" value={contact.phone} mono />}
-          {contact.whatsapp && <Meta label="WhatsApp" value={contact.whatsapp} mono />}
+          {contact.whatsapp && (
+            <Meta label="WhatsApp" value={contact.whatsapp} mono />
+          )}
           {contact.linkedin && <Meta label="LinkedIn" value={contact.linkedin} />}
           {contact.twitter && <Meta label="Twitter" value={contact.twitter} />}
           {company && <Meta label="Company" value={company.name} />}
           {contact.tags.length > 0 && (
-            <Meta label="Tags" value={contact.tags.join(" · ")} />
+            <div className="col-span-full flex items-baseline gap-3 min-w-0">
+              <dt className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground shrink-0 w-20">
+                Tags
+              </dt>
+              <dd className="flex flex-wrap gap-1">
+                {contact.tags.map((t) => (
+                  <Badge key={t} variant="outline" className="text-[10px]">
+                    {t}
+                  </Badge>
+                ))}
+              </dd>
+            </div>
           )}
-        </div>
+        </dl>
       }
       tabs={[
         {
           id: "timeline",
           label: "Timeline",
           count: timeline.length,
-          content: <TimelineFeed events={timeline} emptyLabel="No activity yet for this contact." />,
+          content: (
+            <TimelineFeed
+              events={timeline}
+              emptyLabel="No activity yet for this contact."
+            />
+          ),
         },
         {
           id: "notes",
@@ -138,13 +209,21 @@ export function ContactDetailSheet({
   );
 }
 
-function Meta({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Meta({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
   return (
-    <div className="flex gap-3 min-w-0">
-      <span className="eyebrow text-muted-foreground shrink-0 w-20">{label}</span>
-      <span className={`truncate ${mono ? "font-mono" : ""}`}>{value}</span>
+    <div className="flex items-baseline gap-3 min-w-0">
+      <dt className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground shrink-0 w-20">
+        {label}
+      </dt>
+      <dd className={`truncate ${mono ? "font-mono" : ""}`}>{value}</dd>
     </div>
   );
 }
-
-// PlaceholderTab removed — DealsTab replaces its only use.
