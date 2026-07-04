@@ -525,6 +525,68 @@ function isMegaBrand(name: string): boolean {
   return MEGA_BRAND_DENYLIST.some((brand) => lc.includes(brand));
 }
 
+/**
+ * Google Place types that indicate a shopping center / mall / big
+ * complex — never an independent SMB, always a landlord. We hard-
+ * filter these out because they clog up prospector results for
+ * generic queries like "clothing shops in Nairobi".
+ */
+const DISQUALIFYING_TYPES = new Set([
+  "shopping_mall",
+  "department_store",
+  "supermarket",
+  "airport",
+  "train_station",
+  "bus_station",
+  "subway_station",
+  "transit_station",
+  "school",
+  "university",
+  "hospital",
+  "police",
+  "post_office",
+  "embassy",
+  "city_hall",
+  "courthouse",
+  "local_government_office",
+  "government_office",
+]);
+
+/**
+ * Name patterns that give away a mall / complex / big-brand branch
+ * even when the primary type doesn't. Google mixes types heavily.
+ */
+const DISQUALIFYING_NAME_PATTERNS = [
+  /\bmall\b/i,
+  /\bplaza\b/i,
+  /\bshopping\s+center\b/i,
+  /\bshopping\s+centre\b/i,
+  /\bmarket\b/i,      // catches "Village Market", "City Market"
+  /\barcade\b/i,
+  /\bcomplex\b/i,
+  /\btowers?\b/i,
+  /\bcentre\b/i,      // "Sarit Centre", "Yaya Centre" (as full name)
+  /\bcenter$/i,
+  /\bhouse$/i,        // "Imenti House", "Development House" — buildings, not businesses
+];
+
+function isDisqualifyingType(types: string[] | undefined, name: string): boolean {
+  if (types) {
+    for (const t of types) {
+      if (DISQUALIFYING_TYPES.has(t)) return true;
+    }
+  }
+  // Name pattern check — but only if the name is short + isolated (not
+  // "Salama Pharmacy at Sarit Centre"). Rule: name is 4 words or fewer.
+  const words = name.trim().split(/\s+/).length;
+  if (words <= 4) {
+    for (const pat of DISQUALIFYING_NAME_PATTERNS) {
+      if (pat.test(name)) return true;
+    }
+  }
+  return false;
+}
+
 interface PlaceLike {
   googlePlaceId: string;
   name: string;
@@ -541,7 +603,9 @@ interface PlaceLike {
 }
 
 function filterAndDedupe<T extends PlaceLike>(places: T[]): T[] {
-  const noMega = places.filter((p) => !isMegaBrand(p.name));
+  const noMega = places.filter(
+    (p) => !isMegaBrand(p.name) && !isDisqualifyingType(p.types, p.name),
+  );
   const byName = new Map<string, T & { _dupCount?: number }>();
   for (const p of noMega) {
     const key = p.name.toLowerCase().trim();

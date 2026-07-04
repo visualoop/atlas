@@ -37,6 +37,7 @@ export function CompanyDetailSheet({
 }) {
   const data = useQuery(api.companies.get, { id: companyId });
   const archive = useMutation(api.companies.archive);
+  const [outreachOpen, setOutreachOpen] = useState(Boolean(initialDrafterOpen));
 
   if (!data) {
     return (
@@ -64,8 +65,6 @@ export function CompanyDetailSheet({
     .slice(0, 2)
     .join("")
     .toUpperCase();
-
-  const [outreachOpen, setOutreachOpen] = useState(Boolean(initialDrafterOpen));
 
   async function handleArchive() {
     try {

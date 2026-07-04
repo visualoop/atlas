@@ -204,8 +204,15 @@ export const persistSearchResults = internalMutation({
     const suppressedIds = new Set(suppressed.map((s) => s.googlePlaceId));
 
     let persisted = 0;
+    let filteredMega = 0;
     for (const r of args.results) {
       if (suppressedIds.has(r.googlePlaceId)) continue;
+      // Skip mega-brands + malls / plazas / mega-buildings — these
+      // aren't reachable via cold founder outreach and clog results.
+      if (isMegaBrand(r.name) || isDisqualifyingPlace(r.name, r.types)) {
+        filteredMega++;
+        continue;
+      }
       // Dedup by (workspaceId, googlePlaceId) — same place across searches
       const existing = await ctx.db
         .query("prospectorResults")
@@ -951,5 +958,151 @@ export const bulkImportMapPlaces = mutation({
       capReached,
       remainingBudget: budget,
     };
+  },
+});
+
+/**
+ * Mega-brand + mall filter helpers — shared with prospectorActions.
+ * Duplicated here (small, static, no cross-file import) so the
+ * persistSearchResults mutation doesn't have to import from a
+ * "use node" file.
+ */
+const _MEGA_BRAND_DENYLIST = [
+  "naivas", "carrefour", "quickmart", "chandarana", "cleanshelf",
+  "tuskys", "tusky", "nakumatt", "uchumi", "ukwala", "eastmatt",
+  "shoprite", "game store", "gamestore",
+  "java house", "javahouse", "artcaffe", "kfc", "pizza inn", "chicken inn",
+  "creamy inn", "galitos", "subway", "mcdonald", "burger king", "steers",
+  "debonairs", "domino", "cj's", "cj s", "wimpy", "big square",
+  "kcb", "equity bank", "co-operative bank", "cooperative bank", "co-op bank",
+  "absa", "standard chartered", "stanchart", "stanbic", "ncba", "dtb",
+  "national bank", "family bank", "i&m bank", "im bank", "citibank",
+  "gulf african bank", "sidian", "cba bank", "commercial bank of africa",
+  "hfc", "kwft", "faulu", "housing finance",
+  "safaricom", "airtel", "telkom kenya", "jamii telecom",
+  "shell", "total energies", "totalenergies", "rubis", "ola energy", "oilibya",
+  "kenol kobil", "kenolkobil", "vivo", "hass petroleum",
+  "goodlife pharmacy", "goodlife", "haltons", "healthplus", "afrimed", "portland pharmacy",
+  "hotpoint", "samsung dealership", "samsung store",
+  "britam", "jubilee", "cic insurance", "old mutual", "sanlam", "apa insurance",
+  "uap", "resolution insurance", "madison insurance",
+  "bata", "mr price", "woolworths", "truworths",
+  "serena", "sarova", "fairmont", "hilton", "radisson", "movenpick",
+  "intercontinental", "sheraton", "villa rosa", "kempinski",
+  "text book centre", "textbook centre",
+];
+
+function isMegaBrand(name: string): boolean {
+  const lc = name.toLowerCase();
+  return _MEGA_BRAND_DENYLIST.some((brand) => lc.includes(brand));
+}
+
+const _DISQUALIFYING_TYPES = new Set([
+  "shopping_mall",
+  "department_store",
+  "supermarket",
+  "airport",
+  "train_station",
+  "bus_station",
+  "subway_station",
+  "transit_station",
+  "school",
+  "university",
+  "hospital",
+  "police",
+  "post_office",
+  "embassy",
+  "city_hall",
+  "courthouse",
+  "local_government_office",
+  "government_office",
+]);
+
+const _DISQUALIFYING_NAME_PATTERNS = [
+  /\bmall\b/i,
+  /\bplaza\b/i,
+  /\bshopping\s+cent(er|re)\b/i,
+  /\bmarket\b/i,
+  /\barcade\b/i,
+  /\bcomplex\b/i,
+  /\btowers?\b/i,
+  /\bcentre\b/i,
+  /\bcenter$/i,
+  /\bhouse$/i,
+];
+
+function isDisqualifyingPlace(name: string, types: string[] | undefined): boolean {
+  if (types) {
+    for (const t of types) {
+      if (_DISQUALIFYING_TYPES.has(t)) return true;
+    }
+  }
+  const words = name.trim().split(/\s+/).length;
+  if (words <= 4) {
+    for (const pat of _DISQUALIFYING_NAME_PATTERNS) {
+      if (pat.test(name)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * One-shot cleanup — archives companies + prospector results that
+ * match the mall / plaza / mega-brand filter. Safe to run multiple
+ * times: only touches unarchived rows. Doesn't delete — soft-archives
+ * so history is preserved.
+ */
+export const purgeDisqualifiedImports = mutation({
+  args: { dryRun: v.optional(v.boolean()) },
+  handler: async (ctx, args): Promise<{ companiesArchived: number; resultsRejected: number; matches: string[] }> => {
+    const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "admin" });
+    const dryRun = args.dryRun ?? false;
+
+    // 1. Companies matching the filter
+    const companies = await ctx.db
+      .query("companies")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", wsCtx.workspace._id))
+      .filter((q) => q.eq(q.field("archivedAt"), undefined))
+      .take(500);
+    const matches: string[] = [];
+    let companiesArchived = 0;
+    for (const c of companies) {
+      const types = Array.isArray(
+        (c.enrichmentData as { types?: unknown })?.types,
+      )
+        ? ((c.enrichmentData as { types?: string[] }).types as string[])
+        : undefined;
+      if (isMegaBrand(c.name) || isDisqualifyingPlace(c.name, types)) {
+        matches.push(c.name);
+        if (!dryRun) {
+          await ctx.db.patch(c._id, { archivedAt: Date.now() });
+        }
+        companiesArchived++;
+      }
+    }
+
+    // 2. Prospector results matching the filter — reject so they never
+    //    appear again + won't be re-imported
+    const results = await ctx.db
+      .query("prospectorResults")
+      .withIndex("by_workspace_place", (q) =>
+        q.eq("workspaceId", wsCtx.workspace._id),
+      )
+      .filter((q) => q.eq(q.field("rejectedAt"), undefined))
+      .take(500);
+    let resultsRejected = 0;
+    for (const r of results) {
+      if (isMegaBrand(r.name) || isDisqualifyingPlace(r.name, r.types)) {
+        if (!dryRun) {
+          await ctx.db.patch(r._id, {
+            rejectedAt: Date.now(),
+            rejectedReason: "mall_or_mega_brand_filter",
+          });
+        }
+        resultsRejected++;
+      }
+    }
+
+    return { companiesArchived, resultsRejected, matches: matches.slice(0, 20) };
   },
 });

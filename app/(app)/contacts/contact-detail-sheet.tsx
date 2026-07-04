@@ -34,6 +34,7 @@ export function ContactDetailSheet({
 }) {
   const data = useQuery(api.contacts.get, { id: contactId });
   const archive = useMutation(api.contacts.archive);
+  const [outreachOpen, setOutreachOpen] = useState(false);
 
   if (!data) {
     return (
@@ -72,8 +73,6 @@ export function ContactDetailSheet({
       toast.error(err instanceof Error ? err.message : "Could not archive");
     }
   }
-
-  const [outreachOpen, setOutreachOpen] = useState(false);
 
   return (
     <>
