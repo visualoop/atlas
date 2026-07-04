@@ -19,7 +19,7 @@
  */
 
 import { v, ConvexError } from "convex/values";
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 
@@ -218,3 +218,103 @@ export const draftColdOutreach = action({
     };
   },
 });
+
+
+/* ============================================================ */
+/* System-scheduled auto-draft — after prospect import           */
+/* ============================================================ */
+
+export const autoDraftForCompany = internalAction({
+  args: {
+    companyId: v.id("companies"),
+    channel: v.union(v.literal("email"), v.literal("whatsapp")),
+  },
+  handler: async (ctx, args): Promise<{ ok: boolean }> => {
+    const context = await ctx.runQuery(
+      internal.aiWorkflowHelpers.loadCompanyForOutreachForSystem,
+      { companyId: args.companyId },
+    );
+    if (!context) return { ok: false };
+    const { company, contact, workspace, userId } = context;
+
+    const brandBlock = buildBrandBlock(context.brand);
+    const profile = buildProfile(company, contact);
+    const userPrompt = `${brandBlock}\n\nProspect:\n${profile}\n\nDraft the message.`;
+    const system =
+      args.channel === "email" ? EMAIL_COLD_SYSTEM : WHATSAPP_COLD_SYSTEM;
+
+    try {
+      const result = await ctx.runAction(internal.ai.runFeature, {
+        workspaceId: workspace._id,
+        organizationId: workspace.organizationId,
+        actorId: userId,
+        featureId:
+          args.channel === "email"
+            ? "draft_cold_email"
+            : "draft_cold_whatsapp",
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: userPrompt },
+        ],
+        resourceType: "auto_draft_company",
+        resourceId: args.companyId,
+      });
+
+      if (args.channel === "email") {
+        const raw = result.text.trim();
+        let parsed: { subject?: string; body?: string } = {};
+        try {
+          parsed = JSON.parse(
+            raw.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim(),
+          );
+        } catch {
+          const firstBreak = raw.indexOf("\n\n");
+          if (firstBreak > 0 && firstBreak < 120) {
+            parsed.subject = raw
+              .slice(0, firstBreak)
+              .replace(/^Subject:\s*/i, "")
+              .trim();
+            parsed.body = raw.slice(firstBreak + 2).trim();
+          } else {
+            parsed.body = raw;
+          }
+        }
+        await ctx.runMutation(
+          internal.aiWorkflowHelpers.saveCompanyAiDraft,
+          {
+            companyId: args.companyId,
+            channel: "email",
+            subject: parsed.subject?.slice(0, 200),
+            body: parsed.body?.slice(0, 4000) ?? "",
+          },
+        );
+      } else {
+        await ctx.runMutation(
+          internal.aiWorkflowHelpers.saveCompanyAiDraft,
+          {
+            companyId: args.companyId,
+            channel: "whatsapp",
+            body: result.text.trim().slice(0, 500),
+          },
+        );
+      }
+
+      return { ok: true };
+    } catch (err) {
+      console.warn(
+        "[autoDraft] failed for company",
+        args.companyId,
+        err,
+      );
+      return { ok: false };
+    }
+  },
+});
+
+
+/* ============================================================ */
+/* Public query — read cached AI draft off a company              */
+/*                                                                 */
+/* Moved to convex/coldOutreachQueries.ts (V8) since this file    */
+/* is a Node action module.                                        */
+/* ============================================================ */

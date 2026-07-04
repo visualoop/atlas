@@ -372,6 +372,16 @@ export const importResult = mutation({
       importedCompanyId: companyId,
     });
 
+    // Auto-draft cold outreach in background so the drafter opens
+    // pre-filled next time the user hits it.
+    if (companyId) {
+      await ctx.scheduler.runAfter(
+        3000,
+        internal.coldOutreach.autoDraftForCompany,
+        { companyId, channel: "email" },
+      );
+    }
+
     // Bump the search counter
     const search = await ctx.db.get(r.searchId);
     if (search) {
@@ -482,6 +492,14 @@ export const bulkImport = mutation({
         subjectId: companyId,
         payload: { source: "prospector_bulk" },
       });
+      // Auto-draft outreach for this company
+      if (companyId) {
+        await ctx.scheduler.runAfter(
+          3000,
+          internal.coldOutreach.autoDraftForCompany,
+          { companyId, channel: "email" },
+        );
+      }
     }
     // Kick enrichment dispatcher if anything got enqueued
     if (imported > 0) {
@@ -674,6 +692,13 @@ export const importMapPlace = internalMutation({
       0,
       internal.prospectorEnrich.runEnrichmentBatch,
       {},
+    );
+
+    // Auto-draft outreach 3s later so the drafter opens pre-filled
+    await ctx.scheduler.runAfter(
+      3000,
+      internal.coldOutreach.autoDraftForCompany,
+      { companyId, channel: "email" },
     );
 
     return { companyId, duplicated: false };

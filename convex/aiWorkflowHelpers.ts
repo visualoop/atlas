@@ -445,3 +445,118 @@ export const saveCompanyFitScore = internalMutation({
     });
   },
 });
+
+
+/* ============================================================ */
+/* Session-less variant of loadCompanyForOutreach — used by      */
+/* auto-draft scheduler after prospect import.                    */
+/* ============================================================ */
+
+export const loadCompanyForOutreachForSystem = internalQuery({
+  args: { companyId: v.id("companies") },
+  handler: async (ctx, args) => {
+    const company = await ctx.db.get(args.companyId);
+    if (!company) return null;
+
+    const workspace = await ctx.db.get(company.workspaceId);
+    if (!workspace) return null;
+
+    // Resolve org owner for the actorId that runFeature audits with
+    const members = await ctx.db
+      .query("members")
+      .withIndex("by_org", (q) =>
+        q.eq("organizationId", workspace.organizationId),
+      )
+      .collect();
+    const owner = members.find((m) => m.role === "owner") ?? members[0];
+    if (!owner) return null;
+
+    // Auto-pick primary contact for this company
+    const contact = await ctx.db
+      .query("contacts")
+      .withIndex("by_workspace_company", (q) =>
+        q
+          .eq("workspaceId", workspace._id)
+          .eq("companyId", args.companyId),
+      )
+      .filter((q) => q.eq(q.field("archivedAt"), undefined))
+      .order("desc")
+      .first();
+
+    const enrichment =
+      typeof company.enrichmentData === "object" && company.enrichmentData
+        ? (company.enrichmentData as Record<string, unknown>)
+        : {};
+    const description = typeof enrichment.description === "string"
+      ? enrichment.description
+      : company.description;
+    const types = Array.isArray(enrichment.types)
+      ? (enrichment.types as string[])
+      : undefined;
+
+    return {
+      workspace,
+      userId: owner.userId,
+      brand: {
+        workspaceName: workspace.name,
+        oneLiner: workspace.oneLiner,
+        offerings: workspace.offerings,
+        targetMarket: workspace.targetMarket,
+        pricingSummary: workspace.pricingSummary,
+        brandVoice: workspace.brandVoice,
+      },
+      company: {
+        name: company.name,
+        domain: company.domain,
+        industry: company.industry,
+        city: company.city,
+        country: company.country,
+        address: company.address,
+        website: company.website,
+        description,
+        types,
+        fitScore: company.fitScore,
+        fitReasoning: undefined,
+      },
+      contact: contact
+        ? {
+            firstName: contact.firstName,
+            lastName: contact.lastName,
+            title: contact.title,
+            email: contact.email,
+            phone: contact.phone,
+          }
+        : undefined,
+    };
+  },
+});
+
+export const saveCompanyAiDraft = internalMutation({
+  args: {
+    companyId: v.id("companies"),
+    channel: v.union(v.literal("email"), v.literal("whatsapp")),
+    subject: v.optional(v.string()),
+    body: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const company = await ctx.db.get(args.companyId);
+    if (!company) return;
+    const enrichment =
+      typeof company.enrichmentData === "object" && company.enrichmentData
+        ? { ...(company.enrichmentData as Record<string, unknown>) }
+        : {};
+    const existing =
+      typeof enrichment.aiDraft === "object" && enrichment.aiDraft
+        ? { ...(enrichment.aiDraft as Record<string, unknown>) }
+        : {};
+    if (args.channel === "email") {
+      existing.email = { subject: args.subject, body: args.body, draftedAt: Date.now() };
+    } else {
+      existing.whatsapp = { body: args.body, draftedAt: Date.now() };
+    }
+    enrichment.aiDraft = existing;
+    await ctx.db.patch(args.companyId, {
+      enrichmentData: enrichment,
+    });
+  },
+});

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAction } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import {
   Loader2,
   Mail,
@@ -65,6 +65,10 @@ export function OutreachDrafter({
   autoGenerate,
 }: Props) {
   const drafter = useAction(api.coldOutreach.draftColdOutreach);
+  const cachedDraft = useQuery(
+    api.coldOutreachQueries.companyAiDraft,
+    companyId ? { companyId } : "skip",
+  );
   const [channel, setChannel] = useState<"email" | "whatsapp">(
     hasEmail ? "email" : "whatsapp",
   );
@@ -73,6 +77,21 @@ export function OutreachDrafter({
   const [drafting, setDrafting] = useState(false);
   const [copied, setCopied] = useState<"subject" | "body" | null>(null);
   const [autoTriggered, setAutoTriggered] = useState(false);
+  const [cachedApplied, setCachedApplied] = useState(false);
+
+  // Populate from cached AI draft when it lands (auto-drafted on
+  // prospect import). Only fires once so re-generation still works.
+  useEffect(() => {
+    if (!open || cachedApplied || body || drafting) return;
+    if (channel === "email" && cachedDraft?.email) {
+      setSubject(cachedDraft.email.subject ?? "");
+      setBody(cachedDraft.email.body);
+      setCachedApplied(true);
+    } else if (channel === "whatsapp" && cachedDraft?.whatsapp) {
+      setBody(cachedDraft.whatsapp.body);
+      setCachedApplied(true);
+    }
+  }, [open, cachedDraft, channel, cachedApplied, body, drafting]);
 
   // Auto-generate on first open when caller asks for it (e.g. Draft
   // deep-link from /today or /outreach/queue). Only fires once per mount.
