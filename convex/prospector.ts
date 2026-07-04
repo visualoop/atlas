@@ -245,16 +245,22 @@ export const persistSearchResults = internalMutation({
 
     // Kick auto-ranking — batch AI scoring runs in background
     if (persisted > 0) {
+      // 1. Fill missing contact info from Place Details (fast, ~5s)
       await ctx.scheduler.runAfter(
         0,
+        internal.prospectorPlaceDetails.fillPlaceDetails,
+        { searchId: args.searchId },
+      );
+      // 2. AI-rank with the fresh contact data (delayed so rank sees
+      // filled data, not empty)
+      await ctx.scheduler.runAfter(
+        6000,
         internal.prospectorAutoRank.rankSearchResults,
         { searchId: args.searchId },
       );
-      // Kick website enrichment — scrapes each result's site to fill in
-      // email / description / socials. Delayed 3s so it doesn't compete
-      // with ranking for AI TPM budget.
+      // 3. Website-scrape enrichment for results with a website
       await ctx.scheduler.runAfter(
-        3000,
+        9000,
         internal.prospectorAutoRank.enrichSearchResults,
         { searchId: args.searchId },
       );

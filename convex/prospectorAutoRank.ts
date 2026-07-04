@@ -22,11 +22,13 @@ import type { Id } from "./_generated/dataModel";
 export const rankSearchResults = internalAction({
   args: { searchId: v.id("prospectorSearches") },
   handler: async (ctx, args): Promise<{ ranked: number; skipped: number }> => {
+    console.log("[autoRank] start", { searchId: args.searchId });
     // 1. Load all unranked results for the search
     const unranked = await ctx.runQuery(
       internal.prospectorHelpers.loadUnrankedResults,
       { searchId: args.searchId },
     );
+    console.log("[autoRank] unranked found", { count: unranked.length });
     if (unranked.length === 0) return { ranked: 0, skipped: 0 };
 
     // Auto-rank runs from a scheduler (no user session). Load the
@@ -35,9 +37,12 @@ export const rankSearchResults = internalAction({
     const workspaceId = unranked[0].workspaceId;
 
     // 2. Batch rank via existing ranker (same one used by Map browse)
-    const ranked = await ctx.runAction(
-      api.prospectorRanking.rankProspects,
-      {
+    let ranked: {
+      scores: Array<{ googlePlaceId: string; fitScore: number; fitReason: string }>;
+      error?: string;
+    };
+    try {
+      ranked = await ctx.runAction(api.prospectorRanking.rankProspects, {
         workspaceId,
         places: unranked.map((r) => ({
           googlePlaceId: r.googlePlaceId,
@@ -49,14 +54,21 @@ export const rankSearchResults = internalAction({
           hasPhone: Boolean(r.phone?.trim()),
           hasWebsite: Boolean(r.website?.trim()),
         })),
-      },
-    );
+      });
+      console.log("[autoRank] ranker returned", {
+        scoreCount: ranked.scores.length,
+        error: ranked.error,
+      });
+    } catch (err) {
+      console.error("[autoRank] ranker threw", err);
+      ranked = { scores: [], error: err instanceof Error ? err.message : "unknown" };
+    }
 
     // 3. Map scores back to result IDs by googlePlaceId
     const byPlaceId = new Map(
       unranked.map((r) => [r.googlePlaceId, r._id as Id<"prospectorResults">]),
     );
-    let applied = 0;
+    const applied = new Set<string>();
     for (const s of ranked.scores) {
       const resultId = byPlaceId.get(s.googlePlaceId);
       if (!resultId) continue;
@@ -68,9 +80,31 @@ export const rankSearchResults = internalAction({
           reasoning: s.fitReason,
         },
       );
-      applied++;
+      applied.add(resultId as string);
     }
-    return { ranked: applied, skipped: unranked.length - applied };
+
+    // Hard fallback: any unranked result that didn't get scored (partial
+    // response, provider errors) gets a neutral 50 so the UI unlocks.
+    // Better than a spinner rotating forever.
+    for (const r of unranked) {
+      if (applied.has(r._id as string)) continue;
+      await ctx.runMutation(
+        internal.prospectorHelpers.applyResultFitScore,
+        {
+          resultId: r._id as Id<"prospectorResults">,
+          score: 50,
+          reasoning:
+            ranked.error?.slice(0, 200) ??
+            "AI scoring returned no data — using neutral score",
+        },
+      );
+    }
+
+    console.log("[autoRank] done", {
+      ranked: applied.size,
+      fallback: unranked.length - applied.size,
+    });
+    return { ranked: applied.size, skipped: unranked.length - applied.size };
   },
 });
 

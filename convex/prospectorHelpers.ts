@@ -121,3 +121,95 @@ export const loadUnEnrichedResults = internalQuery({
     return rows;
   },
 });
+
+/**
+ * Load prospectorResults missing all contact info (phone, website).
+ * Used by prospectorPlaceDetails.fillPlaceDetails to gap-fill from
+ * the Places API /v1/places/{id} endpoint.
+ */
+export const loadResultsMissingContact = internalQuery({
+  args: {
+    searchId: v.id("prospectorSearches"),
+    limit: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("prospectorResults")
+      .withIndex("by_search", (q) => q.eq("searchId", args.searchId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("phone"), undefined),
+          q.eq(q.field("website"), undefined),
+          q.neq(q.field("enrichmentStatus"), "no_website"),
+          q.neq(q.field("enrichmentStatus"), "done"),
+        ),
+      )
+      .take(args.limit);
+    return rows;
+  },
+});
+
+/**
+ * Return the org's Google Places key without a session. Uses org
+ * owner as actor for decryption + audit.
+ */
+export const getPlacesKeyForWorkspace = internalQuery({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, args): Promise<{ apiKey: string } | null> => {
+    const ws = await ctx.db.get(args.workspaceId);
+    if (!ws) return null;
+    const members = await ctx.db
+      .query("members")
+      .withIndex("by_org", (q) => q.eq("organizationId", ws.organizationId))
+      .collect();
+    const owner = members.find((m) => m.role === "owner") ?? members[0];
+    if (!owner) return null;
+    try {
+      const k = await getOrgKey(ctx, {
+        organizationId: ws.organizationId,
+        provider: "google_maps_places",
+        reason: "place_details",
+        actorId: owner.userId,
+      });
+      return { apiKey: k.value };
+    } catch {
+      return null;
+    }
+  },
+});
+
+/**
+ * Patch a result with newly-discovered contact info from
+ * /v1/places/{id}.
+ */
+export const patchResultContact = internalMutation({
+  args: {
+    resultId: v.id("prospectorResults"),
+    patch: v.object({
+      phone: v.optional(v.string()),
+      website: v.optional(v.string()),
+      hoursText: v.optional(v.string()),
+      enrichmentStatus: v.optional(v.literal("no_website")),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const r = await ctx.db.get(args.resultId);
+    if (!r) return;
+    const patch: Record<string, unknown> = {};
+    if (args.patch.phone && !r.phone) patch.phone = args.patch.phone;
+    if (args.patch.website && !r.website) patch.website = args.patch.website;
+    if (args.patch.hoursText) {
+      const raw =
+        typeof r.rawPlaceData === "object" && r.rawPlaceData
+          ? (r.rawPlaceData as Record<string, unknown>)
+          : {};
+      patch.rawPlaceData = { ...raw, hoursText: args.patch.hoursText };
+    }
+    if (args.patch.enrichmentStatus) {
+      patch.enrichmentStatus = args.patch.enrichmentStatus;
+    }
+    if (Object.keys(patch).length > 0) {
+      await ctx.db.patch(args.resultId, patch);
+    }
+  },
+});
