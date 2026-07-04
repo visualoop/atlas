@@ -53,6 +53,33 @@ export const loadProspectorResult = internalQuery({
   },
 });
 
+/**
+ * Session-less variant used by scheduler actions (auto-enrich).
+ * Resolves workspace + org owner directly from the result's
+ * workspaceId. Same output shape as loadProspectorResult so callers
+ * can share code.
+ */
+export const loadProspectorResultForSystem = internalQuery({
+  args: { resultId: v.id("prospectorResults") },
+  handler: async (ctx, args) => {
+    const result = await ctx.db.get(args.resultId);
+    if (!result) return null;
+    const workspace = await ctx.db.get(result.workspaceId);
+    if (!workspace) return null;
+    const members = await ctx.db
+      .query("members")
+      .withIndex("by_org", (q) => q.eq("organizationId", workspace.organizationId))
+      .collect();
+    const owner = members.find((m) => m.role === "owner") ?? members[0];
+    if (!owner) return null;
+    return {
+      result,
+      workspace,
+      userId: owner.userId,
+    };
+  },
+});
+
 /* ------------------------------------------------------------------ */
 /* Document → self, workspace, user, company, contact, deal              */
 /* ------------------------------------------------------------------ */

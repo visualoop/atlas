@@ -132,6 +132,7 @@ export const enrichSearchResults = internalAction({
       pending.map((r) =>
         ctx.runAction(api.aiWorkflows.enrichWebsite, {
           resultId: r._id as Id<"prospectorResults">,
+          system: true,
         }),
       ),
     );

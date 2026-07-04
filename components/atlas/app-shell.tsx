@@ -78,6 +78,7 @@ const CRM_NAV: NavItem[] = [
   { href: "/companies", icon: Building2, label: "Companies", key: "o" },
   { href: "/pipelines", icon: Workflow, label: "Pipelines", key: "p" },
   { href: "/prospector", icon: Search, label: "Prospector", key: "g" },
+  { href: "/outreach/queue", icon: Sparkles, label: "Outreach queue", key: "q" },
 ];
 
 const WORK_NAV: NavItem[] = [

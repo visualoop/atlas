@@ -28,10 +28,12 @@ export function CompanyDetailSheet({
   companyId,
   open,
   onOpenChange,
+  initialDrafterOpen,
 }: {
   companyId: Id<"companies">;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialDrafterOpen?: boolean;
 }) {
   const data = useQuery(api.companies.get, { id: companyId });
   const archive = useMutation(api.companies.archive);
@@ -63,7 +65,7 @@ export function CompanyDetailSheet({
     .join("")
     .toUpperCase();
 
-  const [outreachOpen, setOutreachOpen] = useState(false);
+  const [outreachOpen, setOutreachOpen] = useState(Boolean(initialDrafterOpen));
 
   async function handleArchive() {
     try {

@@ -222,7 +222,10 @@ Given the HTML, return ONLY a JSON object with these keys (omit or set null if n
 Do not invent values. Return valid JSON, nothing else.`;
 
 export const enrichWebsite = action({
-  args: { resultId: v.id("prospectorResults") },
+  args: {
+    resultId: v.id("prospectorResults"),
+    system: v.optional(v.boolean()),        // true when called from scheduler (no user session)
+  },
   handler: async (ctx, args): Promise<{
     email?: string;
     phone?: string;
@@ -230,9 +233,14 @@ export const enrichWebsite = action({
     socials?: Record<string, string>;
     error?: string;
   }> => {
-    const context = await ctx.runQuery(internal.aiWorkflowHelpers.loadProspectorResult, {
-      resultId: args.resultId,
-    });
+    const context = args.system
+      ? await ctx.runQuery(
+          internal.aiWorkflowHelpers.loadProspectorResultForSystem,
+          { resultId: args.resultId },
+        )
+      : await ctx.runQuery(internal.aiWorkflowHelpers.loadProspectorResult, {
+          resultId: args.resultId,
+        });
     if (!context) {
       throw new ConvexError({ code: "NOT_FOUND", message: "Result not found." });
     }

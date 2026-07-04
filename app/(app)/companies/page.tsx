@@ -143,7 +143,18 @@ export default function CompaniesPage() {
         <CompanyDetailSheet
           companyId={openId}
           open={true}
-          onOpenChange={(o) => !o && setActiveId(null)}
+          onOpenChange={(o) => {
+            if (!o) {
+              // Also clear the draft param when closing
+              const params = new URLSearchParams(searchParams.toString());
+              params.delete("open");
+              params.delete("draft");
+              router.replace(
+                `${pathname}${params.toString() ? "?" + params.toString() : ""}`,
+              );
+            }
+          }}
+          initialDrafterOpen={searchParams.get("draft") === "1"}
         />
       )}
     </>
