@@ -8,7 +8,7 @@
 import { v } from "convex/values";
 import { internalQuery, internalMutation } from "./_generated/server";
 import { getOrgKey } from "./lib/secretsAccess";
-import { internal } from "./_generated/api";
+import { internal, api } from "./_generated/api";
 
 export const getResendKeyForWorkspace = internalQuery({
   args: { workspaceId: v.id("workspaces") },
@@ -80,23 +80,27 @@ export const attachToMessage = internalMutation({
 });
 
 /**
- * Placeholder: Task 4 replaces this with a call to
- * aiWorkflows.draftEmailReply session-less. For now it just logs
- * intent so we know the pipeline works.
+ * Schedule auto-draft reply once the inbound body has been fetched.
+ * Uses draftEmailReply session-less mode with persistToInboundMessage
+ * so the resulting draft ends up on messages.aiDraftReply for the
+ * thread reader UI to pick up.
  */
 export const scheduleAutoDraft = internalMutation({
   args: { messageId: v.id("messages") },
   handler: async (ctx, args) => {
     const msg = await ctx.db.get(args.messageId);
     if (!msg) return;
-    console.log("[inbound-fetch] auto-draft placeholder", {
-      messageId: args.messageId,
-      conversationId: msg.conversationId,
-    });
-    // Task 4 will replace this with:
-    // await ctx.scheduler.runAfter(0, internal.aiWorkflows.draftEmailReply, {
-    //   conversationId: msg.conversationId,
-    //   system: true,
-    // });
+    // Only draft replies for inbound messages that don't already have one
+    if (msg.direction !== "inbound") return;
+    if (msg.aiDraftReply) return;
+    await ctx.scheduler.runAfter(
+      0,
+      api.aiWorkflows.draftEmailReply,
+      {
+        conversationId: msg.conversationId,
+        system: true,
+        persistToInboundMessage: args.messageId,
+      },
+    );
   },
 });

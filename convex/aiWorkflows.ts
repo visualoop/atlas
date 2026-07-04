@@ -41,11 +41,18 @@ export const draftEmailReply = action({
   args: {
     conversationId: v.id("conversations"),
     intent: v.optional(v.string()),                             // "accept" | "decline" | free text hint
+    system: v.optional(v.boolean()),                            // scheduler-invoked, no user session
+    persistToInboundMessage: v.optional(v.id("messages")),      // if set, save the draft on this message row
   },
   handler: async (ctx, args): Promise<{ draft: string; provider: string; model: string }> => {
-    const context = await ctx.runQuery(internal.aiWorkflowHelpers.loadConversationForReply, {
-      conversationId: args.conversationId,
-    });
+    const context = args.system
+      ? await ctx.runQuery(
+          internal.aiWorkflowHelpers.loadConversationForReplyForSystem,
+          { conversationId: args.conversationId },
+        )
+      : await ctx.runQuery(internal.aiWorkflowHelpers.loadConversationForReply, {
+          conversationId: args.conversationId,
+        });
     if (!context) {
       throw new ConvexError({ code: "NOT_FOUND", message: "Conversation not found." });
     }
@@ -79,6 +86,18 @@ export const draftEmailReply = action({
       resourceType: "conversation",
       resourceId: args.conversationId,
     });
+
+    // If asked, persist the draft on the inbound message row so the
+    // thread reader can offer a one-click use-the-draft UX.
+    if (args.persistToInboundMessage) {
+      await ctx.runMutation(
+        internal.aiWorkflowHelpers.saveAutoDraft,
+        {
+          messageId: args.persistToInboundMessage,
+          draft: result.text,
+        },
+      );
+    }
 
     return { draft: result.text, provider: result.provider, model: result.model };
   },

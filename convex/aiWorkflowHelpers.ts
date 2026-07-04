@@ -35,6 +35,53 @@ export const loadConversationForReply = internalQuery({
   },
 });
 
+/**
+ * Session-less variant — used when the caller is a scheduler action
+ * (auto-draft on inbound). Resolves org owner as the actor for logging.
+ */
+export const loadConversationForReplyForSystem = internalQuery({
+  args: { conversationId: v.id("conversations") },
+  handler: async (ctx, args) => {
+    const conv = await ctx.db.get(args.conversationId);
+    if (!conv) return null;
+    const workspace = await ctx.db.get(conv.workspaceId);
+    if (!workspace) return null;
+    const members = await ctx.db
+      .query("members")
+      .withIndex("by_org", (q) => q.eq("organizationId", workspace.organizationId))
+      .collect();
+    const owner = members.find((m) => m.role === "owner") ?? members[0];
+    if (!owner) return null;
+    const messages = await ctx.db
+      .query("messages")
+      .withIndex("by_conversation_time", (q) => q.eq("conversationId", conv._id))
+      .order("asc")
+      .take(30);
+    return {
+      conversation: conv,
+      messages,
+      workspace,
+      userId: owner.userId,
+    };
+  },
+});
+
+/**
+ * Persist the auto-generated reply draft onto the inbound message row.
+ * The thread reader detects it and shows a "Use draft" chip.
+ */
+export const saveAutoDraft = internalMutation({
+  args: { messageId: v.id("messages"), draft: v.string() },
+  handler: async (ctx, args) => {
+    const msg = await ctx.db.get(args.messageId);
+    if (!msg) return;
+    await ctx.db.patch(args.messageId, {
+      aiDraftReply: args.draft,
+      aiDraftedAt: Date.now(),
+    });
+  },
+});
+
 /* ------------------------------------------------------------------ */
 /* Prospector result → self, workspace, user                             */
 /* ------------------------------------------------------------------ */

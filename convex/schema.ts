@@ -631,6 +631,11 @@ export default defineSchema({
     referencesChain: v.optional(v.array(v.string())),
     aiDrafted: v.boolean(),
     aiModel: v.optional(v.string()),
+    // Pre-generated reply — populated when an inbound message
+    // arrives (see convex/emailsInboundFetch.ts scheduleAutoDraft).
+    // Cleared once the user sends a reply or dismisses the draft.
+    aiDraftReply: v.optional(v.string()),
+    aiDraftedAt: v.optional(v.number()),
     scheduledFor: v.optional(v.number()),
     sentAt: v.optional(v.number()),
     receivedAt: v.optional(v.number()),

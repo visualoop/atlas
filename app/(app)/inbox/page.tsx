@@ -526,7 +526,37 @@ function ThreadReader({ conversationId, onClose }: {
             onCancel={() => { setReplying(false); setDraft(undefined); }}
           />
         ) : (
-          <div className="px-6 py-3 flex items-center gap-2">
+          <div className="px-6 py-3 flex items-center gap-2 flex-wrap">
+            {(() => {
+              // Look for a pending auto-draft on the most recent inbound message
+              const lastInbound = [...messages]
+                .reverse()
+                .find((m) => m.direction === "inbound");
+              if (lastInbound?.aiDraftReply) {
+                return (
+                  <div className="w-full mb-2 px-3 py-2 border border-primary/40 bg-primary/5 rounded flex items-center gap-2 text-xs">
+                    <Sparkles className="size-3.5 text-primary shrink-0" />
+                    <span className="text-primary font-medium">
+                      AI drafted a reply
+                    </span>
+                    <span className="text-muted-foreground truncate flex-1 italic">
+                      {lastInbound.aiDraftReply.slice(0, 80)}
+                      {lastInbound.aiDraftReply.length > 80 ? "…" : ""}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setDraft(lastInbound.aiDraftReply);
+                        setReplying(true);
+                      }}
+                      className="text-[10px] font-mono uppercase tracking-[0.12em] h-6 px-2 bg-primary text-primary-foreground rounded shrink-0"
+                    >
+                      Use it
+                    </button>
+                  </div>
+                );
+              }
+              return null;
+            })()}
             <button
               onClick={() => setReplying(true)}
               className="inline-flex items-center gap-2 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors"
