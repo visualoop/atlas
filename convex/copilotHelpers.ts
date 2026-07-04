@@ -674,3 +674,95 @@ export const workspaceBrandInfo = query({
     };
   },
 });
+
+/**
+ * Session-less variant of `prepare`. Used by background scheduler
+ * actions (autoRank, calendar reminders, etc.) that don't run under
+ * a user session.
+ *
+ * Resolves org owner from `members` table + uses them as `actorId`
+ * for getOrgKey decryption. Same output shape as `prepare` so callers
+ * can share downstream code.
+ */
+export const prepareForWorkspace = internalQuery({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    workspaceId: Id<"workspaces">;
+    organizationId: Id<"organizations">;
+    userId: Id<"users">;
+    keys: {
+      groq?: string;
+      openrouter?: string;
+      gemini?: string;
+      cerebras?: string;
+      openai?: string;
+    };
+    brand: {
+      workspaceName?: string;
+      website?: string;
+      oneLiner?: string;
+      elevatorPitch?: string;
+      offerings?: string;
+      targetMarket?: string;
+      brandVoice?: string;
+      coreValues?: string;
+      pricingSummary?: string;
+    } | null;
+  } | null> => {
+    const ws = await ctx.db.get(args.workspaceId);
+    if (!ws) return null;
+
+    // Resolve org owner as our actor for decryption + audit.
+    const members = await ctx.db
+      .query("members")
+      .withIndex("by_org", (q) => q.eq("organizationId", ws.organizationId))
+      .collect();
+    const owner =
+      members.find((m) => m.role === "owner") ?? members[0];
+    if (!owner) return null;
+
+    const keys: {
+      groq?: string;
+      openrouter?: string;
+      gemini?: string;
+      cerebras?: string;
+      openai?: string;
+    } = {};
+    for (const p of ["groq", "openrouter", "gemini", "cerebras", "openai"] as const) {
+      try {
+        const k = await getOrgKey(ctx, {
+          organizationId: ws.organizationId,
+          provider: p,
+          reason: "auto_rank",
+          actorId: owner.userId,
+        });
+        keys[p] = k.value;
+      } catch {
+        // Missing key — skipped
+      }
+    }
+
+    const brand = {
+      workspaceName: ws.name,
+      website: ws.website,
+      oneLiner: ws.oneLiner,
+      elevatorPitch: ws.elevatorPitch,
+      offerings: ws.offerings,
+      targetMarket: ws.targetMarket,
+      brandVoice: ws.brandVoice,
+      coreValues: ws.coreValues,
+      pricingSummary: ws.pricingSummary,
+    };
+
+    return {
+      workspaceId: ws._id,
+      organizationId: ws.organizationId,
+      userId: owner.userId,
+      keys,
+      brand,
+    };
+  },
+});

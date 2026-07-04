@@ -19,7 +19,7 @@
  */
 
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 interface PlaceIn {
@@ -41,6 +41,7 @@ interface ScoredPlace {
 
 export const rankProspects = action({
   args: {
+    workspaceId: v.optional(v.id("workspaces")),
     places: v.array(
       v.object({
         googlePlaceId: v.string(),
@@ -61,6 +62,8 @@ export const rankProspects = action({
   }> => {
     if (args.places.length === 0) return { scores: [] };
 
+    // Two paths: with session (user calls from UI) or without
+    // (scheduler action passes workspaceId directly).
     const setup: {
       brand: {
         workspaceName?: string;
@@ -75,7 +78,11 @@ export const rankProspects = action({
         openrouter?: string;
         openai?: string;
       };
-    } | null = await ctx.runQuery(internal.copilotHelpers.prepare, {});
+    } | null = args.workspaceId
+      ? await ctx.runQuery(internal.copilotHelpers.prepareForWorkspace, {
+          workspaceId: args.workspaceId,
+        })
+      : await ctx.runQuery(internal.copilotHelpers.prepare, {});
 
     if (!setup) return { scores: [], error: "not_in_workspace" };
 

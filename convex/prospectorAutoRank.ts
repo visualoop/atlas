@@ -29,10 +29,16 @@ export const rankSearchResults = internalAction({
     );
     if (unranked.length === 0) return { ranked: 0, skipped: 0 };
 
+    // Auto-rank runs from a scheduler (no user session). Load the
+    // workspaceId from the first result so rankProspects can use
+    // the session-less prepare path.
+    const workspaceId = unranked[0].workspaceId;
+
     // 2. Batch rank via existing ranker (same one used by Map browse)
     const ranked = await ctx.runAction(
       api.prospectorRanking.rankProspects,
       {
+        workspaceId,
         places: unranked.map((r) => ({
           googlePlaceId: r.googlePlaceId,
           name: r.name,
