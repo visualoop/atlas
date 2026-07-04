@@ -388,7 +388,37 @@ function ResultsPane({ searchId }: { searchId: Id<"prospectorSearches"> }) {
   const importResult = useMutation(api.prospector.importResult);
   const bulkImport = useMutation(api.prospector.bulkImport);
   const rejectResult = useMutation(api.prospector.rejectResult);
+  const rescoreSearch = useAction(api.prospectorAutoRank.rankSearchResultsPublic);
   const [runningMore, setRunningMore] = useState(false);
+  const [rescoring, setRescoring] = useState(false);
+
+  // Sort results by fit score desc (unscored fall to end).
+  // AI scoring runs in the background after search — this ensures the
+  // UI ranks itself as scores arrive.
+  const sortedResults = useMemo(() => {
+    if (!results) return results;
+    return [...results].sort((a, b) => {
+      const sa = typeof a.fitScore === "number" ? a.fitScore : -1;
+      const sb = typeof b.fitScore === "number" ? b.fitScore : -1;
+      if (sa === sb) return 0;
+      return sb - sa; // desc
+    });
+  }, [results]);
+
+  const unscoredCount = results?.filter((r) => typeof r.fitScore !== "number").length ?? 0;
+  const scoredCount = results?.filter((r) => typeof r.fitScore === "number").length ?? 0;
+
+  async function handleRescore() {
+    setRescoring(true);
+    try {
+      const r = await rescoreSearch({ searchId });
+      toast.success(`Scored ${r.ranked} results with AI.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed.");
+    } finally {
+      setRescoring(false);
+    }
+  }
 
   async function loadMore() {
     if (!search?.nextPageToken) return;
@@ -406,7 +436,20 @@ function ResultsPane({ searchId }: { searchId: Id<"prospectorSearches"> }) {
     if (selected.size === 0) return;
     try {
       const r = await bulkImport({ ids: Array.from(selected) });
-      toast.success(`Imported ${r.imported}, skipped ${r.skipped}.`);
+      const parts: string[] = [];
+      if (r.imported > 0) parts.push(`Imported ${r.imported}`);
+      if (r.skipped > 0) parts.push(`${r.skipped} already imported`);
+      if (r.skippedNoContact && r.skippedNoContact > 0) {
+        parts.push(`${r.skippedNoContact} skipped — no phone/email/website`);
+      }
+      if (parts.length === 0) parts.push("Nothing changed");
+      if (r.imported > 0) {
+        toast.success(parts.join(" · "));
+      } else if (r.skippedNoContact && r.skippedNoContact > 0) {
+        toast.error(parts.join(" · "));
+      } else {
+        toast.info(parts.join(" · "));
+      }
       setSelected(new Set());
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed.");
@@ -424,9 +467,13 @@ function ResultsPane({ searchId }: { searchId: Id<"prospectorSearches"> }) {
 
   const toggleAll = () => {
     if (!results) return;
-    const unimported = results.filter((r) => !r.importedAt);
-    if (selected.size === unimported.length) setSelected(new Set());
-    else setSelected(new Set(unimported.map((r) => r._id)));
+    const importable = results.filter(
+      (r) =>
+        !r.importedAt &&
+        Boolean(r.phone?.trim() || r.email?.trim() || r.website?.trim()),
+    );
+    if (selected.size === importable.length) setSelected(new Set());
+    else setSelected(new Set(importable.map((r) => r._id)));
   };
 
   if (!search) return <Skeleton className="h-40 w-full" />;
@@ -457,7 +504,7 @@ function ResultsPane({ searchId }: { searchId: Id<"prospectorSearches"> }) {
         </div>
       </header>
 
-      <div className="flex items-center gap-1 text-xs">
+      <div className="flex items-center gap-1 text-xs flex-wrap">
         {(["unimported", "imported", "all"] as const).map((f) => (
           <button
             key={f}
@@ -470,6 +517,36 @@ function ResultsPane({ searchId }: { searchId: Id<"prospectorSearches"> }) {
             {f}
           </button>
         ))}
+        {results && results.length > 0 && (
+          <div className="ml-2 flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono">
+            {unscoredCount > 0 && !rescoring ? (
+              <>
+                <Loader2 className="size-3 animate-spin text-primary" />
+                <span>
+                  AI scoring… {scoredCount}/{results.length}
+                </span>
+              </>
+            ) : scoredCount > 0 ? (
+              <>
+                <Sparkles className="size-3 text-primary" />
+                <span>All {scoredCount} ranked · highest-fit first</span>
+              </>
+            ) : null}
+            <button
+              onClick={handleRescore}
+              disabled={rescoring}
+              title="Re-score every result with AI"
+              className="ml-1 inline-flex items-center gap-1 h-6 px-1.5 border border-border hover:border-foreground text-[10px] uppercase tracking-[0.12em] disabled:opacity-50"
+            >
+              {rescoring ? (
+                <Loader2 className="size-2.5 animate-spin" />
+              ) : (
+                <RefreshCw className="size-2.5" />
+              )}
+              Rescore
+            </button>
+          </div>
+        )}
         {selected.size > 0 && (
           <button
             onClick={importAll}
@@ -481,9 +558,9 @@ function ResultsPane({ searchId }: { searchId: Id<"prospectorSearches"> }) {
         )}
       </div>
 
-      {results === undefined ? (
+      {sortedResults === undefined ? (
         <ResultsSkeleton />
-      ) : results.length === 0 ? (
+      ) : sortedResults.length === 0 ? (
         <div className="border border-border p-8 text-center text-sm text-muted-foreground">
           {filter === "unimported"
             ? "Everything imported already."
@@ -497,8 +574,17 @@ function ResultsPane({ searchId }: { searchId: Id<"prospectorSearches"> }) {
             <div className="px-4 h-9 flex items-center bg-muted/30">
               <Checkbox
                 checked={
-                  results.filter((r) => !r.importedAt).length > 0 &&
-                  selected.size === results.filter((r) => !r.importedAt).length
+                  sortedResults.filter(
+                    (r) =>
+                      !r.importedAt &&
+                      Boolean(r.phone?.trim() || r.email?.trim() || r.website?.trim()),
+                  ).length > 0 &&
+                  selected.size ===
+                    sortedResults.filter(
+                      (r) =>
+                        !r.importedAt &&
+                        Boolean(r.phone?.trim() || r.email?.trim() || r.website?.trim()),
+                    ).length
                 }
                 onCheckedChange={toggleAll}
               />
@@ -507,7 +593,7 @@ function ResultsPane({ searchId }: { searchId: Id<"prospectorSearches"> }) {
               </span>
             </div>
           )}
-          {results.map((r) => (
+          {sortedResults.map((r) => (
             <ResultRow
               key={r._id}
               r={r}
@@ -548,6 +634,7 @@ function ResultRow({
   onReject: () => void;
 }) {
   const imported = r.importedAt !== undefined;
+  const reachable = Boolean(r.phone?.trim() || r.email?.trim() || r.website?.trim());
   const scoreLead = useAction(api.aiWorkflows.scoreLeadFit);
   const enrichWebsite = useAction(api.aiWorkflows.enrichWebsite);
   const [aiBusy, setAiBusy] = useState<"score" | "enrich" | null>(null);
@@ -584,11 +671,12 @@ function ResultRow({
   }
 
   return (
-    <div className={cn("px-4 py-4 flex items-start gap-4", imported && "opacity-70")}>
+    <div className={cn("px-4 py-4 flex items-start gap-4", imported && "opacity-70", !reachable && !imported && "opacity-60")}>
       {!imported && (
         <Checkbox
           checked={selected}
           onCheckedChange={onToggle}
+          disabled={!reachable}
           aria-label={`Select ${r.name}`}
         />
       )}
@@ -597,6 +685,14 @@ function ResultRow({
         <div className="flex items-baseline gap-3 justify-between">
           <p className="font-medium text-sm truncate">{r.name}</p>
           <div className="flex items-center gap-2 shrink-0">
+            {!reachable && !imported && (
+              <span
+                title="No phone, email, or website — can't cold outreach"
+                className="text-[9px] font-mono uppercase tracking-[0.12em] border border-[var(--warning)]/60 text-[var(--warning)] px-1.5 py-0.5"
+              >
+                No contact
+              </span>
+            )}
             {typeof r.fitScore === "number" && (
               <span
                 title={r.fitReasoning}
@@ -696,8 +792,9 @@ function ResultRow({
           </button>
           <button
             onClick={onImport}
-            title="Import as company"
-            className="size-8 grid place-items-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
+            disabled={!reachable}
+            title={reachable ? "Import as company" : "No contact info — cannot import"}
+            className="size-8 grid place-items-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors disabled:opacity-30 disabled:hover:text-muted-foreground disabled:hover:bg-transparent disabled:cursor-not-allowed"
           >
             <Check className="size-3.5" />
           </button>

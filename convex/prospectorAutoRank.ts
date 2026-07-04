@@ -15,7 +15,7 @@
  */
 
 import { v } from "convex/values";
-import { internalAction } from "./_generated/server";
+import { internalAction, action } from "./_generated/server";
 import { internal, api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 
@@ -109,5 +109,24 @@ export const enrichSearchResults = internalAction({
       );
     }
     return { enriched: pending.length, remaining: hasMore.length > 0 };
+  },
+});
+
+/**
+ * Public wrapper — allows the frontend to manually trigger a re-score
+ * of every result in a search. Enforces workspace ownership through
+ * the internal action via requireWorkspaceContext.
+ */
+export const rankSearchResultsPublic = action({
+  args: { searchId: v.id("prospectorSearches") },
+  handler: async (ctx, args): Promise<{ ranked: number; skipped: number }> => {
+    // Verify ownership by reading via prospectorHelpers.prepareSearch
+    await ctx.runQuery(internal.prospectorHelpers.prepareSearch, {
+      searchId: args.searchId,
+    });
+    return await ctx.runAction(
+      internal.prospectorAutoRank.rankSearchResults,
+      { searchId: args.searchId },
+    );
   },
 });
