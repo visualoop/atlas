@@ -9,8 +9,10 @@
  */
 
 import type * as ai from "../ai.js";
+import type * as ai_catalog from "../ai/catalog.js";
 import type * as ai_providers from "../ai/providers.js";
 import type * as ai_registry from "../ai/registry.js";
+import type * as ai_router from "../ai/router.js";
 import type * as aiHelpers from "../aiHelpers.js";
 import type * as aiWorkflowHelpers from "../aiWorkflowHelpers.js";
 import type * as aiWorkflows from "../aiWorkflows.js";
@@ -68,6 +70,7 @@ import type * as lib_secrets from "../lib/secrets.js";
 import type * as lib_secretsAccess from "../lib/secretsAccess.js";
 import type * as lib_systemMailer from "../lib/systemMailer.js";
 import type * as lib_timeline from "../lib/timeline.js";
+import type * as lib_tokenEstimate from "../lib/tokenEstimate.js";
 import type * as lib_workspaceContext from "../lib/workspaceContext.js";
 import type * as lib_workspaceContextAi from "../lib/workspaceContextAi.js";
 import type * as mailer from "../mailer.js";
@@ -119,8 +122,10 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   ai: typeof ai;
+  "ai/catalog": typeof ai_catalog;
   "ai/providers": typeof ai_providers;
   "ai/registry": typeof ai_registry;
+  "ai/router": typeof ai_router;
   aiHelpers: typeof aiHelpers;
   aiWorkflowHelpers: typeof aiWorkflowHelpers;
   aiWorkflows: typeof aiWorkflows;
@@ -178,6 +183,7 @@ declare const fullApi: ApiFromModules<{
   "lib/secretsAccess": typeof lib_secretsAccess;
   "lib/systemMailer": typeof lib_systemMailer;
   "lib/timeline": typeof lib_timeline;
+  "lib/tokenEstimate": typeof lib_tokenEstimate;
   "lib/workspaceContext": typeof lib_workspaceContext;
   "lib/workspaceContextAi": typeof lib_workspaceContextAi;
   mailer: typeof mailer;
