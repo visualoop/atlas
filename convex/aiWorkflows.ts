@@ -512,6 +512,145 @@ export const composeAssist = action({
   },
 });
 
+/* ============================================================ */
+/* Fit scoring — score a contact or company vs ICP               */
+/* ============================================================ */
+
+const FIT_SYSTEM = `You score how well a prospect fits the founder's ideal customer profile (ICP).
+
+Rules:
+- Return JSON only: {"score": 0-100, "reason": "<one sentence>"}
+- 90+ = perfect fit, buy signals visible
+- 70-89 = strong fit, worth investment
+- 50-69 = plausible, needs qualification
+- 30-49 = wrong segment but salvageable
+- 0-29 = wrong entirely
+- Reason must be specific: mention title, industry, or company traits — never generic ("could be a good fit").
+
+Return only the JSON, no code fences.`;
+
+function parseFitResult(text: string): { score: number; reason: string } {
+  const clean = text.replace(/```json|```/g, "").trim();
+  try {
+    const parsed = JSON.parse(clean);
+    const score = Math.max(0, Math.min(100, Math.round(Number(parsed.score))));
+    const reason = String(parsed.reason ?? "").slice(0, 200);
+    return { score, reason };
+  } catch {
+    return { score: 50, reason: "Could not parse AI response" };
+  }
+}
+
+export const scoreContactFit = action({
+  args: { contactId: v.id("contacts") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ score: number; reason: string }> => {
+    const setup = await ctx.runQuery(internal.copilotHelpers.prepare, {});
+    if (!setup) throw new ConvexError({ code: "NO_WORKSPACE", message: "No workspace." });
+
+    const contact = await ctx.runQuery(
+      internal.aiWorkflowHelpers.loadContactForScoring,
+      { contactId: args.contactId },
+    );
+    if (!contact) throw new ConvexError({ code: "NOT_FOUND", message: "Contact not found." });
+
+    const userPrompt = [
+      `ICP: ${setup.brand?.targetMarket ?? "not defined"}`,
+      `Offering: ${setup.brand?.oneLiner ?? setup.brand?.offerings ?? "not defined"}`,
+      "",
+      `Contact:`,
+      `- Name: ${contact.firstName} ${contact.lastName ?? ""}`.trim(),
+      contact.title ? `- Title: ${contact.title}` : "",
+      contact.email ? `- Email: ${contact.email}` : "",
+      contact.companyName ? `- Company: ${contact.companyName}` : "",
+      contact.companyIndustry ? `- Industry: ${contact.companyIndustry}` : "",
+      contact.notes ? `- Notes: ${contact.notes.slice(0, 300)}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const result = await ctx.runAction(internal.ai.runFeature, {
+      workspaceId: setup.workspaceId,
+      organizationId: setup.organizationId,
+      actorId: setup.userId,
+      featureId: "extract_json",
+      messages: [
+        { role: "system", content: FIT_SYSTEM },
+        { role: "user", content: userPrompt },
+      ],
+      resourceType: "contact_fit",
+      resourceId: args.contactId,
+    });
+
+    const parsed = parseFitResult(result.text);
+    // Persist to contact.fitScore for sort-by-priority
+    await ctx.runMutation(internal.aiWorkflowHelpers.saveContactFitScore, {
+      contactId: args.contactId,
+      score: parsed.score,
+      reason: parsed.reason,
+    });
+    return parsed;
+  },
+});
+
+export const scoreCompanyFit = action({
+  args: { companyId: v.id("companies") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ score: number; reason: string }> => {
+    const setup = await ctx.runQuery(internal.copilotHelpers.prepare, {});
+    if (!setup) throw new ConvexError({ code: "NO_WORKSPACE", message: "No workspace." });
+
+    const company = await ctx.runQuery(
+      internal.aiWorkflowHelpers.loadCompanyForScoring,
+      { companyId: args.companyId },
+    );
+    if (!company) throw new ConvexError({ code: "NOT_FOUND", message: "Company not found." });
+
+    const userPrompt = [
+      `ICP: ${setup.brand?.targetMarket ?? "not defined"}`,
+      `Offering: ${setup.brand?.oneLiner ?? setup.brand?.offerings ?? "not defined"}`,
+      "",
+      `Company:`,
+      `- Name: ${company.name}`,
+      company.industry ? `- Industry: ${company.industry}` : "",
+      company.description ? `- Description: ${company.description.slice(0, 400)}` : "",
+      company.website ? `- Website: ${company.website}` : "",
+      company.city ? `- Location: ${company.city}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const result = await ctx.runAction(internal.ai.runFeature, {
+      workspaceId: setup.workspaceId,
+      organizationId: setup.organizationId,
+      actorId: setup.userId,
+      featureId: "extract_json",
+      messages: [
+        { role: "system", content: FIT_SYSTEM },
+        { role: "user", content: userPrompt },
+      ],
+      resourceType: "company_fit",
+      resourceId: args.companyId,
+    });
+
+    const parsed = parseFitResult(result.text);
+    await ctx.runMutation(internal.aiWorkflowHelpers.saveCompanyFitScore, {
+      companyId: args.companyId,
+      score: parsed.score,
+      reason: parsed.reason,
+    });
+    return parsed;
+  },
+});
+
+/* ============================================================ */
+/* Document body generation                                       */
+/* ============================================================ */
+
 export const generateDocumentBody = action({
   args: {
     documentId: v.id("documents"),

@@ -351,3 +351,97 @@ export const loadResultForOutreach = internalQuery({
     };
   },
 });
+
+
+/* ============================================================ */
+/* Fit scoring helpers                                            */
+/* ============================================================ */
+
+export const loadContactForScoring = internalQuery({
+  args: { contactId: v.id("contacts") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    firstName: string;
+    lastName?: string;
+    email?: string;
+    title?: string;
+    notes?: string;
+    companyName?: string;
+    companyIndustry?: string;
+  } | null> => {
+    const c = await ctx.db.get(args.contactId);
+    if (!c) return null;
+    let companyName: string | undefined;
+    let companyIndustry: string | undefined;
+    if (c.companyId) {
+      const co = await ctx.db.get(c.companyId);
+      if (co) {
+        companyName = co.name;
+        companyIndustry = co.industry;
+      }
+    }
+    return {
+      firstName: c.firstName,
+      lastName: c.lastName,
+      email: c.email,
+      title: c.title,
+      notes: c.notes,
+      companyName,
+      companyIndustry,
+    };
+  },
+});
+
+export const saveContactFitScore = internalMutation({
+  args: {
+    contactId: v.id("contacts"),
+    score: v.number(),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.contactId, {
+      fitScore: args.score,
+      fitScoreReason: args.reason,
+    });
+  },
+});
+
+export const loadCompanyForScoring = internalQuery({
+  args: { companyId: v.id("companies") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    name: string;
+    industry?: string;
+    description?: string;
+    website?: string;
+    city?: string;
+  } | null> => {
+    const c = await ctx.db.get(args.companyId);
+    if (!c) return null;
+    return {
+      name: c.name,
+      industry: c.industry,
+      description: c.description,
+      website: c.website,
+      city: c.city,
+    };
+  },
+});
+
+export const saveCompanyFitScore = internalMutation({
+  args: {
+    companyId: v.id("companies"),
+    score: v.number(),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.companyId, {
+      fitScore: args.score,
+      fitScoreReason: args.reason,
+    });
+  },
+});

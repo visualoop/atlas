@@ -362,6 +362,7 @@ export default defineSchema({
     enrichmentAttempts: v.optional(v.number()), // retry counter
     source: v.string(),                        // 'manual' | 'prospector' | 'inbound_email' | …
     fitScore: v.optional(v.number()),          // AI fit 0-100
+    fitScoreReason: v.optional(v.string()),    // one-line AI justification
     lifecycleStage: v.string(),                // 'cold' | 'warm' | 'qualified' | 'customer' | 'lost' | 'archived'
     ownerId: v.optional(v.id("users")),
     tags: v.array(v.string()),                 // tag names (denormalized for speed)
@@ -397,6 +398,10 @@ export default defineSchema({
     ownerId: v.optional(v.id("users")),
     tags: v.array(v.string()),
     customFields: v.optional(v.any()),
+    // AI fit scoring (Task 8)
+    fitScore: v.optional(v.number()),          // AI fit 0-100
+    fitScoreReason: v.optional(v.string()),    // one-line AI justification
+    notes: v.optional(v.string()),             // freeform notes for context
     archivedAt: v.optional(v.number()),
   })
     .index("by_workspace", ["workspaceId"])

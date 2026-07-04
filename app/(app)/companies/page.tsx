@@ -2,8 +2,14 @@
 
 import { useState } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { useQuery, useMutation, usePaginatedQuery } from "convex/react";
-import { Globe, MapPin, Loader2, Sparkles } from "lucide-react";
+import { useQuery, useMutation, usePaginatedQuery, useAction } from "convex/react";
+import { Globe, MapPin, Loader2, Sparkles, MoreHorizontal, Copy, Gauge, Mail } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { ListLayout } from "@/components/atlas/list-layout";
 import { Button } from "@/components/ui/button";
 import { FilterChips } from "@/components/atlas/filter-chips";
@@ -251,6 +257,7 @@ function CompaniesTable({
             <Th>Location</Th>
             <Th>Stage</Th>
             <Th className="text-right">Added</Th>
+            <Th className="w-10"><span className="sr-only">Actions</span></Th>
           </tr>
         </thead>
         <tbody>
@@ -310,6 +317,16 @@ function CompaniesTable({
                   year: "2-digit",
                 })}
               </Td>
+              <td
+                className="px-2 py-2.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <CompanyRowActions
+                  companyId={c._id}
+                  domain={c.domain}
+                  onOpen={() => onOpen(c._id)}
+                />
+              </td>
             </tr>
           ))}
         </tbody>
@@ -380,5 +397,84 @@ function LifecyclePill({ stage }: { stage: string }) {
     >
       {stage}
     </span>
+  );
+}
+
+
+/* ============================================================ */
+/* Per-row AI actions                                             */
+/* ============================================================ */
+
+function CompanyRowActions({
+  companyId,
+  domain,
+  onOpen,
+}: {
+  companyId: Id<"companies">;
+  domain?: string;
+  onOpen: () => void;
+}) {
+  const scoreFit = useAction(api.aiWorkflows.scoreCompanyFit);
+  const [busy, setBusy] = useState<"score" | null>(null);
+
+  async function handleScore(e: React.MouseEvent) {
+    e.stopPropagation();
+    setBusy("score");
+    try {
+      const r = await scoreFit({ companyId });
+      toast.success(`Fit: ${r.score}/100 · ${r.reason}`, { duration: 6000 });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Score failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function copyDomain(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!domain) return;
+    await navigator.clipboard.writeText(domain);
+    toast.success("Domain copied");
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        onClick={(e) => e.stopPropagation()}
+        className="p-1.5 rounded hover:bg-muted transition-colors inline-flex items-center justify-center"
+        aria-label="Row actions"
+      >
+        {busy ? (
+          <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+        ) : (
+          <MoreHorizontal className="size-3.5 text-muted-foreground" />
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuItem onClick={onOpen}>
+          <Mail className="size-3.5 mr-2" />
+          Open details
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen();
+          }}
+        >
+          <Sparkles className="size-3.5 mr-2 text-primary" />
+          Draft outreach
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={handleScore}>
+          <Gauge className="size-3.5 mr-2" />
+          Score fit with AI
+        </DropdownMenuItem>
+        {domain && (
+          <DropdownMenuItem onClick={copyDomain}>
+            <Copy className="size-3.5 mr-2" />
+            Copy domain
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
