@@ -492,6 +492,8 @@ export const chatSetupForAgent = query({
         brandVoice: (ws as unknown as { brandVoice?: string }).brandVoice,
         coreValues: (ws as unknown as { coreValues?: string }).coreValues,
         pricingSummary: (ws as unknown as { pricingSummary?: string }).pricingSummary,
+        assistantName: (ws as unknown as { assistantName?: string }).assistantName,
+        assistantPersonaTraits: (ws as unknown as { assistantPersonaTraits?: string }).assistantPersonaTraits,
       },
     };
   },

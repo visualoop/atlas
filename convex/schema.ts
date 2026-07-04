@@ -221,6 +221,10 @@ export default defineSchema({
     brandVoice: v.optional(v.string()),      // 'confident + direct, Kenyan English, no marketing fluff'
     coreValues: v.optional(v.string()),
     pricingSummary: v.optional(v.string()),
+    // AI assistant persona — user-configurable per-workspace so each
+    // team names + tunes their own assistant. Default "Atlas" if unset.
+    assistantName: v.optional(v.string()),
+    assistantPersonaTraits: v.optional(v.string()), // freeform description of tone/style
     // Prospector guardrails — max Places imports per day per workspace,
     // stops the AI from blowing through credits. Default 100.
     prospectorDailyCap: v.optional(v.number()),

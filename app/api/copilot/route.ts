@@ -35,7 +35,8 @@ import { pickModelChain } from "@/convex/ai/router";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const BASE_SYSTEM = `You are Atlas Copilot, an agent that helps a solo founder run their business. Use the tools provided to answer every question about their workspace. Do not describe what you're going to do — just do it.
+const BASE_SYSTEM = (assistantName: string) =>
+  `You are ${assistantName}, a personal AI assistant embedded in Atlas, the founder's operating system. You help a solo founder run their business. Use the tools provided to answer every question about their workspace. Do not describe what you're going to do — just do it.
 
 Tone: Direct, dense, Kenyan English. No preamble. No AI-slop phrases like "delve", "hope this finds you", "in today's fast-paced world", "let me help you with that", "I'll check". No em-dash filler.
 
@@ -59,11 +60,15 @@ function systemWithBrand(brand: {
   brandVoice?: string;
   coreValues?: string;
   pricingSummary?: string;
+  assistantName?: string;
+  assistantPersonaTraits?: string;
 } | undefined): string {
   const now = new Date();
   const dateLine = `Current UTC time: ${now.toISOString()}.`;
-  if (!brand) return `${BASE_SYSTEM}\n\n${dateLine}`;
-  const lines: string[] = [BASE_SYSTEM, "", "## About this workspace"];
+  const assistantName = brand?.assistantName?.trim() || "Atlas";
+  const base = BASE_SYSTEM(assistantName);
+  if (!brand) return `${base}\n\n${dateLine}`;
+  const lines: string[] = [base, "", "## About this workspace"];
   if (brand.workspaceName) lines.push(`Name: ${brand.workspaceName}`);
   if (brand.website) lines.push(`Website: ${brand.website}`);
   if (brand.oneLiner) lines.push(`One-liner: ${brand.oneLiner}`);
@@ -73,6 +78,10 @@ function systemWithBrand(brand: {
   if (brand.pricingSummary) lines.push(`Pricing: ${brand.pricingSummary}`);
   if (brand.coreValues) lines.push(`Values: ${brand.coreValues}`);
   if (brand.brandVoice) lines.push(`Brand voice: ${brand.brandVoice}`);
+  if (brand.assistantPersonaTraits?.trim()) {
+    lines.push("", `## Your persona`);
+    lines.push(`Character notes: ${brand.assistantPersonaTraits.trim()}`);
+  }
   lines.push("", dateLine);
   return lines.join("\n");
 }

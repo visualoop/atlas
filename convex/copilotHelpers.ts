@@ -658,19 +658,22 @@ export const workspaceSnapshot = internalQuery({
  */
 export const workspaceBrandInfo = query({
   args: {},
-  handler: async (ctx): Promise<{ hasContext: boolean }> => {
+  handler: async (ctx): Promise<{ hasContext: boolean; assistantName: string }> => {
     const user = await requireUser(ctx);
     const profile = await ctx.db
       .query("userProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .first();
-    if (!profile?.lastActiveWorkspaceId) return { hasContext: false };
+    if (!profile?.lastActiveWorkspaceId) {
+      return { hasContext: false, assistantName: "Atlas" };
+    }
     const ws = await ctx.db.get(profile.lastActiveWorkspaceId);
-    if (!ws) return { hasContext: false };
+    if (!ws) return { hasContext: false, assistantName: "Atlas" };
     return {
       hasContext: Boolean(
         ws.oneLiner || ws.elevatorPitch || ws.offerings || ws.targetMarket,
       ),
+      assistantName: ws.assistantName?.trim() || "Atlas",
     };
   },
 });

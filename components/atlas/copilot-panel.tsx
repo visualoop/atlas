@@ -241,7 +241,7 @@ export function CopilotPanel({ open, onOpenChange }: Props) {
       >
         <header className="h-12 border-b border-border flex items-center px-3 gap-2 shrink-0">
           <Sparkles className="size-4 text-primary" />
-          <p className="text-sm font-medium">Copilot</p>
+          <p className="text-sm font-medium">{workspaceInfo?.assistantName ?? "Atlas"}</p>
           <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground px-2 py-0.5 border border-border rounded">
             ⌘J
           </span>

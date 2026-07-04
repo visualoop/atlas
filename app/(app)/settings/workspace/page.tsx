@@ -30,6 +30,8 @@ export default function WorkspacePage() {
     brandVoice: "",
     coreValues: "",
     pricingSummary: "",
+    assistantName: "",
+    assistantPersonaTraits: "",
     prospectorDailyCap: 100,
     googleMapsDailySearchCap: 150,
   });
@@ -48,6 +50,8 @@ export default function WorkspacePage() {
       brandVoice: ws.brandVoice ?? "",
       coreValues: ws.coreValues ?? "",
       pricingSummary: ws.pricingSummary ?? "",
+      assistantName: ws.assistantName ?? "",
+      assistantPersonaTraits: ws.assistantPersonaTraits ?? "",
       prospectorDailyCap: ws.prospectorDailyCap ?? 100,
       googleMapsDailySearchCap: ws.googleMapsDailySearchCap ?? 150,
     });
@@ -70,6 +74,8 @@ export default function WorkspacePage() {
           brandVoice: values.brandVoice.trim() || undefined,
           coreValues: values.coreValues.trim() || undefined,
           pricingSummary: values.pricingSummary.trim() || undefined,
+          assistantName: values.assistantName.trim() || undefined,
+          assistantPersonaTraits: values.assistantPersonaTraits.trim() || undefined,
           prospectorDailyCap: values.prospectorDailyCap,
           googleMapsDailySearchCap: values.googleMapsDailySearchCap,
         },
@@ -242,6 +248,52 @@ export default function WorkspacePage() {
               })
             }
             className="w-32 h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono num"
+          />
+        </Field>
+      </section>
+
+      <section className="space-y-5 border border-border p-6">
+        <div>
+          <p className="eyebrow">
+            <Sparkles className="size-3 inline mr-1 text-primary" />
+            Your assistant
+          </p>
+          <p className="text-xs text-muted-foreground mt-1 max-w-prose">
+            Name your AI assistant and describe how they should sound.
+            Applied everywhere — Copilot header, generated emails,
+            WhatsApp drafts, the daily briefing. Blank fields fall
+            back to "Atlas" with the standard Kenyan-English voice.
+          </p>
+        </div>
+        <Field
+          label="Assistant name"
+          hint="What should we call your AI assistant?"
+        >
+          <input
+            value={values.assistantName}
+            onChange={(e) =>
+              setValues({ ...values, assistantName: e.target.value })
+            }
+            placeholder="Atlas"
+            className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
+            maxLength={40}
+          />
+        </Field>
+        <Field
+          label="How should they sound?"
+          hint="Freeform character notes the AI weaves into responses"
+        >
+          <textarea
+            rows={3}
+            value={values.assistantPersonaTraits}
+            onChange={(e) =>
+              setValues({
+                ...values,
+                assistantPersonaTraits: e.target.value,
+              })
+            }
+            placeholder="Direct, warm, uses Sheng occasionally. Never uses corporate jargon. Confident but never salesy. Always signs off with the founder's first name only."
+            className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none"
           />
         </Field>
       </section>

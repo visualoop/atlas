@@ -40,5 +40,27 @@ export async function workspaceBrandBlock(
   }
   parts.push(`Timezone: ${ws.timezone}`);
   parts.push(`Currency: ${ws.currency}`);
+
+  // Assistant persona — user-configurable per-workspace
+  const assistantName = ws.assistantName?.trim() || "Atlas";
+  parts.push("");
+  parts.push(`## Your persona`);
+  parts.push(`You are named "${assistantName}". Speak in first person as ${assistantName}.`);
+  if (ws.assistantPersonaTraits?.trim()) {
+    parts.push(`Character notes: ${ws.assistantPersonaTraits.trim()}`);
+  }
+
   return parts.join("\n");
+}
+
+/**
+ * Just the assistant name — used by UI headers ("Copilot" → "{name}")
+ * without loading the full brand block.
+ */
+export async function workspaceAssistantName(
+  ctx: QueryCtx,
+  workspaceId: Id<"workspaces">,
+): Promise<string> {
+  const ws = await ctx.db.get(workspaceId);
+  return ws?.assistantName?.trim() || "Atlas";
 }
