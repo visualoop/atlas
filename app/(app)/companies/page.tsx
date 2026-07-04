@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useQuery, useMutation, usePaginatedQuery } from "convex/react";
-import { Globe, MapPin, Loader2 } from "lucide-react";
+import { Globe, MapPin, Loader2, Sparkles } from "lucide-react";
 import { ListLayout } from "@/components/atlas/list-layout";
+import { Button } from "@/components/ui/button";
 import { FilterChips } from "@/components/atlas/filter-chips";
 import { BulkActionBar } from "@/components/atlas/bulk-action-bar";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -57,6 +58,36 @@ export default function CompaniesPage() {
   );
   const bulkUpdate = useMutation(api.companies.bulkUpdate);
   const bulkArchive = useMutation(api.companies.bulkArchive);
+  const purgeDisqualified = useMutation(api.prospector.purgeDisqualifiedImports);
+  const [purging, setPurging] = useState(false);
+
+  async function handlePurge() {
+    // Dry run first so user sees what will happen
+    const preview = await purgeDisqualified({ dryRun: true });
+    if (preview.companiesArchived === 0 && preview.resultsRejected === 0) {
+      toast.info("No malls or mega-brand companies to purge.");
+      return;
+    }
+    const list = preview.matches.slice(0, 5).join(", ");
+    if (
+      !confirm(
+        `Archive ${preview.companiesArchived} companies + reject ${preview.resultsRejected} prospector results?\n\nMatches: ${list}${preview.companiesArchived > 5 ? " …" : ""}`,
+      )
+    ) {
+      return;
+    }
+    setPurging(true);
+    try {
+      const r = await purgeDisqualified({ dryRun: false });
+      toast.success(
+        `Archived ${r.companiesArchived} · Rejected ${r.resultsRejected}`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Purge failed.");
+    } finally {
+      setPurging(false);
+    }
+  }
 
   const isInitialLoad = pageStatus === "LoadingFirstPage";
   const canLoadMore = pageStatus === "CanLoadMore";
@@ -85,6 +116,22 @@ export default function CompaniesPage() {
         searchValue={search}
         onSearch={setSearch}
         primaryAction={{ label: "New company", onClick: () => setNewOpen(true) }}
+        secondaryAction={
+          <Button
+            variant="outline"
+            size="default"
+            onClick={handlePurge}
+            disabled={purging}
+            title="Archive companies + reject prospector results that are malls, plazas, mega-brands"
+          >
+            {purging ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="size-3.5" />
+            )}
+            Cleanup malls
+          </Button>
+        }
         count={companies.length}
         filterStrip={
           <FilterChips<LifecycleStage>

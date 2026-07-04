@@ -16,7 +16,7 @@
 
 import { NextRequest } from "next/server";
 import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server";
-import { fetchAction, fetchQuery } from "convex/nextjs";
+import { fetchAction, fetchQuery, fetchMutation } from "convex/nextjs";
 import {
   streamText,
   tool,
@@ -42,6 +42,7 @@ Rules:
 - For any question about contacts, companies, deals, conversations, messages, activity, tasks, KPIs, or the workspace in general — call the appropriate tool. Never guess. Never say "I don't have access" without checking first.
 - For vague greetings or open-ended questions like "hi", "what should I do today", "catch me up", call the workspace snapshot tool first.
 - For "who did I speak to" or "any replies" or "yesterday's messages", use the recent messages tool with an appropriate sinceHoursAgo (yesterday = 48, today = 24, last week = 168).
+- When the user asks to "purge", "clean up", "remove malls", or "archive disqualified imports", use the purge tool. Confirm first with dryRun: true if the user hasn't explicitly said "yes, do it".
 - When referencing a workspace record, include its ID in square brackets so the user can click through: [contact:jd7abc123].
 - Never invent data. If a tool returns nothing, say so plainly.
 
@@ -189,6 +190,25 @@ function buildTools(token: string) {
         limit: z.number().optional(),
       }),
       execute: async (args) => query(api.copilotAgent.listTasksForAgent, args),
+    }),
+
+    purge_disqualified_imports: tool({
+      description:
+        "Archive every company + reject every prospector result that matches the mall / plaza / mega-brand filter. Use when the user asks to 'clean up bad imports', 'remove malls', 'purge disqualified companies', or similar. Returns counts + a preview list. Pass dryRun: true to preview first without changing anything.",
+      inputSchema: z.object({
+        dryRun: z
+          .boolean()
+          .optional()
+          .describe(
+            "If true, report what WOULD be archived without making changes. Default false = actually archive.",
+          ),
+      }),
+      execute: async ({ dryRun }) =>
+        fetchMutation(
+          api.prospector.purgeDisqualifiedImports,
+          { dryRun },
+          { token },
+        ),
     }),
   };
 }

@@ -14,6 +14,7 @@ interface ListLayoutProps {
   searchValue: string;
   onSearch: (q: string) => void;
   primaryAction?: { label: string; onClick: () => void };
+  secondaryAction?: ReactNode;
   filterStrip?: ReactNode;
   count?: number;
   children: ReactNode;
@@ -29,6 +30,7 @@ export function ListLayout({
   searchValue,
   onSearch,
   primaryAction,
+  secondaryAction,
   filterStrip,
   count,
   children,
@@ -55,8 +57,13 @@ export function ListLayout({
             <p className="text-sm text-muted-foreground max-w-prose">{description}</p>
           )}
         </div>
-        {primaryAction && (
-          <Button onClick={primaryAction.onClick}>{primaryAction.label}</Button>
+        {(primaryAction || secondaryAction) && (
+          <div className="flex items-center gap-2">
+            {secondaryAction}
+            {primaryAction && (
+              <Button onClick={primaryAction.onClick}>{primaryAction.label}</Button>
+            )}
+          </div>
         )}
       </header>
 
