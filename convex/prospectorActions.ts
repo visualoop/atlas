@@ -27,6 +27,8 @@ const ENDPOINT = "https://places.googleapis.com/v1/places:searchText";
 const LEGACY_TEXTSEARCH_ENDPOINT = "https://maps.googleapis.com/maps/api/place/textsearch/json";
 
 // The bracketed dotted paths are the FieldMask.
+// Include contact + hours + rating fields so search returns full lead data
+// in ONE call — no follow-up /details roundtrip needed.
 const FIELD_MASK = [
   "places.id",
   "places.displayName",
@@ -41,6 +43,9 @@ const FIELD_MASK = [
   "places.rating",
   "places.userRatingCount",
   "places.businessStatus",
+  "places.regularOpeningHours",
+  "places.primaryType",
+  "places.primaryTypeDisplayName",
   "nextPageToken",
 ].join(",");
 
@@ -79,6 +84,7 @@ export const searchAndPersist = action({
     persisted: number;
     nextPageToken?: string;
     error?: string;
+    cached?: boolean;
   }> => {
     // 1. Resolve the search + org key
     const setup = await ctx.runQuery(internal.prospectorHelpers.prepareSearch, {
@@ -91,57 +97,111 @@ export const searchAndPersist = action({
       });
     }
 
+    // Dedup — if this search ran within the last 5 minutes AND we're
+    // not paginating, skip the API call and return cached results.
+    // Saves Google Places quota + gives instant feedback on retry.
+    const FRESH_MS = 5 * 60 * 1000;
+    if (
+      !args.pageToken &&
+      setup.search.lastRunAt &&
+      Date.now() - setup.search.lastRunAt < FRESH_MS &&
+      (setup.search.resultCount ?? 0) > 0
+    ) {
+      return {
+        persisted: 0,
+        cached: true,
+        nextPageToken: setup.search.nextPageToken,
+      };
+    }
+
     // Enforce daily cap BEFORE the billable call
     await ctx.runMutation(internal.apiUsage.checkAndRecord, {
       workspaceId: setup.search.workspaceId,
     });
 
-    // 2. Legacy Places API — works with default billing (no Places API New
-    // subscription needed). We normalize the response into the same
-    // shape the /v1 endpoint returns downstream.
     const query = setup.search.query + (setup.search.location ? ` in ${setup.search.location}` : "");
-    const params = new URLSearchParams({
-      query,
-      key: setup.apiKey,
-    });
-    if (!setup.search.locationBias && !setup.search.location) {
-      params.set("region", "ke");
-    }
-    if (args.pageToken) params.set("pagetoken", args.pageToken);
 
-    let legacyJson: LegacyNearbyResponse;
+    // 2. Places API (New) — places:searchText.
+    // Returns full contact fields (phone, website, hours) in one call
+    // via the FieldMask above. No follow-up /details roundtrip needed.
+    // Falls back to Legacy Text Search if New API is unavailable.
+    let json: PlacesResponse;
     try {
-      const res = await fetch(`${LEGACY_TEXTSEARCH_ENDPOINT}?${params.toString()}`);
+      const body: Record<string, unknown> = {
+        textQuery: query,
+        maxResultCount: 20,
+        regionCode: "ke",
+      };
+      if (args.pageToken) body.pageToken = args.pageToken;
+      const res = await fetch(ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": setup.apiKey,
+          "X-Goog-FieldMask": FIELD_MASK,
+        },
+        body: JSON.stringify(body),
+      });
       if (!res.ok) {
+        // If the New API is disabled/unavailable, fall through to Legacy.
+        if (res.status === 403 || res.status === 404) {
+          throw new Error("new_api_unavailable");
+        }
         return { persisted: 0, error: `Places API ${res.status}` };
       }
-      legacyJson = (await res.json()) as LegacyNearbyResponse;
-      if (legacyJson.status && legacyJson.status !== "OK" && legacyJson.status !== "ZERO_RESULTS") {
-        return { persisted: 0, error: legacyJson.error_message ?? legacyJson.status };
+      json = (await res.json()) as PlacesResponse;
+      if (json.error) {
+        return {
+          persisted: 0,
+          error: json.error.message ?? json.error.status ?? "Unknown error",
+        };
       }
     } catch (err) {
-      return { persisted: 0, error: err instanceof Error ? err.message : "Network error" };
-    }
+      // Fallback to Legacy Text Search (returns less contact data,
+      // but always available).
+      const params = new URLSearchParams({
+        query,
+        key: setup.apiKey,
+      });
+      if (!setup.search.locationBias && !setup.search.location) {
+        params.set("region", "ke");
+      }
+      if (args.pageToken) params.set("pagetoken", args.pageToken);
 
-    // Normalize into the shape expected downstream (mirrors the v1 shape)
-    const json: PlacesResponse = {
-      places: (legacyJson.results ?? []).map((p) => ({
-        id: p.place_id,
-        displayName: { text: p.name ?? "(unnamed)" },
-        formattedAddress: p.formatted_address ?? p.vicinity,
-        addressComponents: [],
-        location: {
-          latitude: p.geometry?.location?.lat,
-          longitude: p.geometry?.location?.lng,
-        },
-        types: p.types,
-        rating: p.rating,
-        userRatingCount: p.user_ratings_total,
-        businessStatus: p.business_status,
-        googleMapsUri: `https://www.google.com/maps/place/?q=place_id:${p.place_id}`,
-      })),
-      nextPageToken: legacyJson.next_page_token,
-    };
+      let legacyJson: LegacyNearbyResponse;
+      try {
+        const res = await fetch(`${LEGACY_TEXTSEARCH_ENDPOINT}?${params.toString()}`);
+        if (!res.ok) {
+          return { persisted: 0, error: `Places API ${res.status}` };
+        }
+        legacyJson = (await res.json()) as LegacyNearbyResponse;
+        if (legacyJson.status && legacyJson.status !== "OK" && legacyJson.status !== "ZERO_RESULTS") {
+          return { persisted: 0, error: legacyJson.error_message ?? legacyJson.status };
+        }
+      } catch (err2) {
+        return { persisted: 0, error: err2 instanceof Error ? err2.message : "Network error" };
+      }
+
+      // Normalize into the shape expected downstream (mirrors the v1 shape)
+      json = {
+        places: (legacyJson.results ?? []).map((p) => ({
+          id: p.place_id,
+          displayName: { text: p.name ?? "(unnamed)" },
+          formattedAddress: p.formatted_address ?? p.vicinity,
+          addressComponents: [],
+          location: {
+            latitude: p.geometry?.location?.lat,
+            longitude: p.geometry?.location?.lng,
+          },
+          types: p.types,
+          rating: p.rating,
+          userRatingCount: p.user_ratings_total,
+          businessStatus: p.business_status,
+          googleMapsUri: `https://www.google.com/maps/place/?q=place_id:${p.place_id}`,
+        })),
+        nextPageToken: legacyJson.next_page_token,
+      };
+    }
 
     if (json.error) {
       return { persisted: 0, error: json.error.message ?? json.error.status ?? "Unknown error" };

@@ -17,6 +17,44 @@ import { MapBrowse } from "./map-browse";
 import { MapBrowseOsm } from "./map-browse-osm";
 import { MapBrowseHybrid } from "./map-browse-hybrid";
 
+/**
+ * Popular Kenyan cities + Nairobi neighborhoods used as one-click
+ * location chips. Text search results are noticeably better when you
+ * scope to a specific neighborhood versus "Nairobi, Kenya" broadly.
+ */
+const QUICK_LOCATIONS = [
+  "Nairobi CBD, Kenya",
+  "Westlands, Nairobi",
+  "Kilimani, Nairobi",
+  "Karen, Nairobi",
+  "Kileleshwa, Nairobi",
+  "Parklands, Nairobi",
+  "Ngong Road, Nairobi",
+  "Eastleigh, Nairobi",
+  "South B, Nairobi",
+  "Mombasa, Kenya",
+  "Kisumu, Kenya",
+  "Nakuru, Kenya",
+  "Eldoret, Kenya",
+  "Thika, Kenya",
+];
+
+const LOCATION_PRESETS = [
+  ...QUICK_LOCATIONS,
+  "Nairobi, Kenya",
+  "Runda, Nairobi",
+  "Muthaiga, Nairobi",
+  "Lavington, Nairobi",
+  "Buruburu, Nairobi",
+  "Embakasi, Nairobi",
+  "Nyali, Mombasa",
+  "Diani, Kenya",
+  "Malindi, Kenya",
+  "Kakamega, Kenya",
+  "Nyeri, Kenya",
+  "Machakos, Kenya",
+];
+
 export default function ProspectorPage() {
   const searches = useQuery(api.prospector.listSearches, {});
   const [activeSearchId, setActiveSearchId] = useState<Id<"prospectorSearches"> | null>(null);
@@ -234,6 +272,8 @@ function NewSearchForm({ onCreated }: { onCreated: (id: Id<"prospectorSearches">
       const result = await runSearch({ searchId: id });
       if (result.error) {
         toast.error(result.error);
+      } else if (result.cached) {
+        toast.info("Using cached results from the last 5 minutes.");
       } else {
         toast.success(`Found ${result.persisted} places.`);
       }
@@ -265,8 +305,14 @@ function NewSearchForm({ onCreated }: { onCreated: (id: Id<"prospectorSearches">
             onChange={(e) => setLocation(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
             placeholder="Location…"
+            list="prospector-location-presets"
             className="w-full h-10 pl-10 pr-3 bg-transparent border border-border focus:border-foreground focus:outline-none text-sm"
           />
+          <datalist id="prospector-location-presets">
+            {LOCATION_PRESETS.map((loc) => (
+              <option key={loc} value={loc} />
+            ))}
+          </datalist>
         </div>
         <button
           onClick={submit}
@@ -300,6 +346,25 @@ function NewSearchForm({ onCreated }: { onCreated: (id: Id<"prospectorSearches">
           <ExternalLink className="size-3" />
           Open on Google Maps
         </a>
+      </div>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground mr-1">
+          Quick:
+        </span>
+        {QUICK_LOCATIONS.map((loc) => (
+          <button
+            key={loc}
+            onClick={() => setLocation(loc)}
+            className={cn(
+              "text-[10px] font-mono h-6 px-2 border transition-colors",
+              location === loc
+                ? "border-primary text-primary bg-primary/10"
+                : "border-border text-muted-foreground hover:border-foreground hover:text-foreground",
+            )}
+          >
+            {loc.replace(", Kenya", "").replace(", Nairobi", "")}
+          </button>
+        ))}
       </div>
     </div>
   );

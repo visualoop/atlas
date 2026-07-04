@@ -87,10 +87,35 @@ export const createSearch = mutation({
     if (args.query.trim().length < 3) {
       throw new ConvexError({ code: "INVALID", message: "Search query is too short." });
     }
+
+    const normalizedQuery = args.query.trim();
+    const normalizedLocation = args.location?.trim();
+
+    // Dedup — reuse an identical search from the last 24h. Saves a
+    // Google Places call and prevents cluttered history when the
+    // founder retries the same query.
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const existing = await ctx.db
+      .query("prospectorSearches")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", wsCtx.workspace._id))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("query"), normalizedQuery),
+          q.eq(q.field("location"), normalizedLocation),
+          q.gte(q.field("_creationTime"), cutoff),
+        ),
+      )
+      .first();
+    if (existing) {
+      // Bump lastRunAt so it shows recent in the sidebar
+      await ctx.db.patch(existing._id, { lastRunBy: wsCtx.user._id });
+      return existing._id;
+    }
+
     const id = await ctx.db.insert("prospectorSearches", {
       workspaceId: wsCtx.workspace._id,
-      query: args.query.trim(),
-      location: args.location?.trim(),
+      query: normalizedQuery,
+      location: normalizedLocation,
       locationBias: args.locationBias,
       resultCount: 0,
       importedCount: 0,
@@ -103,7 +128,7 @@ export const createSearch = mutation({
       action: "created",
       resourceType: "prospector_search",
       resourceId: id,
-      after: { query: args.query, location: args.location },
+      after: { query: normalizedQuery, location: normalizedLocation },
     });
     return id;
   },
@@ -217,6 +242,24 @@ export const persistSearchResults = internalMutation({
       lastRunAt: Date.now(),
       nextPageToken: args.nextPageToken,
     });
+
+    // Kick auto-ranking — batch AI scoring runs in background
+    if (persisted > 0) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.prospectorAutoRank.rankSearchResults,
+        { searchId: args.searchId },
+      );
+      // Kick website enrichment — scrapes each result's site to fill in
+      // email / description / socials. Delayed 3s so it doesn't compete
+      // with ranking for AI TPM budget.
+      await ctx.scheduler.runAfter(
+        3000,
+        internal.prospectorAutoRank.enrichSearchResults,
+        { searchId: args.searchId },
+      );
+    }
+
     return { persisted };
   },
 });
@@ -226,8 +269,11 @@ export const persistSearchResults = internalMutation({
 /* ============================================================ */
 
 export const importResult = mutation({
-  args: { id: v.id("prospectorResults") },
-  handler: async (ctx, { id }) => {
+  args: {
+    id: v.id("prospectorResults"),
+    force: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { id, force }) => {
     const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
     const r = await ctx.db.get(id);
     if (!r || r.workspaceId !== wsCtx.workspace._id) {
@@ -235,6 +281,18 @@ export const importResult = mutation({
     }
     if (r.importedAt && r.importedCompanyId) {
       return { companyId: r.importedCompanyId, alreadyImported: true };
+    }
+
+    // Guardrail: refuse to import a lead you can't actually reach.
+    // Cold outreach without at least one of phone/email/website is
+    // a dead end. Enrichment might fill this later, but at import
+    // time the user should acknowledge.
+    const reachable = Boolean(r.phone?.trim() || r.email?.trim() || r.website?.trim());
+    if (!reachable && !force) {
+      throw new ConvexError({
+        code: "NO_CONTACT_INFO",
+        message: `"${r.name}" has no phone, email, or website. Import blocked so you don't waste time. Pass force: true to override.`,
+      });
     }
 
     // Check if a company with this googlePlaceId already exists in the workspace
@@ -266,7 +324,34 @@ export const importResult = mutation({
         enrichmentData: r.rawPlaceData
           ? { rating: r.rating, ratingCount: r.ratingCount, types: r.types }
           : undefined,
+        enrichmentPending: true,
       });
+
+      // If we have contact data, seed a primary contact record. The
+      // owner can rename later, but this means the CRM view has a
+      // person to reach out to immediately.
+      if (r.email?.trim() || r.phone?.trim()) {
+        await ctx.db.insert("contacts", {
+          workspaceId: wsCtx.workspace._id,
+          companyId,
+          firstName: r.name.split(/\s+/)[0] ?? "Owner",
+          lastName: undefined,
+          email: r.email?.trim().toLowerCase(),
+          phone: r.phone?.trim(),
+          whatsapp: r.phone?.trim(),
+          title: "Primary contact",
+          source: "prospector",
+          lifecycleStage: "cold",
+          tags: ["prospector"],
+        });
+      }
+
+      // Kick enrichment dispatcher (throttled, 3 in parallel)
+      await ctx.scheduler.runAfter(
+        0,
+        internal.prospectorEnrich.runEnrichmentBatch,
+        {},
+      );
     }
 
     await ctx.db.patch(id, {
@@ -307,15 +392,26 @@ export const importResult = mutation({
 });
 
 export const bulkImport = mutation({
-  args: { ids: v.array(v.id("prospectorResults")) },
-  handler: async (ctx, { ids }) => {
+  args: {
+    ids: v.array(v.id("prospectorResults")),
+    force: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { ids, force }) => {
     const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
     let imported = 0;
     let skipped = 0;
+    let skippedNoContact = 0;
     for (const id of ids) {
       const r = await ctx.db.get(id);
       if (!r || r.workspaceId !== wsCtx.workspace._id) continue;
       if (r.importedAt) { skipped++; continue; }
+
+      // Reachability guard — skip contactless leads unless force=true
+      const reachable = Boolean(r.phone?.trim() || r.email?.trim() || r.website?.trim());
+      if (!reachable && !force) {
+        skippedNoContact++;
+        continue;
+      }
 
       const existing = await ctx.db
         .query("companies")
@@ -342,7 +438,26 @@ export const bulkImport = mutation({
           googlePlaceId: r.googlePlaceId,
           lifecycleStage: "cold",
           tags: [],
+          enrichmentPending: true,
         });
+
+        // Seed a primary contact if we have any reach info
+        if (r.email?.trim() || r.phone?.trim()) {
+          await ctx.db.insert("contacts", {
+            workspaceId: wsCtx.workspace._id,
+            companyId,
+            firstName: r.name.split(/\s+/)[0] ?? "Owner",
+            lastName: undefined,
+            email: r.email?.trim().toLowerCase(),
+            phone: r.phone?.trim(),
+            whatsapp: r.phone?.trim(),
+            title: "Primary contact",
+            source: "prospector",
+            lifecycleStage: "cold",
+            tags: ["prospector"],
+          });
+        }
+
         imported++;
       }
       await ctx.db.patch(id, { importedAt: Date.now(), importedCompanyId: companyId });
@@ -355,7 +470,15 @@ export const bulkImport = mutation({
         payload: { source: "prospector_bulk" },
       });
     }
-    return { imported, skipped };
+    // Kick enrichment dispatcher if anything got enqueued
+    if (imported > 0) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.prospectorEnrich.runEnrichmentBatch,
+        {},
+      );
+    }
+    return { imported, skipped, skippedNoContact };
   },
 });
 
