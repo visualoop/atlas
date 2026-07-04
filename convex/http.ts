@@ -47,6 +47,64 @@ interface InboundPayload {
   receivedAt?: string;                          // ISO
 }
 
+/**
+ * Resend's `email.received` webhook (2026 API). Body + attachments are
+ * NOT in the webhook — fetched separately via Resend's Retrieve
+ * Received Email API. See emailsInboundFetch.ts.
+ */
+interface ResendEmailReceivedEvent {
+  type: "email.received";
+  created_at: string;
+  data: {
+    email_id: string;
+    created_at: string;
+    from: string;                               // "Name <addr>" or bare addr
+    to: string[];
+    cc?: string[];
+    bcc?: string[];
+    received_for?: string[];
+    message_id?: string;
+    subject?: string;
+    attachments?: Array<{
+      id: string;
+      filename: string;
+      content_type: string;
+      content_disposition?: string;
+      content_id?: string;
+    }>;
+  };
+}
+
+/**
+ * Turn "Name <addr>" or "addr" into { name?, email }.
+ */
+function parseEmailAddress(raw: string): InboundAddress {
+  const m = raw.match(/^(.*)\s*<([^>]+)>\s*$/);
+  if (m) return { name: m[1].trim() || undefined, email: m[2].trim().toLowerCase() };
+  return { email: raw.trim().toLowerCase() };
+}
+
+/**
+ * Normalize Resend's `email.received` event to the InboundPayload
+ * shape. Body/html/attachments left undefined — fetched by
+ * emailsInboundFetch action once conversation shell is created.
+ */
+function normalizeResendEvent(evt: ResendEmailReceivedEvent): InboundPayload {
+  return {
+    from: parseEmailAddress(evt.data.from),
+    to: evt.data.to.map(parseEmailAddress),
+    cc: evt.data.cc?.map(parseEmailAddress),
+    subject: evt.data.subject,
+    text: undefined,
+    html: undefined,
+    messageId: evt.data.message_id,
+    inReplyTo: undefined,
+    references: undefined,
+    receivedAt: evt.data.created_at,
+    attachments: undefined,                      // metadata-only in webhook
+  };
+}
+
 http.route({
   path: "/inbound/email",
   method: "POST",
@@ -74,20 +132,48 @@ http.route({
     }
 
     // 3. Parse
-    let payload: InboundPayload;
+    let rawEvent: unknown;
     try {
-      payload = JSON.parse(rawBody) as InboundPayload;
+      rawEvent = JSON.parse(rawBody);
     } catch {
       return new Response("Invalid JSON", { status: 400 });
+    }
+
+    // Detect Resend's 2026 `email.received` shape and normalize.
+    // Falls back to the legacy custom shape (name+email objects,
+    // embedded text/html + base64 attachments) if type isn't set.
+    const isResendV2 =
+      typeof rawEvent === "object" &&
+      rawEvent !== null &&
+      (rawEvent as { type?: string }).type === "email.received";
+
+    let payload: InboundPayload;
+    let externalIdCandidate: string | undefined;
+    let resendEmailId: string | undefined;
+    let resendAttachmentsMeta:
+      | ResendEmailReceivedEvent["data"]["attachments"]
+      | undefined;
+
+    if (isResendV2) {
+      const evt = rawEvent as ResendEmailReceivedEvent;
+      payload = normalizeResendEvent(evt);
+      externalIdCandidate = evt.data.email_id ?? evt.data.message_id;
+      resendEmailId = evt.data.email_id;
+      resendAttachmentsMeta = evt.data.attachments;
+    } else {
+      payload = rawEvent as InboundPayload;
+      externalIdCandidate = payload.messageId;
     }
 
     if (!payload.from?.email || !payload.to?.[0]?.email) {
       return new Response("Missing from/to", { status: 400 });
     }
 
-    // 4. Idempotency — dedupe by messageId or Svix id
+    // 4. Idempotency — dedupe by email_id (v2), messageId, or Svix id
     const externalId =
-      payload.messageId ?? req.headers.get("svix-id") ?? crypto.randomUUID();
+      externalIdCandidate ??
+      req.headers.get("svix-id") ??
+      crypto.randomUUID();
     const already = await ctx.runQuery(internal.emailsInbound.findWebhookEvent, {
       provider: "resend",
       externalId,
@@ -165,6 +251,27 @@ http.route({
       providerPayload: undefined,                 // we log to webhookEvents instead
       attachments: savedAttachments,
     });
+
+    // For Resend v2 events, schedule the body-fetch action to
+    // hydrate the message with real content + attachments. The
+    // ingest above only had metadata.
+    if (
+      isResendV2 &&
+      resendEmailId &&
+      result.status === "ingested" &&
+      "conversationId" in result
+    ) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.emailsInboundFetch.fetchInboundBody,
+        {
+          workspaceId,
+          messageId: result.messageId,
+          resendEmailId,
+          attachmentsMeta: resendAttachmentsMeta ?? [],
+        },
+      );
+    }
 
     await ctx.runMutation(internal.emailsInbound.recordWebhookEvent, {
       provider: "resend",

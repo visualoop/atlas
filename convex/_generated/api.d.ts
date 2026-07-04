@@ -53,6 +53,8 @@ import type * as documentsActionsHelpers from "../documentsActionsHelpers.js";
 import type * as documentsPdf from "../documentsPdf.js";
 import type * as emails from "../emails.js";
 import type * as emailsInbound from "../emailsInbound.js";
+import type * as emailsInboundFetch from "../emailsInboundFetch.js";
+import type * as emailsInboundFetch_helpers from "../emailsInboundFetch_helpers.js";
 import type * as emailsOut from "../emailsOut.js";
 import type * as emailsOutHelpers from "../emailsOutHelpers.js";
 import type * as emailsOutSystem from "../emailsOutSystem.js";
@@ -166,6 +168,8 @@ declare const fullApi: ApiFromModules<{
   documentsPdf: typeof documentsPdf;
   emails: typeof emails;
   emailsInbound: typeof emailsInbound;
+  emailsInboundFetch: typeof emailsInboundFetch;
+  emailsInboundFetch_helpers: typeof emailsInboundFetch_helpers;
   emailsOut: typeof emailsOut;
   emailsOutHelpers: typeof emailsOutHelpers;
   emailsOutSystem: typeof emailsOutSystem;

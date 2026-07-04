@@ -217,6 +217,22 @@ export default function IntegrationsPage() {
           );
         })}
 
+        {/* Inbound Email webhook URL */}
+        <section className="border border-dashed border-border p-5 space-y-3">
+          <p className="eyebrow">Inbound email webhook</p>
+          <p className="text-xs text-muted-foreground">
+            To receive email replies in Atlas Inbox, add this URL to your
+            Resend Webhooks and subscribe to <code className="font-mono">email.received</code>.
+            Also add a matching Sender identity at{" "}
+            <Link href="/settings/senders" className="text-primary hover:underline">Settings → Senders</Link>{" "}
+            with the address that should route here.
+          </p>
+          <InboundWebhookCopy />
+          <p className="text-[11px] text-muted-foreground italic">
+            Set <code className="font-mono">RESEND_INBOUND_SECRET</code> to Resend's webhook signing secret so we can verify signatures.
+          </p>
+        </section>
+
         {/* System-level env vars notice */}
         <section className="border border-dashed border-border p-5 space-y-2">
           <p className="eyebrow">System-level (Convex env vars)</p>
@@ -265,6 +281,38 @@ function TierBadge({ tier }: { tier: "free" | "paid" | "freemium" }) {
     )}>
       {tier}
     </span>
+  );
+}
+
+function InboundWebhookCopy() {
+  const [copied, setCopied] = useState(false);
+  const url =
+    (process.env.NEXT_PUBLIC_CONVEX_SITE_URL ??
+      "https://3221.blyss.co.ke") + "/inbound/email";
+  return (
+    <div className="flex items-center gap-2">
+      <code className="flex-1 min-w-0 px-3 py-2 text-xs font-mono bg-muted rounded truncate">
+        {url}
+      </code>
+      <button
+        onClick={() => {
+          void navigator.clipboard.writeText(url);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        }}
+        className="text-[10px] font-mono uppercase tracking-[0.12em] h-9 px-3 border border-border hover:border-foreground rounded inline-flex items-center gap-1"
+      >
+        {copied ? "Copied" : "Copy"}
+      </button>
+      <a
+        href="https://resend.com/webhooks"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-[10px] font-mono uppercase tracking-[0.12em] h-9 px-3 border border-border hover:border-foreground rounded inline-flex items-center gap-1"
+      >
+        Resend →
+      </a>
+    </div>
   );
 }
 
