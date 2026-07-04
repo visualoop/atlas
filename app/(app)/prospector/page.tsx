@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { MapBrowse } from "./map-browse";
 import { MapBrowseOsm } from "./map-browse-osm";
 import { MapBrowseHybrid } from "./map-browse-hybrid";
+import { OutreachDrafter } from "@/components/atlas/outreach-drafter";
 
 /**
  * Popular Kenyan cities + Nairobi neighborhoods used as one-click
@@ -391,6 +392,12 @@ function ResultsPane({ searchId }: { searchId: Id<"prospectorSearches"> }) {
   const rescoreSearch = useAction(api.prospectorAutoRank.rankSearchResultsPublic);
   const [runningMore, setRunningMore] = useState(false);
   const [rescoring, setRescoring] = useState(false);
+  const [drafterResultId, setDrafterResultId] = useState<Id<"prospectorResults"> | null>(null);
+
+  const drafterTarget = useMemo(() => {
+    if (!drafterResultId || !results) return null;
+    return results.find((r) => r._id === drafterResultId) ?? null;
+  }, [drafterResultId, results]);
 
   // Sort results by fit score desc (unscored fall to end).
   // AI scoring runs in the background after search — this ensures the
@@ -607,6 +614,7 @@ function ResultsPane({ searchId }: { searchId: Id<"prospectorSearches"> }) {
                   toast.error(err instanceof Error ? err.message : "Failed.");
                 }
               }}
+              onDraft={() => setDrafterResultId(r._id)}
               onReject={async () => {
                 if (!confirm(`Reject "${r.name}" and never see it again?`)) return;
                 await rejectResult({ id: r._id });
@@ -615,6 +623,18 @@ function ResultsPane({ searchId }: { searchId: Id<"prospectorSearches"> }) {
             />
           ))}
         </div>
+      )}
+      {drafterTarget && (
+        <OutreachDrafter
+          resultId={drafterTarget._id}
+          companyName={drafterTarget.name}
+          hasEmail={Boolean(drafterTarget.email?.trim())}
+          hasPhone={Boolean(drafterTarget.phone?.trim())}
+          primaryEmail={drafterTarget.email}
+          primaryPhone={drafterTarget.phone}
+          open={drafterResultId !== null}
+          onOpenChange={(o) => !o && setDrafterResultId(null)}
+        />
       )}
     </div>
   );
@@ -625,12 +645,13 @@ function ResultsPane({ searchId }: { searchId: Id<"prospectorSearches"> }) {
 /* ------------------------------------------------------------------ */
 
 function ResultRow({
-  r, selected, onToggle, onImport, onReject,
+  r, selected, onToggle, onImport, onDraft, onReject,
 }: {
   r: Doc<"prospectorResults">;
   selected: boolean;
   onToggle: () => void;
   onImport: () => void;
+  onDraft: () => void;
   onReject: () => void;
 }) {
   const imported = r.importedAt !== undefined;
@@ -797,6 +818,14 @@ function ResultRow({
             className="size-8 grid place-items-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors disabled:opacity-30 disabled:hover:text-muted-foreground disabled:hover:bg-transparent disabled:cursor-not-allowed"
           >
             <Check className="size-3.5" />
+          </button>
+          <button
+            onClick={onDraft}
+            disabled={!reachable}
+            title={reachable ? "Draft outreach with AI" : "No contact info — cannot draft"}
+            className="size-8 grid place-items-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors disabled:opacity-30 disabled:hover:text-muted-foreground disabled:hover:bg-transparent disabled:cursor-not-allowed"
+          >
+            <Sparkles className="size-3.5" />
           </button>
         </div>
       )}

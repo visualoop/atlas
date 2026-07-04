@@ -30,6 +30,34 @@ export default function InboxPage() {
   const [state, setState] = useState<StateFilter>("open");
   const [search, setSearch] = useState("");
   const [composeOpen, setComposeOpen] = useState(false);
+  const [composePrefill, setComposePrefill] = useState<
+    { to?: string[]; subject?: string; bodyHtml?: string } | undefined
+  >(undefined);
+
+  // Handle ?compose=1&to=…&subject=…&body=… deep-link from the Draft
+  // outreach dialog. Prefills the compose sheet and opens it once.
+  useEffect(() => {
+    if (searchParams.get("compose") !== "1") return;
+    const to = searchParams.get("to");
+    const subject = searchParams.get("subject");
+    const body = searchParams.get("body");
+    setComposePrefill({
+      to: to ? [to] : undefined,
+      subject: subject ?? undefined,
+      bodyHtml: body ? body.replace(/\n/g, "<br>") : undefined,
+    });
+    setComposeOpen(true);
+    // Strip the prefill params from the URL so refreshing doesn't reopen
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("compose");
+    params.delete("to");
+    params.delete("subject");
+    params.delete("body");
+    router.replace(
+      `${pathname}${params.toString() ? "?" + params.toString() : ""}`,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const conversations = useQuery(api.emails.listInbox, {
     channel,
@@ -206,7 +234,14 @@ export default function InboxPage() {
         </div>
       </div>
 
-      <ComposeSheet open={composeOpen} onOpenChange={setComposeOpen} />
+      <ComposeSheet
+        open={composeOpen}
+        onOpenChange={(o) => {
+          setComposeOpen(o);
+          if (!o) setComposePrefill(undefined);
+        }}
+        prefill={composePrefill}
+      />
     </>
   );
 }

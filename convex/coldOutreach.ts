@@ -126,8 +126,9 @@ function buildBrandBlock(brand: Brand | null): string {
 
 export const draftColdOutreach = action({
   args: {
-    companyId: v.id("companies"),
+    companyId: v.optional(v.id("companies")),
     contactId: v.optional(v.id("contacts")),
+    resultId: v.optional(v.id("prospectorResults")),
     channel: v.union(v.literal("email"), v.literal("whatsapp")),
   },
   handler: async (
@@ -140,12 +141,23 @@ export const draftColdOutreach = action({
     provider: string;
     model: string;
   }> => {
-    const context = await ctx.runQuery(
-      internal.aiWorkflowHelpers.loadCompanyForOutreach,
-      { companyId: args.companyId, contactId: args.contactId },
-    );
+    if (!args.companyId && !args.resultId) {
+      throw new ConvexError({
+        code: "BAD_INPUT",
+        message: "Provide either companyId or resultId.",
+      });
+    }
+    const context = args.companyId
+      ? await ctx.runQuery(
+          internal.aiWorkflowHelpers.loadCompanyForOutreach,
+          { companyId: args.companyId, contactId: args.contactId },
+        )
+      : await ctx.runQuery(
+          internal.aiWorkflowHelpers.loadResultForOutreach,
+          { resultId: args.resultId! },
+        );
     if (!context) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Company not found." });
+      throw new ConvexError({ code: "NOT_FOUND", message: "Prospect not found." });
     }
     const { company, contact, workspace, userId } = context;
 
@@ -166,8 +178,8 @@ export const draftColdOutreach = action({
         { role: "system", content: system },
         { role: "user", content: userPrompt },
       ],
-      resourceType: "company",
-      resourceId: args.companyId,
+      resourceType: args.companyId ? "company" : "prospector_result",
+      resourceId: args.companyId ?? args.resultId!,
     });
 
     if (args.channel === "email") {

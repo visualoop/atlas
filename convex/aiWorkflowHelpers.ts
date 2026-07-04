@@ -228,3 +228,52 @@ export const loadCompanyForOutreach = internalQuery({
     };
   },
 });
+
+/**
+ * Load full context for cold outreach directly from a prospector
+ * result (before it's been imported as a company). Same shape as
+ * loadCompanyForOutreach so the AI action can reuse the same prompt
+ * builder.
+ */
+export const loadResultForOutreach = internalQuery({
+  args: { resultId: v.id("prospectorResults") },
+  handler: async (ctx, args) => {
+    const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
+    const r = await ctx.db.get(args.resultId);
+    if (!r || r.workspaceId !== wsCtx.workspace._id) return null;
+
+    return {
+      workspace: wsCtx.workspace,
+      userId: wsCtx.user._id,
+      brand: {
+        workspaceName: wsCtx.workspace.name,
+        oneLiner: wsCtx.workspace.oneLiner,
+        offerings: wsCtx.workspace.offerings,
+        targetMarket: wsCtx.workspace.targetMarket,
+        pricingSummary: wsCtx.workspace.pricingSummary,
+        brandVoice: wsCtx.workspace.brandVoice,
+      },
+      company: {
+        name: r.name,
+        industry: undefined,
+        city: r.city,
+        country: r.country,
+        address: r.address,
+        website: r.website,
+        description: undefined,
+        types: r.types,
+        fitScore: r.fitScore,
+        fitReasoning: r.fitReasoning,
+      },
+      contact: r.email || r.phone
+        ? {
+            firstName: r.name.split(/\s+/)[0] ?? "Owner",
+            lastName: undefined,
+            title: "Primary contact",
+            email: r.email,
+            phone: r.phone,
+          }
+        : undefined,
+    };
+  },
+});

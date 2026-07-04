@@ -106,7 +106,82 @@ export default function TodayPage() {
           <ChecklistItem label="Invite a team member" href="/settings/members" />
         </ul>
       </section>
+
+      <NextContactsSection />
     </div>
+  );
+}
+
+function NextContactsSection() {
+  const suggestions = useQuery(api.outreachSuggestions.nextContactSuggestions, {
+    limit: 5,
+  });
+
+  if (suggestions === undefined) return null;
+  if (suggestions.length === 0) return null;
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-baseline justify-between">
+        <div>
+          <p className="eyebrow">Who to contact next</p>
+          <h2 className="font-display italic text-2xl mt-1">
+            Top prospects with contact info.
+          </h2>
+        </div>
+        <Link
+          href="/prospector"
+          className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+        >
+          Prospector
+          <ArrowRight className="size-3" />
+        </Link>
+      </div>
+      <ul className="border border-border divide-y divide-border">
+        {suggestions.map((s) => (
+          <li key={s.companyId} className="px-4 py-3 flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <Link
+                  href={`/companies?open=${s.companyId}`}
+                  className="text-sm font-medium truncate hover:underline"
+                >
+                  {s.companyName}
+                </Link>
+                {typeof s.fitScore === "number" && (
+                  <span
+                    className={`text-[10px] font-mono px-1.5 py-0.5 border ${
+                      s.fitScore >= 70
+                        ? "border-emerald-600/60 text-emerald-700 dark:text-emerald-400"
+                        : s.fitScore >= 40
+                          ? "border-amber-600/60 text-amber-700 dark:text-amber-500"
+                          : "border-border text-muted-foreground"
+                    }`}
+                  >
+                    {s.fitScore}
+                  </span>
+                )}
+                <span className="text-[10px] font-mono text-muted-foreground/70">
+                  {[s.industry, s.city].filter(Boolean).join(" · ")}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mt-1 text-[10px] font-mono text-muted-foreground">
+                {s.hasEmail && <span>📧 {s.primaryEmail}</span>}
+                {s.hasPhone && <span>📞 {s.primaryPhone}</span>}
+                {s.contactName && <span>· {s.contactName}</span>}
+              </div>
+            </div>
+            <Link
+              href={`/companies?open=${s.companyId}&draft=1`}
+              className="text-xs font-mono uppercase tracking-[0.12em] h-8 px-3 bg-primary text-primary-foreground inline-flex items-center gap-1 hover:opacity-90"
+            >
+              Draft
+              <ArrowRight className="size-3" />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

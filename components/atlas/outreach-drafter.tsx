@@ -29,8 +29,9 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 
 interface Props {
-  companyId: Id<"companies">;
+  companyId?: Id<"companies">;
   contactId?: Id<"contacts">;
+  resultId?: Id<"prospectorResults">;
   companyName: string;
   hasEmail: boolean;
   hasPhone: boolean;
@@ -51,6 +52,7 @@ interface Props {
 export function OutreachDrafter({
   companyId,
   contactId,
+  resultId,
   companyName,
   hasEmail,
   hasPhone,
@@ -71,7 +73,7 @@ export function OutreachDrafter({
   async function generate() {
     setDrafting(true);
     try {
-      const r = await drafter({ companyId, contactId, channel });
+      const r = await drafter({ companyId, contactId, resultId, channel });
       if (channel === "email") setSubject(r.subject ?? "");
       setBody(r.body);
     } catch (err) {

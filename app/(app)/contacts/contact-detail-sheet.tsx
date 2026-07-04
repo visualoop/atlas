@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { Mail, Phone, MessageSquare, MoreHorizontal, Archive, Linkedin, Twitter } from "lucide-react";
+import { Mail, Phone, MessageSquare, MoreHorizontal, Archive, Linkedin, Twitter, Sparkles } from "lucide-react";
 import { RecordSheet } from "@/components/atlas/record-sheet";
+import { OutreachDrafter } from "@/components/atlas/outreach-drafter";
 import { TimelineFeed } from "@/components/atlas/timeline-feed";
 import { NotesTab } from "@/components/atlas/notes-tab";
 import { TasksTab } from "@/components/atlas/tasks-tab";
@@ -71,7 +73,10 @@ export function ContactDetailSheet({
     }
   }
 
+  const [outreachOpen, setOutreachOpen] = useState(false);
+
   return (
+    <>
     <RecordSheet
       open={open}
       onOpenChange={onOpenChange}
@@ -125,6 +130,18 @@ export function ContactDetailSheet({
               <Linkedin className="size-3.5" />
               LinkedIn
             </a>
+          )}
+          {(contact.email || contact.phone) && contact.companyId && (
+            <button
+              onClick={() => setOutreachOpen(true)}
+              className={cn(
+                buttonVariants({ variant: "default", size: "sm" }),
+                "gap-1.5",
+              )}
+            >
+              <Sparkles className="size-3.5" />
+              Draft outreach
+            </button>
           )}
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -206,6 +223,20 @@ export function ContactDetailSheet({
         },
       ]}
     />
+    {contact.companyId && (
+      <OutreachDrafter
+        companyId={contact.companyId}
+        contactId={contactId}
+        companyName={company?.name ?? fullName}
+        hasEmail={Boolean(contact.email)}
+        hasPhone={Boolean(contact.phone)}
+        primaryEmail={contact.email}
+        primaryPhone={contact.phone}
+        open={outreachOpen}
+        onOpenChange={setOutreachOpen}
+      />
+    )}
+    </>
   );
 }
 
