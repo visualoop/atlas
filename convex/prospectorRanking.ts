@@ -21,6 +21,8 @@
 import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { pickModelChain, providersFromKeys } from "./ai/router";
+import { estimateTokens } from "./lib/tokenEstimate";
 
 interface PlaceIn {
   googlePlaceId: string;
@@ -100,28 +102,28 @@ export const rankProspects = action({
       places: args.places,
     });
 
-    const chain: Array<{
-      provider: "groq" | "gemini" | "cerebras" | "openrouter" | "openai";
-      model: string;
-    }> = [
-      // Groq — cheap and fast, but 6000 TPM cap on free tier
-      { provider: "groq", model: "llama-3.1-8b-instant" },
-      { provider: "groq", model: "llama-3.3-70b-versatile" },
-      // Gemini free tier — different rate-limit budget
-      { provider: "gemini", model: "gemini-2.0-flash-exp" },
-      { provider: "gemini", model: "gemini-1.5-flash" },
-      // Cerebras free
-      { provider: "cerebras", model: "llama-3.3-70b" },
-      // OpenRouter free auto-router
-      { provider: "openrouter", model: "openrouter/auto" },
-      // OpenAI paid
-      { provider: "openai", model: "gpt-4o-mini" },
-    ];
+    // Router-picked chain. Task = extract_json (ranker returns
+    // structured scores). Bigger prospect batches ≈ 2-3k tokens.
+    const availableProviders = providersFromKeys(setup.keys);
+    const routedChain = pickModelChain("extract_json", {
+      availableProviders,
+      contextTokens: estimateTokens(prompt),
+      requireJson: true,
+      maxSteps: 5,
+    });
+    console.log("[rank] routing", {
+      contextTokens: estimateTokens(prompt),
+      first: routedChain[0]?.model,
+    });
+    const chain = routedChain.filter(
+      (s): s is typeof s & { provider: "groq" | "gemini" | "cerebras" | "openrouter" | "openai" } =>
+        ["groq", "gemini", "cerebras", "openrouter", "openai"].includes(s.provider),
+    );
 
     const errors: string[] = [];
     let anyKeyPresent = false;
     for (const step of chain) {
-      const apiKey = setup.keys[step.provider];
+      const apiKey = (setup.keys as Record<string, string | undefined>)[step.provider];
       if (!apiKey) continue;
       anyKeyPresent = true;
       try {

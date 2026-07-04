@@ -30,6 +30,7 @@ import { createCerebras } from "@ai-sdk/cerebras";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { api } from "@/convex/_generated/api";
+import { pickModelChain } from "@/convex/ai/router";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -222,15 +223,6 @@ interface ProviderStep {
   model: string;
 }
 
-const PROVIDER_CHAIN: ProviderStep[] = [
-  { provider: "groq", model: "llama-3.3-70b-versatile" },
-  { provider: "groq", model: "llama-3.1-8b-instant" },
-  { provider: "cerebras", model: "llama-3.3-70b" },
-  { provider: "gemini", model: "gemini-2.0-flash-exp" },
-  { provider: "gemini", model: "gemini-1.5-flash" },
-  { provider: "openai", model: "gpt-4o-mini" },
-];
-
 function buildLanguageModel(step: ProviderStep, apiKey: string) {
   switch (step.provider) {
     case "groq":
@@ -286,8 +278,35 @@ export async function POST(req: NextRequest) {
     const system = systemWithBrand(setup.brand);
     const tools = buildTools(token);
 
-    // Find the first provider we have a key for
-    const chosen = PROVIDER_CHAIN.find((step) => keys[step.provider]);
+    const modelMessages = (await convertToModelMessages(body.messages)).slice(-8);
+
+    // Task-aware routing. Estimate tokens (chars/4) to pick between
+    // fast small models for short chats vs long-context Gemini for
+    // dense multi-turn threads.
+    const contextTokens = modelMessages.reduce(
+      (n, m) =>
+        n +
+        Math.ceil(
+          (typeof m.content === "string" ? m.content.length : 0) / 4,
+        ),
+      0,
+    );
+    const availableProviders = Object.entries(keys)
+      .filter(([, v]) => v && v.length > 8)
+      .map(([k]) => k) as Array<
+      "groq" | "cerebras" | "gemini" | "openai" | "openrouter"
+    >;
+    const chain = pickModelChain("chat_agentic", {
+      availableProviders,
+      contextTokens,
+      requireTools: true,
+      maxSteps: 4,
+    }).filter((s): s is typeof s & { provider: "groq" | "cerebras" | "gemini" | "openai" | "openrouter" } =>
+      ["groq", "cerebras", "gemini", "openai", "openrouter"].includes(s.provider),
+    );
+
+    // First provider that has a key
+    const chosen = chain[0];
     if (!chosen) {
       return new Response(
         JSON.stringify({
@@ -299,7 +318,11 @@ export async function POST(req: NextRequest) {
     }
     const apiKey = keys[chosen.provider]!;
 
-    const modelMessages = (await convertToModelMessages(body.messages)).slice(-8);
+    console.log("[copilot-stream] routing", {
+      contextTokens,
+      chainLength: chain.length,
+      model: chosen.model,
+    });
 
     const result = streamText({
       model: buildLanguageModel(chosen, apiKey),

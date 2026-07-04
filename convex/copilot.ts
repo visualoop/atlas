@@ -29,6 +29,8 @@ import { z } from "zod";
 import { action } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { pickModelChain, providersFromKeys } from "./ai/router";
+import { estimateMessagesTokens } from "./lib/tokenEstimate";
 import type { Id } from "./_generated/dataModel";
 import { generateText, tool, stepCountIs, type ModelMessage } from "ai";
 import { createGroq } from "@ai-sdk/groq";
@@ -263,7 +265,7 @@ function buildAtlasTools(ctx: ActionCtx, workspaceId: Id<"workspaces">) {
 }
 
 /* ============================================================ */
-/* Provider chain                                                */
+/* Provider chain — dynamic via task-aware router                */
 /* ============================================================ */
 
 interface ProviderStep {
@@ -271,21 +273,6 @@ interface ProviderStep {
   model: string;
   supportsTools: boolean;
 }
-
-const PROVIDER_CHAIN: ProviderStep[] = [
-  // Groq — free tier, fast, native tool calling on llama models
-  { provider: "groq", model: "llama-3.3-70b-versatile", supportsTools: true },
-  { provider: "groq", model: "llama-3.1-8b-instant", supportsTools: true },
-  // Cerebras — free tier llama 3.3 70b
-  { provider: "cerebras", model: "llama-3.3-70b", supportsTools: true },
-  // Gemini free tier — Flash supports tool calling in AI SDK
-  { provider: "gemini", model: "gemini-2.0-flash-exp", supportsTools: true },
-  { provider: "gemini", model: "gemini-1.5-flash", supportsTools: true },
-  // OpenAI paid fallback
-  { provider: "openai", model: "gpt-4o-mini", supportsTools: true },
-  // OpenRouter free auto (some free models don't support tools reliably)
-  { provider: "openrouter", model: "openai/gpt-oss-20b:free", supportsTools: true },
-];
 
 function buildLanguageModel(step: ProviderStep, apiKey: string) {
   switch (step.provider) {
@@ -425,11 +412,38 @@ export const chat = action({
 
     const tools = buildAtlasTools(ctx, setup.workspaceId);
 
+    // Task-aware routing: pick best-fit chain for this task shape.
+    // Agentic chat = needs tools. Estimate size to auto-upgrade to
+    // long-context models when the thread grows.
+    const contextTokens = estimateMessagesTokens(
+      messages as Array<{ role: string; content: string }>,
+    );
+    const availableProviders = providersFromKeys(setup.keys);
+    const chain = pickModelChain("chat_agentic", {
+      availableProviders,
+      contextTokens,
+      requireTools: true,
+      maxSteps: 5,
+    })
+      // Filter to providers copilot.ts can build a language model for.
+      // (Router catalog includes anthropic/mistral etc. — those go
+      // through app/api/copilot streaming route which can handle them,
+      // but this Convex action is limited.)
+      .filter((s): s is typeof s & { provider: "groq" | "cerebras" | "gemini" | "openai" | "openrouter" } =>
+        ["groq", "cerebras", "gemini", "openai", "openrouter"].includes(s.provider),
+      );
+    console.log("[copilot] routing", {
+      taskCategory: "chat_agentic",
+      contextTokens,
+      chainLength: chain.length,
+      first: chain[0]?.model,
+    });
+
     let anyKeyConfigured = false;
     const errors: string[] = [];
 
-    for (const step of PROVIDER_CHAIN) {
-      const apiKey = setup.keys[step.provider];
+    for (const step of chain) {
+      const apiKey = (setup.keys as Record<string, string | undefined>)[step.provider];
       if (!apiKey) continue;
       anyKeyConfigured = true;
 
