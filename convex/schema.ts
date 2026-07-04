@@ -2221,4 +2221,32 @@ export default defineSchema({
   })
     .index("by_workspace", ["workspaceId"])
     .index("by_workspace_active", ["workspaceId", "active"]),
+
+  /* ============================================================ */
+  /* AI daily briefings — cached hero paragraph on /today          */
+  /* ============================================================ */
+  dailyBriefings: defineTable({
+    workspaceId: v.id("workspaces"),
+    briefing: v.string(),                        // the paragraph itself
+    generatedAt: v.number(),
+    modelUsed: v.optional(v.string()),
+  })
+    .index("by_workspace_generated", ["workspaceId", "generatedAt"])
+    .index("by_workspace", ["workspaceId"]),
+
+  /* ============================================================ */
+  /* Proactive notifications — toasts + inbox unread              */
+  /* ============================================================ */
+  notifications: defineTable({
+    workspaceId: v.id("workspaces"),
+    userId: v.optional(v.id("users")),           // optional per-user targeting
+    kind: v.string(),                            // 'rotting_deal' | 'hot_lead' | 'inbound_arrived' | 'enrichment_complete' | 'ai_scored'
+    title: v.string(),
+    body: v.optional(v.string()),
+    actionLink: v.optional(v.string()),          // href to click
+    readAt: v.optional(v.number()),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace_created", ["workspaceId"])
+    .index("by_workspace_unread", ["workspaceId", "readAt"]),
 });

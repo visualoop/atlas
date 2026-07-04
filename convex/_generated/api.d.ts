@@ -45,6 +45,8 @@ import type * as copilotAgent from "../copilotAgent.js";
 import type * as copilotAgentKeys from "../copilotAgentKeys.js";
 import type * as copilotHelpers from "../copilotHelpers.js";
 import type * as crons from "../crons.js";
+import type * as dailyBriefings from "../dailyBriefings.js";
+import type * as dailyBriefingsHelpers from "../dailyBriefingsHelpers.js";
 import type * as demoRecordings from "../demoRecordings.js";
 import type * as demoRecordingsHelpers from "../demoRecordingsHelpers.js";
 import type * as documents from "../documents.js";
@@ -160,6 +162,8 @@ declare const fullApi: ApiFromModules<{
   copilotAgentKeys: typeof copilotAgentKeys;
   copilotHelpers: typeof copilotHelpers;
   crons: typeof crons;
+  dailyBriefings: typeof dailyBriefings;
+  dailyBriefingsHelpers: typeof dailyBriefingsHelpers;
   demoRecordings: typeof demoRecordings;
   demoRecordingsHelpers: typeof demoRecordingsHelpers;
   documents: typeof documents;

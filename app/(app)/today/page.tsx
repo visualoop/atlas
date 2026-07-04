@@ -1,19 +1,36 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useQuery, useAction } from "convex/react";
+import { useState } from "react";
 import {
-  Mail, AlertTriangle, ListTodo, Calendar, ArrowRight,
+  Mail, AlertTriangle, ListTodo, Calendar, ArrowRight, Sparkles, RefreshCw, Loader2,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { formatDistanceToNowStrict } from "date-fns";
+import { toast } from "sonner";
 
 export default function TodayPage() {
   const bootstrap = useQuery(api.organizations.currentBootstrap);
   const queues = useQuery(api.analytics.todayQueues, {});
+  const briefing = useQuery(api.dailyBriefingsHelpers.latestForWorkspace);
+  const refresh = useAction(api.dailyBriefingsHelpers.refreshMine);
+  const [refreshing, setRefreshing] = useState(false);
   const firstName = bootstrap?.user.name?.split(/\s+/)[0] ?? "there";
 
   const loading = queues === undefined;
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await refresh({});
+      toast.success("Briefing refreshed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to refresh");
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-4 md:px-8 py-16 space-y-16">
@@ -34,6 +51,43 @@ export default function TodayPage() {
           AI-suggested next moves.
         </p>
       </header>
+
+      {/* AI briefing paragraph */}
+      <section className="border-l-2 border-primary/60 pl-4 py-1 relative group">
+        <div className="flex items-center justify-between mb-2">
+          <p className="eyebrow flex items-center gap-1.5">
+            <Sparkles className="size-3 text-primary" />
+            AI briefing
+          </p>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="text-[11px] font-mono uppercase tracking-[0.14em] text-muted-foreground hover:text-foreground disabled:opacity-50 inline-flex items-center gap-1"
+          >
+            {refreshing ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : (
+              <RefreshCw className="size-3" />
+            )}
+            Refresh
+          </button>
+        </div>
+        {briefing === undefined ? (
+          <p className="text-sm text-muted-foreground italic">Loading…</p>
+        ) : briefing === null ? (
+          <p className="text-sm text-muted-foreground italic">
+            No briefing yet. Click Refresh to generate one.
+          </p>
+        ) : (
+          <>
+            <p className="text-base leading-relaxed">{briefing.briefing}</p>
+            <p className="text-[11px] font-mono text-muted-foreground/60 mt-2">
+              {formatDistanceToNowStrict(briefing.generatedAt, { addSuffix: true })}
+              {briefing.modelUsed ? ` · ${briefing.modelUsed}` : ""}
+            </p>
+          </>
+        )}
+      </section>
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-px bg-border border border-border">
         <QueueCard

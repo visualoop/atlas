@@ -110,4 +110,24 @@ crons.interval(
   internal.documentsActions.pollSignatureStatus,
 );
 
+/* ============================================================ */
+/* Daily briefings — 3x/day AI paragraph for the Today page        */
+/* ============================================================ */
+
+crons.cron(
+  "morning briefing",
+  "0 3 * * *", // 03:00 UTC = 06:00 Africa/Nairobi
+  internal.dailyBriefings.generateForAllWorkspaces,
+);
+crons.cron(
+  "midday briefing",
+  "0 9 * * *", // 09:00 UTC = 12:00 Africa/Nairobi
+  internal.dailyBriefings.generateForAllWorkspaces,
+);
+crons.cron(
+  "evening briefing",
+  "0 15 * * *", // 15:00 UTC = 18:00 Africa/Nairobi
+  internal.dailyBriefings.generateForAllWorkspaces,
+);
+
 export default crons;
