@@ -330,7 +330,9 @@ export async function POST(req: NextRequest) {
     console.log("[copilot-stream] routing", {
       contextTokens,
       chainLength: chain.length,
+      provider: chosen.provider,
       model: chosen.model,
+      availableProviders,
     });
 
     const result = streamText({
@@ -341,11 +343,22 @@ export async function POST(req: NextRequest) {
       stopWhen: stepCountIs(10),
       temperature: 0.4,
       onError({ error }) {
-        console.error("[copilot] stream error", error);
+        console.error("[copilot] stream error", {
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+          provider: chosen.provider,
+          model: chosen.model,
+        });
       },
     });
 
-    return result.toUIMessageStreamResponse();
+    return result.toUIMessageStreamResponse({
+      sendReasoning: false,
+      onError: (err: unknown) => {
+        console.error("[copilot] UI stream error", err);
+        return err instanceof Error ? err.message : "Model call failed. Try again or switch providers.";
+      },
+    });
   } catch (err) {
     console.error("[copilot] POST error", err);
     return new Response(
