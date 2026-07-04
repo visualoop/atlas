@@ -350,6 +350,14 @@ function DealCard({ deal, dragging }: { deal: Doc<"deals">; dragging?: boolean }
           })}
         </div>
       )}
+      {deal.aiNextAction && (
+        <div className="mt-2 pt-2 border-t border-border/50 flex items-start gap-1.5">
+          <Sparkles className="size-3 text-primary shrink-0 mt-0.5" />
+          <p className="text-[11px] leading-snug text-muted-foreground line-clamp-2">
+            {deal.aiNextAction}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

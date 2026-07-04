@@ -976,6 +976,7 @@ export default defineSchema({
     healthScore: v.optional(v.number()),                        // 0-100
     healthNotes: v.optional(v.string()),
     healthCheckedAt: v.optional(v.number()),
+    aiNextAction: v.optional(v.string()),                        // AI-suggested one-line nudge
     lastActivityAt: v.number(),                                  // touched on any related timeline event
     tags: v.array(v.string()),
     customFields: v.optional(v.any()),

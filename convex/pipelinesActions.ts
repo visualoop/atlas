@@ -33,7 +33,7 @@ export const classifyRottingDeals = internalAction({
       );
       if (!key) continue;
 
-      const prompt = `You are a sales coach. Score this deal 0-100 for how likely it is to still close, and give one crisp reason why.
+      const prompt = `You are a sales coach. Score this deal 0-100 for how likely it is to still close, give one crisp reason why, and suggest ONE concrete next action the founder should take today.
 
 ${d.brandBlock ? d.brandBlock + "\n\n" : ""}Deal:
 - Name: ${d.name}
@@ -43,10 +43,16 @@ ${d.brandBlock ? d.brandBlock + "\n\n" : ""}Deal:
 - Age (days): ${d.ageDays}
 - Notes: ${d.notes ?? "none"}
 
-Return JSON: { "healthScore": 0-100, "healthNotes": "one short reason" }`;
+Return JSON:
+{
+  "healthScore": 0-100,
+  "healthNotes": "one short reason why the deal is where it is",
+  "nextAction": "one specific move — 'Nudge Kimton with a case study', 'Ask for a decision date on the current proposal', 'Send a Loom summary of the demo'. Max 12 words."
+}`;
 
       let healthScore = 50;
       let healthNotes = "";
+      let nextAction = "";
       try {
         const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
@@ -61,7 +67,7 @@ Return JSON: { "healthScore": 0-100, "healthNotes": "one short reason" }`;
               { role: "user", content: prompt },
             ],
             temperature: 0.3,
-            max_tokens: 200,
+            max_tokens: 300,
             response_format: { type: "json_object" },
           }),
         });
@@ -70,9 +76,11 @@ Return JSON: { "healthScore": 0-100, "healthNotes": "one short reason" }`;
           const parsed = JSON.parse(j.choices?.[0]?.message?.content ?? "{}") as {
             healthScore?: number;
             healthNotes?: string;
+            nextAction?: string;
           };
           if (typeof parsed.healthScore === "number") healthScore = Math.max(0, Math.min(100, parsed.healthScore));
           if (typeof parsed.healthNotes === "string") healthNotes = parsed.healthNotes.slice(0, 200);
+          if (typeof parsed.nextAction === "string") nextAction = parsed.nextAction.slice(0, 120);
         }
       } catch {
         continue;
@@ -82,6 +90,7 @@ Return JSON: { "healthScore": 0-100, "healthNotes": "one short reason" }`;
         dealId: d._id,
         healthScore,
         healthNotes,
+        nextAction,
       });
       classified++;
     }

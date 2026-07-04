@@ -616,12 +616,14 @@ export const updateDealHealth = internalMutation({
     dealId: v.id("deals"),
     healthScore: v.number(),
     healthNotes: v.string(),
+    nextAction: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.dealId, {
       healthScore: args.healthScore,
       healthNotes: args.healthNotes,
       healthCheckedAt: Date.now(),
+      ...(args.nextAction ? { aiNextAction: args.nextAction } : {}),
     });
   },
 });

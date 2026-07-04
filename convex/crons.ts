@@ -65,8 +65,8 @@ crons.interval(
 /* ============================================================ */
 
 crons.cron(
-  "weekly deal health check",
-  "0 6 * * 1", // Monday 06:00 UTC = 09:00 Africa/Nairobi
+  "daily deal health check",
+  "0 4 * * *", // 04:00 UTC = 07:00 Africa/Nairobi, every day
   internal.pipelinesActions.classifyRottingDeals,
 );
 
