@@ -391,6 +391,127 @@ Style rules — non-negotiable:
 Return Markdown — headings with ##, lists with -, bold with **. No
 front-matter, no meta commentary, no "here is the document" preamble.`;
 
+/* ============================================================ */
+/* Compose assist — help write outbound emails from the inbox    */
+/* ============================================================ */
+
+const COMPOSE_SYSTEM = `You help a founder draft outbound emails from their inbox.
+
+Voice:
+- Direct, human, Kenyan English. Never formal-corporate.
+- Never AI-slop ("delve", "leverage", "unlock value", "in today's fast-paced world", "hope this finds you well", em-dash filler).
+- Match the length + tone the user asked for.
+- Never end with fake signatures — that's added by the sender identity later.
+
+Return ONLY the message body. No preamble, no meta commentary, no code fences.`;
+
+export const composeAssist = action({
+  args: {
+    mode: v.union(
+      v.literal("draft"), // empty compose → generate from a hint
+      v.literal("improve"), // tighten current body
+      v.literal("shorter"),
+      v.literal("longer"),
+      v.literal("different_angle"), // regenerate with fresh approach
+    ),
+    subject: v.optional(v.string()),
+    currentBody: v.optional(v.string()),
+    hint: v.optional(v.string()), // required for 'draft' — what's this about
+    recipientName: v.optional(v.string()),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ body: string; provider: string; model: string }> => {
+    const setup = await ctx.runQuery(internal.copilotHelpers.prepare, {});
+    if (!setup) {
+      throw new ConvexError({
+        code: "NO_WORKSPACE",
+        message: "Not in a workspace.",
+      });
+    }
+
+    const brandParts: string[] = [];
+    if (setup.brand?.workspaceName)
+      brandParts.push(`Workspace: ${setup.brand.workspaceName}`);
+    if (setup.brand?.oneLiner) brandParts.push(`One-liner: ${setup.brand.oneLiner}`);
+    if (setup.brand?.offerings)
+      brandParts.push(`Offer: ${setup.brand.offerings.slice(0, 300)}`);
+    if (setup.brand?.brandVoice)
+      brandParts.push(`Voice guidance: ${setup.brand.brandVoice.slice(0, 200)}`);
+
+    let userPrompt = "";
+    switch (args.mode) {
+      case "draft":
+        userPrompt = [
+          brandParts.join("\n"),
+          "",
+          args.recipientName ? `Recipient: ${args.recipientName}` : "",
+          args.subject ? `Subject: ${args.subject}` : "",
+          args.hint ? `About: ${args.hint}` : "",
+          "",
+          "Draft the email body. 100-150 words unless the topic needs more.",
+        ]
+          .filter(Boolean)
+          .join("\n");
+        break;
+      case "improve":
+        userPrompt = [
+          brandParts.join("\n"),
+          "",
+          "Improve this email — tighten prose, remove any AI-slop, keep the meaning:",
+          "",
+          args.currentBody ?? "",
+        ].join("\n");
+        break;
+      case "shorter":
+        userPrompt = [
+          "Rewrite this email in half the length while keeping the ask intact:",
+          "",
+          args.currentBody ?? "",
+        ].join("\n");
+        break;
+      case "longer":
+        userPrompt = [
+          brandParts.join("\n"),
+          "",
+          "Expand this email — add one supporting sentence that helps the ask land. Do not add filler:",
+          "",
+          args.currentBody ?? "",
+        ].join("\n");
+        break;
+      case "different_angle":
+        userPrompt = [
+          brandParts.join("\n"),
+          "",
+          "Rewrite this email from a different angle — different opening hook, different framing, same ask:",
+          "",
+          args.currentBody ?? "",
+        ].join("\n");
+        break;
+    }
+
+    const result = await ctx.runAction(internal.ai.runFeature, {
+      workspaceId: setup.workspaceId,
+      organizationId: setup.organizationId,
+      actorId: setup.userId,
+      featureId: "draft_email_reply",
+      messages: [
+        { role: "system", content: COMPOSE_SYSTEM },
+        { role: "user", content: userPrompt },
+      ],
+      resourceType: "compose",
+      resourceId: `compose-${Date.now()}`,
+    });
+
+    return {
+      body: result.text.trim(),
+      provider: result.provider,
+      model: result.model,
+    };
+  },
+});
+
 export const generateDocumentBody = action({
   args: {
     documentId: v.id("documents"),

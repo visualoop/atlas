@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useAction } from "convex/react";
-import { X, Send, Loader2 } from "lucide-react";
+import { X, Send, Loader2, Sparkles, RefreshCw, Scissors, Plus, Shuffle } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Id, Doc } from "@/convex/_generated/dataModel";
 import { RichComposer } from "@/components/atlas/rich-composer";
@@ -186,7 +186,16 @@ export function ComposeSheet({ open, onOpenChange, prefill }: ComposeSheetProps)
             />
           </FieldRow>
 
-          <div className="pt-2">
+          <div className="pt-2 space-y-2">
+            <AIAssistBar
+              subject={subject}
+              bodyText={bodyText}
+              recipientName={to[0]?.split("@")[0]}
+              onDraft={(body) => {
+                setBodyHtml(body.replace(/\n/g, "<br>"));
+                setBodyText(body);
+              }}
+            />
             <RichComposer
               initialHtml={bodyHtml}
               placeholder="Write your message…"
@@ -197,6 +206,7 @@ export function ComposeSheet({ open, onOpenChange, prefill }: ComposeSheetProps)
                 setBodyText(v.text);
               }}
               onSubmit={handleSend}
+              key={bodyHtml.length === 0 ? "empty" : `filled-${bodyText.slice(0, 20)}`}
             />
           </div>
         </div>
@@ -328,6 +338,167 @@ function FieldRow({
       <span className="eyebrow font-mono text-muted-foreground mt-2">{label}</span>
       <div className="min-w-0">{children}</div>
       <div className="mt-2">{action}</div>
+    </div>
+  );
+}
+
+/* ============================================================ */
+/* AIAssistBar — Draft with AI / Improve / Shorter / Longer / etc */
+/* ============================================================ */
+
+function AIAssistBar({
+  subject,
+  bodyText,
+  recipientName,
+  onDraft,
+}: {
+  subject: string;
+  bodyText: string;
+  recipientName?: string;
+  onDraft: (body: string) => void;
+}) {
+  const assist = useAction(api.aiWorkflows.composeAssist);
+  const [busy, setBusy] = useState<
+    "draft" | "improve" | "shorter" | "longer" | "different_angle" | null
+  >(null);
+  const [draftHint, setDraftHint] = useState("");
+  const [showHint, setShowHint] = useState(false);
+
+  const hasBody = bodyText.trim().length > 0;
+
+  async function run(mode: Exclude<typeof busy, null>, hint?: string) {
+    setBusy(mode);
+    try {
+      const r = await assist({
+        mode,
+        subject: subject || undefined,
+        currentBody: bodyText || undefined,
+        hint,
+        recipientName,
+      });
+      onDraft(r.body);
+      toast.success(
+        mode === "draft"
+          ? "AI drafted a first version"
+          : mode === "improve"
+            ? "Improved"
+            : mode === "shorter"
+              ? "Tightened"
+              : mode === "longer"
+                ? "Expanded"
+                : "Rewritten from a different angle",
+      );
+      setShowHint(false);
+      setDraftHint("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "AI failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {!hasBody ? (
+          <>
+            <button
+              onClick={() => setShowHint((v) => !v)}
+              disabled={busy !== null}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs border border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 rounded transition-colors disabled:opacity-50"
+            >
+              {busy === "draft" ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <Sparkles className="size-3" />
+              )}
+              Draft with AI
+            </button>
+            <span className="text-[10px] font-mono text-muted-foreground">
+              or start typing
+            </span>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => run("improve")}
+              disabled={busy !== null}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs border border-border hover:border-primary hover:text-primary rounded transition-colors disabled:opacity-50"
+            >
+              {busy === "improve" ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <RefreshCw className="size-3" />
+              )}
+              Improve
+            </button>
+            <button
+              onClick={() => run("shorter")}
+              disabled={busy !== null}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs border border-border hover:border-primary hover:text-primary rounded transition-colors disabled:opacity-50"
+            >
+              {busy === "shorter" ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <Scissors className="size-3" />
+              )}
+              Shorter
+            </button>
+            <button
+              onClick={() => run("longer")}
+              disabled={busy !== null}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs border border-border hover:border-primary hover:text-primary rounded transition-colors disabled:opacity-50"
+            >
+              {busy === "longer" ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <Plus className="size-3" />
+              )}
+              Longer
+            </button>
+            <button
+              onClick={() => run("different_angle")}
+              disabled={busy !== null}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs border border-border hover:border-primary hover:text-primary rounded transition-colors disabled:opacity-50"
+            >
+              {busy === "different_angle" ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <Shuffle className="size-3" />
+              )}
+              Different angle
+            </button>
+          </>
+        )}
+      </div>
+      {showHint && !hasBody && (
+        <div className="flex items-center gap-2">
+          <input
+            autoFocus
+            value={draftHint}
+            onChange={(e) => setDraftHint(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && draftHint.trim().length >= 3) {
+                void run("draft", draftHint.trim());
+              }
+            }}
+            placeholder="What's this email about?"
+            className="flex-1 h-8 px-3 text-sm bg-transparent border border-border rounded focus:border-primary focus:outline-none"
+          />
+          <button
+            onClick={() => run("draft", draftHint.trim())}
+            disabled={busy !== null || draftHint.trim().length < 3}
+            className="inline-flex items-center gap-1 h-8 px-3 text-xs font-mono bg-primary text-primary-foreground rounded disabled:opacity-50"
+          >
+            {busy === "draft" ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : (
+              <Sparkles className="size-3" />
+            )}
+            Draft
+          </button>
+        </div>
+      )}
     </div>
   );
 }
