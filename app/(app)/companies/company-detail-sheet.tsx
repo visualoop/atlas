@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import Link from "next/link";
-import { Mail, Phone, Globe, MoreHorizontal, Archive, ExternalLink, MessageSquare } from "lucide-react";
+import { Mail, Phone, Globe, MoreHorizontal, Archive, ExternalLink, MessageSquare, Sparkles } from "lucide-react";
 import { RecordSheet } from "@/components/atlas/record-sheet";
+import { OutreachDrafter } from "@/components/atlas/outreach-drafter";
 import { TimelineFeed } from "@/components/atlas/timeline-feed";
 import { NotesTab } from "@/components/atlas/notes-tab";
 import { TasksTab } from "@/components/atlas/tasks-tab";
@@ -61,6 +63,8 @@ export function CompanyDetailSheet({
     .join("")
     .toUpperCase();
 
+  const [outreachOpen, setOutreachOpen] = useState(false);
+
   async function handleArchive() {
     try {
       await archive({ id: companyId });
@@ -75,6 +79,7 @@ export function CompanyDetailSheet({
   const waNumber = (company.whatsapp ?? company.phone)?.replace(/[^\d]/g, "");
 
   return (
+    <>
     <RecordSheet
       open={open}
       onOpenChange={onOpenChange}
@@ -125,6 +130,18 @@ export function CompanyDetailSheet({
               <MessageSquare className="size-3.5" />
               WhatsApp
             </a>
+          )}
+          {(company.emailPrimary || company.phone) && (
+            <button
+              onClick={() => setOutreachOpen(true)}
+              className={cn(
+                buttonVariants({ variant: "default", size: "sm" }),
+                "gap-1.5",
+              )}
+            >
+              <Sparkles className="size-3.5" />
+              Draft outreach
+            </button>
           )}
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -214,6 +231,17 @@ export function CompanyDetailSheet({
         },
       ]}
     />
+    <OutreachDrafter
+      companyId={companyId}
+      companyName={company.name}
+      hasEmail={Boolean(company.emailPrimary)}
+      hasPhone={Boolean(company.phone)}
+      primaryEmail={company.emailPrimary}
+      primaryPhone={company.phone}
+      open={outreachOpen}
+      onOpenChange={setOutreachOpen}
+    />
+    </>
   );
 }
 

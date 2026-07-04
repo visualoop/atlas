@@ -31,6 +31,7 @@ import type * as campaignRunnerHelpers from "../campaignRunnerHelpers.js";
 import type * as campaigns from "../campaigns.js";
 import type * as cloudflareEmailRoutingActions from "../cloudflareEmailRoutingActions.js";
 import type * as cloudflareEmailRoutingHelpers from "../cloudflareEmailRoutingHelpers.js";
+import type * as coldOutreach from "../coldOutreach.js";
 import type * as companies from "../companies.js";
 import type * as composio from "../composio.js";
 import type * as composioActions from "../composioActions.js";
@@ -139,6 +140,7 @@ declare const fullApi: ApiFromModules<{
   campaigns: typeof campaigns;
   cloudflareEmailRoutingActions: typeof cloudflareEmailRoutingActions;
   cloudflareEmailRoutingHelpers: typeof cloudflareEmailRoutingHelpers;
+  coldOutreach: typeof coldOutreach;
   companies: typeof companies;
   composio: typeof composio;
   composioActions: typeof composioActions;

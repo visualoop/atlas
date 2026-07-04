@@ -147,3 +147,84 @@ export const markEnrichment = internalMutation({
     });
   },
 });
+
+/**
+ * Load full context for cold outreach drafting — company + optional
+ * contact + workspace brand fields. Session-scoped (uses
+ * requireWorkspaceContext), so the calling user must be in the
+ * workspace.
+ */
+export const loadCompanyForOutreach = internalQuery({
+  args: {
+    companyId: v.id("companies"),
+    contactId: v.optional(v.id("contacts")),
+  },
+  handler: async (ctx, args) => {
+    const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
+    const company = await ctx.db.get(args.companyId);
+    if (!company || company.workspaceId !== wsCtx.workspace._id) return null;
+
+    let contact: Doc<"contacts"> | null = null;
+    if (args.contactId) {
+      const c = await ctx.db.get(args.contactId);
+      if (c && c.workspaceId === wsCtx.workspace._id) contact = c;
+    } else {
+      // Auto-pick primary contact for this company (most recent one)
+      const rows = await ctx.db
+        .query("contacts")
+        .withIndex("by_workspace_company", (q) =>
+          q
+            .eq("workspaceId", wsCtx.workspace._id)
+            .eq("companyId", args.companyId),
+        )
+        .filter((q) => q.eq(q.field("archivedAt"), undefined))
+        .order("desc")
+        .first();
+      contact = rows;
+    }
+
+    const enrichment =
+      typeof company.enrichmentData === "object" && company.enrichmentData
+        ? (company.enrichmentData as Record<string, unknown>)
+        : {};
+    const description = typeof enrichment.description === "string"
+      ? enrichment.description
+      : company.description;
+    const types = Array.isArray(enrichment.types) ? (enrichment.types as string[]) : undefined;
+
+    return {
+      workspace: wsCtx.workspace,
+      userId: wsCtx.user._id,
+      brand: {
+        workspaceName: wsCtx.workspace.name,
+        oneLiner: wsCtx.workspace.oneLiner,
+        offerings: wsCtx.workspace.offerings,
+        targetMarket: wsCtx.workspace.targetMarket,
+        pricingSummary: wsCtx.workspace.pricingSummary,
+        brandVoice: wsCtx.workspace.brandVoice,
+      },
+      company: {
+        name: company.name,
+        domain: company.domain,
+        industry: company.industry,
+        city: company.city,
+        country: company.country,
+        address: company.address,
+        website: company.website,
+        description,
+        types,
+        fitScore: company.fitScore,
+        fitReasoning: undefined,
+      },
+      contact: contact
+        ? {
+            firstName: contact.firstName,
+            lastName: contact.lastName,
+            title: contact.title,
+            email: contact.email,
+            phone: contact.phone,
+          }
+        : undefined,
+    };
+  },
+});
