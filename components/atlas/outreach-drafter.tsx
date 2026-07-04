@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAction } from "convex/react";
 import {
   Loader2,
@@ -39,6 +39,8 @@ interface Props {
   primaryPhone?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Auto-generate a draft as soon as the dialog opens. */
+  autoGenerate?: boolean;
 }
 
 /**
@@ -60,6 +62,7 @@ export function OutreachDrafter({
   primaryPhone,
   open,
   onOpenChange,
+  autoGenerate,
 }: Props) {
   const drafter = useAction(api.coldOutreach.draftColdOutreach);
   const [channel, setChannel] = useState<"email" | "whatsapp">(
@@ -69,6 +72,16 @@ export function OutreachDrafter({
   const [body, setBody] = useState("");
   const [drafting, setDrafting] = useState(false);
   const [copied, setCopied] = useState<"subject" | "body" | null>(null);
+  const [autoTriggered, setAutoTriggered] = useState(false);
+
+  // Auto-generate on first open when caller asks for it (e.g. Draft
+  // deep-link from /today or /outreach/queue). Only fires once per mount.
+  useEffect(() => {
+    if (!open || !autoGenerate || autoTriggered || body || drafting) return;
+    setAutoTriggered(true);
+    void generate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, autoGenerate]);
 
   async function generate() {
     setDrafting(true);

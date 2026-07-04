@@ -242,6 +242,7 @@ export function CompanyDetailSheet({
       primaryPhone={company.phone}
       open={outreachOpen}
       onOpenChange={setOutreachOpen}
+      autoGenerate={Boolean(initialDrafterOpen)}
     />
     </>
   );

@@ -58,29 +58,21 @@ export const nextContactSuggestions = query({
       const reachable = Boolean(c.phone?.trim() || c.emailPrimary?.trim() || c.website?.trim());
       if (!reachable) continue;
 
-      // Check if we've sent any outbound message to a contact at this company
-      const contacts = await ctx.db
-        .query("contacts")
-        .withIndex("by_workspace_company", (q) =>
-          q.eq("workspaceId", wsCtx.workspace._id).eq("companyId", c._id),
-        )
-        .collect();
+      // Check if we've sent any outbound message linked to a
+      // contact at this company. Query conversations by companyId,
+      // then messages by conversation.
+      const convs = await ctx.db
+        .query("conversations")
+        .withIndex("by_company", (q) => q.eq("companyId", c._id))
+        .take(5);
       let hasOutbound = false;
-      for (const contact of contacts) {
+      for (const conv of convs) {
         const outbound = await ctx.db
           .query("messages")
-          .withIndex("by_workspace_time", (q) =>
-            q.eq("workspaceId", wsCtx.workspace._id),
+          .withIndex("by_conversation_time", (q) =>
+            q.eq("conversationId", conv._id),
           )
-          .filter((q) =>
-            q.and(
-              q.eq(q.field("direction"), "outbound"),
-              q.or(
-                q.eq(q.field("senderEmail"), contact.email ?? "___never___"),
-                q.eq(q.field("recipientEmails"), [contact.email ?? "___never___"]),
-              ),
-            ),
-          )
+          .filter((q) => q.eq(q.field("direction"), "outbound"))
           .first();
         if (outbound) {
           hasOutbound = true;
