@@ -142,6 +142,44 @@ export const AI_FEATURES: Record<string, AIFeature> = {
       FREE_ROUTER_SAFETY,
     ],
   },
+
+  /* Cold email draft — first-touch outreach with JSON output */
+  draft_cold_email: {
+    id: "draft_cold_email",
+    label: "Draft cold email",
+    description: "First-touch outreach email. Returns JSON { subject, body }.",
+    defaultChain: [
+      { provider: "gemini", model: "gemini-2.0-flash-exp", temperature: 0.6, maxTokens: 800 },
+      { provider: "groq", model: "llama-3.3-70b-versatile", temperature: 0.6, maxTokens: 800 },
+      { provider: "cerebras", model: "llama-4-scout-17b-16e-instruct", temperature: 0.6, maxTokens: 800 },
+      FREE_ROUTER_SAFETY,
+    ],
+  },
+
+  /* Cold WhatsApp draft — short, casual opener */
+  draft_cold_whatsapp: {
+    id: "draft_cold_whatsapp",
+    label: "Draft cold WhatsApp",
+    description: "Short first-touch WhatsApp opener. Plain text, casual voice.",
+    defaultChain: [
+      { provider: "groq", model: "llama-3.3-70b-versatile", temperature: 0.7, maxTokens: 300 },
+      { provider: "gemini", model: "gemini-2.0-flash-exp", temperature: 0.7, maxTokens: 300 },
+      { provider: "cerebras", model: "llama-4-scout-17b-16e-instruct", temperature: 0.7, maxTokens: 300 },
+      FREE_ROUTER_SAFETY,
+    ],
+  },
+
+  /* Generic JSON extraction — fit scoring, deal analysis, etc */
+  extract_json: {
+    id: "extract_json",
+    label: "Extract structured JSON",
+    description: "Return strict JSON for scoring, classification, extraction tasks.",
+    defaultChain: [
+      { provider: "gemini", model: "gemini-2.0-flash-exp", temperature: 0.1, maxTokens: 800 },
+      { provider: "groq", model: "llama-3.3-70b-versatile", temperature: 0.1, maxTokens: 800 },
+      FREE_ROUTER_SAFETY,
+    ],
+  },
 };
 
 export function getDefaultChain(featureId: string): ChainStep[] {

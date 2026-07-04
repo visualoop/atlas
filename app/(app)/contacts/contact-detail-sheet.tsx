@@ -222,7 +222,7 @@ export function ContactDetailSheet({
         },
       ]}
     />
-    {contact.companyId && (
+    {contact.companyId && outreachOpen && (
       <OutreachDrafter
         companyId={contact.companyId}
         contactId={contactId}

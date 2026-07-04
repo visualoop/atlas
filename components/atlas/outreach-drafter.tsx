@@ -152,8 +152,8 @@ export function OutreachDrafter({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl gap-0 p-0">
-        <DialogHeader className="px-6 pt-6 pb-4 border-b space-y-1.5">
+      <DialogContent className="w-[calc(100vw-1rem)] max-w-2xl gap-0 p-0 flex flex-col max-h-[90vh]">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b space-y-1.5 shrink-0">
           <p className="text-[11px] font-mono uppercase tracking-[0.14em] text-muted-foreground">
             AI · Cold outreach
           </p>
@@ -167,50 +167,48 @@ export function OutreachDrafter({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-4 space-y-4">
-          <div className="flex gap-1.5">
-            <button
-              onClick={() => setChannel("email")}
-              disabled={!hasEmail}
-              className={`h-9 px-4 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-1.5 ${
-                channel === "email"
-                  ? "bg-primary text-primary-foreground"
-                  : "border bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
-              } ${!hasEmail && "opacity-40 cursor-not-allowed"}`}
-            >
-              <Mail className="size-3.5" />
-              Email {!hasEmail && "(no address)"}
-            </button>
-            <button
-              onClick={() => setChannel("whatsapp")}
-              disabled={!hasPhone}
-              className={`h-9 px-4 rounded-md text-sm font-medium transition-colors inline-flex items-center gap-1.5 ${
-                channel === "whatsapp"
-                  ? "bg-primary text-primary-foreground"
-                  : "border bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
-              } ${!hasPhone && "opacity-40 cursor-not-allowed"}`}
-            >
-              <MessageSquare className="size-3.5" />
-              WhatsApp {!hasPhone && "(no phone)"}
-            </button>
-            <div className="ml-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-md border p-0.5 bg-muted/40">
               <Button
-                onClick={generate}
-                disabled={drafting || !canGenerate}
+                type="button"
                 size="sm"
-                variant={hasContent ? "outline" : "default"}
-                className="gap-1.5"
+                variant={channel === "email" ? "default" : "ghost"}
+                onClick={() => setChannel("email")}
+                disabled={!hasEmail}
+                className="h-8 px-3"
               >
-                {drafting ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : hasContent ? (
-                  <RefreshCw className="size-3.5" />
-                ) : (
-                  <Sparkles className="size-3.5" />
-                )}
-                {hasContent ? "Regenerate" : "Draft with AI"}
+                <Mail className="size-3.5" />
+                Email
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={channel === "whatsapp" ? "default" : "ghost"}
+                onClick={() => setChannel("whatsapp")}
+                disabled={!hasPhone}
+                className="h-8 px-3"
+              >
+                <MessageSquare className="size-3.5" />
+                WhatsApp
               </Button>
             </div>
+            <Button
+              onClick={generate}
+              disabled={drafting || !canGenerate}
+              size="sm"
+              variant={hasContent ? "outline" : "default"}
+              className="ml-auto"
+            >
+              {drafting ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : hasContent ? (
+                <RefreshCw className="size-3.5" />
+              ) : (
+                <Sparkles className="size-3.5" />
+              )}
+              {hasContent ? "Regenerate" : "Draft with AI"}
+            </Button>
           </div>
 
           {channel === "email" && (
@@ -275,20 +273,21 @@ export function OutreachDrafter({
                   : `No ${channel === "email" ? "email address" : "phone number"} on this contact.`
               }
               rows={channel === "email" ? 10 : 5}
-              className="resize-none font-normal"
+              className="resize-none"
             />
           </div>
         </div>
 
-        <DialogFooter className="border-t px-6 py-3 flex-row items-center justify-between gap-2">
-          <p className="text-[11px] text-muted-foreground italic">
+        <DialogFooter className="border-t px-4 sm:px-6 py-3 flex-col sm:flex-row sm:items-center sm:justify-between gap-2 shrink-0">
+          <p className="text-[11px] text-muted-foreground italic hidden sm:block">
             Review before sending. Cold outreach compliance is on you.
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onOpenChange(false)}
+              className="flex-1 sm:flex-initial"
             >
               Close
             </Button>
@@ -296,7 +295,7 @@ export function OutreachDrafter({
               onClick={sendNow}
               disabled={!hasContent || (channel === "email" && !subject)}
               size="sm"
-              className="gap-1.5"
+              className="flex-1 sm:flex-initial"
             >
               <Send className="size-3.5" />
               {channel === "email" ? "Open in inbox" : "Open WhatsApp"}

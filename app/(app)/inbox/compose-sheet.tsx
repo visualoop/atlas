@@ -7,6 +7,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id, Doc } from "@/convex/_generated/dataModel";
 import { RichComposer } from "@/components/atlas/rich-composer";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Sheet,
   SheetContent,
@@ -397,106 +398,126 @@ function AIAssistBar({
     }
   }
 
+  const disabled = busy !== null;
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 rounded-md border bg-muted/40 p-2">
       <div className="flex flex-wrap items-center gap-1.5">
         {!hasBody ? (
           <>
-            <button
+            <Button
+              type="button"
+              size="sm"
+              variant="default"
               onClick={() => setShowHint((v) => !v)}
-              disabled={busy !== null}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs border border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 rounded transition-colors disabled:opacity-50"
+              disabled={disabled}
+              className="h-8"
             >
               {busy === "draft" ? (
-                <Loader2 className="size-3 animate-spin" />
+                <Loader2 className="size-3.5 animate-spin" />
               ) : (
-                <Sparkles className="size-3" />
+                <Sparkles className="size-3.5" />
               )}
               Draft with AI
-            </button>
-            <span className="text-[10px] font-mono text-muted-foreground">
+            </Button>
+            <span className="text-[11px] text-muted-foreground">
               or start typing
             </span>
           </>
         ) : (
           <>
-            <button
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
               onClick={() => run("improve")}
-              disabled={busy !== null}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs border border-border hover:border-primary hover:text-primary rounded transition-colors disabled:opacity-50"
+              disabled={disabled}
+              className="h-8"
             >
               {busy === "improve" ? (
-                <Loader2 className="size-3 animate-spin" />
+                <Loader2 className="size-3.5 animate-spin" />
               ) : (
-                <RefreshCw className="size-3" />
+                <RefreshCw className="size-3.5" />
               )}
-              Improve
-            </button>
-            <button
+              <span className="hidden sm:inline">Improve</span>
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
               onClick={() => run("shorter")}
-              disabled={busy !== null}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs border border-border hover:border-primary hover:text-primary rounded transition-colors disabled:opacity-50"
+              disabled={disabled}
+              className="h-8"
             >
               {busy === "shorter" ? (
-                <Loader2 className="size-3 animate-spin" />
+                <Loader2 className="size-3.5 animate-spin" />
               ) : (
-                <Scissors className="size-3" />
+                <Scissors className="size-3.5" />
               )}
-              Shorter
-            </button>
-            <button
+              <span className="hidden sm:inline">Shorter</span>
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
               onClick={() => run("longer")}
-              disabled={busy !== null}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs border border-border hover:border-primary hover:text-primary rounded transition-colors disabled:opacity-50"
+              disabled={disabled}
+              className="h-8"
             >
               {busy === "longer" ? (
-                <Loader2 className="size-3 animate-spin" />
+                <Loader2 className="size-3.5 animate-spin" />
               ) : (
-                <Plus className="size-3" />
+                <Plus className="size-3.5" />
               )}
-              Longer
-            </button>
-            <button
+              <span className="hidden sm:inline">Longer</span>
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
               onClick={() => run("different_angle")}
-              disabled={busy !== null}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs border border-border hover:border-primary hover:text-primary rounded transition-colors disabled:opacity-50"
+              disabled={disabled}
+              className="h-8"
             >
               {busy === "different_angle" ? (
-                <Loader2 className="size-3 animate-spin" />
+                <Loader2 className="size-3.5 animate-spin" />
               ) : (
-                <Shuffle className="size-3" />
+                <Shuffle className="size-3.5" />
               )}
-              Different angle
-            </button>
+              <span className="hidden sm:inline">Different angle</span>
+            </Button>
           </>
         )}
       </div>
       {showHint && !hasBody && (
-        <div className="flex items-center gap-2">
-          <input
+        <div className="flex flex-col sm:flex-row items-stretch gap-2">
+          <Input
             autoFocus
             value={draftHint}
             onChange={(e) => setDraftHint(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && draftHint.trim().length >= 3) {
+                e.preventDefault();
                 void run("draft", draftHint.trim());
               }
             }}
             placeholder="What's this email about?"
-            className="flex-1 h-8 px-3 text-sm bg-transparent border border-border rounded focus:border-primary focus:outline-none"
+            className="flex-1 h-9"
           />
-          <button
+          <Button
+            type="button"
+            size="sm"
             onClick={() => run("draft", draftHint.trim())}
-            disabled={busy !== null || draftHint.trim().length < 3}
-            className="inline-flex items-center gap-1 h-8 px-3 text-xs font-mono bg-primary text-primary-foreground rounded disabled:opacity-50"
+            disabled={disabled || draftHint.trim().length < 3}
+            className="h-9"
           >
             {busy === "draft" ? (
-              <Loader2 className="size-3 animate-spin" />
+              <Loader2 className="size-3.5 animate-spin" />
             ) : (
-              <Sparkles className="size-3" />
+              <Sparkles className="size-3.5" />
             )}
             Draft
-          </button>
+          </Button>
         </div>
       )}
     </div>

@@ -232,17 +232,19 @@ export function CompanyDetailSheet({
         },
       ]}
     />
-    <OutreachDrafter
-      companyId={companyId}
-      companyName={company.name}
-      hasEmail={Boolean(company.emailPrimary)}
-      hasPhone={Boolean(company.phone)}
-      primaryEmail={company.emailPrimary}
-      primaryPhone={company.phone}
-      open={outreachOpen}
-      onOpenChange={setOutreachOpen}
-      autoGenerate={Boolean(initialDrafterOpen)}
-    />
+    {outreachOpen && (
+      <OutreachDrafter
+        companyId={companyId}
+        companyName={company.name}
+        hasEmail={Boolean(company.emailPrimary)}
+        hasPhone={Boolean(company.phone)}
+        primaryEmail={company.emailPrimary}
+        primaryPhone={company.phone}
+        open={outreachOpen}
+        onOpenChange={setOutreachOpen}
+        autoGenerate={Boolean(initialDrafterOpen)}
+      />
+    )}
     </>
   );
 }
