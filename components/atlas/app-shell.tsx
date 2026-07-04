@@ -57,6 +57,7 @@ import { Label } from "@/components/ui/label";
 import { CommandPalette } from "@/components/atlas/command-palette";
 import { CopilotPanel } from "@/components/atlas/copilot-panel";
 import { AppShellSkeleton } from "@/components/atlas/app-shell-skeleton";
+import { NotificationSubscriber } from "@/components/atlas/notification-subscriber";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
@@ -169,6 +170,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <TooltipProvider>
+      <NotificationSubscriber />
       <SidebarProvider defaultOpen={true}>
         <AtlasSidebar
           pathname={pathname ?? ""}

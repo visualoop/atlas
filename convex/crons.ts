@@ -130,4 +130,14 @@ crons.cron(
   internal.dailyBriefings.generateForAllWorkspaces,
 );
 
+/* ============================================================ */
+/* Notifications — trim entries older than 30 days                */
+/* ============================================================ */
+
+crons.cron(
+  "trim old notifications",
+  "0 2 * * *", // 02:00 UTC daily
+  internal.notifications.trimOld,
+);
+
 export default crons;

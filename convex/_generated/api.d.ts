@@ -80,6 +80,7 @@ import type * as lib_workspaceContext from "../lib/workspaceContext.js";
 import type * as lib_workspaceContextAi from "../lib/workspaceContextAi.js";
 import type * as mailer from "../mailer.js";
 import type * as notes from "../notes.js";
+import type * as notifications from "../notifications.js";
 import type * as organizations from "../organizations.js";
 import type * as outreachSuggestions from "../outreachSuggestions.js";
 import type * as payments from "../payments.js";
@@ -198,6 +199,7 @@ declare const fullApi: ApiFromModules<{
   "lib/workspaceContextAi": typeof lib_workspaceContextAi;
   mailer: typeof mailer;
   notes: typeof notes;
+  notifications: typeof notifications;
   organizations: typeof organizations;
   outreachSuggestions: typeof outreachSuggestions;
   payments: typeof payments;

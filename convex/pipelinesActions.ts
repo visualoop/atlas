@@ -92,6 +92,16 @@ Return JSON:
         healthNotes,
         nextAction,
       });
+      // If health dropped low, notify the workspace
+      if (healthScore < 40) {
+        await ctx.runMutation(internal.notifications.notify, {
+          workspaceId: d.workspaceId,
+          kind: "rotting_deal",
+          title: `Deal rotting: ${d.name}`,
+          body: nextAction || healthNotes,
+          actionLink: `/pipelines`,
+        });
+      }
       classified++;
     }
     return { scanned: deals.length, classified };

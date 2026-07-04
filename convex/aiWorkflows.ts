@@ -643,6 +643,16 @@ export const scoreCompanyFit = action({
       score: parsed.score,
       reason: parsed.reason,
     });
+    // Notify if this is a hot lead (≥90)
+    if (parsed.score >= 90) {
+      await ctx.runMutation(internal.notifications.notify, {
+        workspaceId: setup.workspaceId,
+        kind: "hot_lead",
+        title: `Hot lead: ${company.name}`,
+        body: `${parsed.score}/100 fit — ${parsed.reason}`,
+        actionLink: `/companies?open=${args.companyId}`,
+      });
+    }
     return parsed;
   },
 });

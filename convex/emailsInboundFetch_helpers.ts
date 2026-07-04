@@ -102,5 +102,16 @@ export const scheduleAutoDraft = internalMutation({
         persistToInboundMessage: args.messageId,
       },
     );
+    // Notify the workspace that inbound arrived + a draft is coming
+    const conversation = await ctx.db.get(msg.conversationId);
+    if (conversation) {
+      await ctx.runMutation(internal.notifications.notify, {
+        workspaceId: msg.workspaceId,
+        kind: "inbound_arrived",
+        title: `New reply${msg.senderName ? ` from ${msg.senderName}` : ""}`,
+        body: msg.subject ?? (msg.bodyText ?? "").slice(0, 100),
+        actionLink: `/inbox?conversation=${msg.conversationId}`,
+      });
+    }
   },
 });
