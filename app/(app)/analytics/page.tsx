@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import {
   DollarSign, TrendingUp, TrendingDown, Users, FileText, Clock,
-  Plus, Loader2, Copy, Check, ExternalLink, Link as LinkIcon,
+  Plus, Loader2, Copy, Check, ExternalLink, Link as LinkIcon, Sparkles, RefreshCw,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
@@ -98,6 +98,9 @@ export default function AnalyticsPage() {
             </div>
           )}
         </section>
+
+        {/* AI summary */}
+        <AnalyticsAISummary kpis={kpis} />
 
         {/* Two-column: funnel + sources */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
@@ -617,4 +620,108 @@ function formatCurrency(cents: string | bigint, currency: string): string {
   } catch {
     return `${currency} ${value.toFixed(0)}`;
   }
+}
+
+
+/* ============================================================ */
+/* AnalyticsAISummary — 2-3 sentence narrative under KPIs        */
+/* ============================================================ */
+
+function AnalyticsAISummary({
+  kpis,
+}: {
+  kpis:
+    | {
+        pipelineValueCents: string;
+        openDealsCount: number;
+        wonThisMonthCents: string;
+        wonThisMonthCount: number;
+        paidCentsThisMonth: string;
+        outstandingCents: string;
+        outstandingInvoicesCount: number;
+        overdueCents: string;
+        currency: string;
+      }
+    | undefined;
+}) {
+  const runSummary = useAction(api.publisherAI.summariseAnalytics);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function refresh() {
+    if (!kpis) return;
+    setLoading(true);
+    try {
+      const currency = kpis.currency;
+      const r = await runSummary({
+        period: "this month so far",
+        metrics: [
+          {
+            name: "Pipeline value",
+            currentValue: Number(kpis.pipelineValueCents) / 100,
+            unit: currency,
+          },
+          {
+            name: "Open deals",
+            currentValue: kpis.openDealsCount,
+          },
+          {
+            name: "Won this month",
+            currentValue: Number(kpis.wonThisMonthCents) / 100,
+            unit: currency,
+          },
+          {
+            name: "Won deals",
+            currentValue: kpis.wonThisMonthCount,
+          },
+          {
+            name: "Paid this month",
+            currentValue: Number(kpis.paidCentsThisMonth) / 100,
+            unit: currency,
+          },
+          {
+            name: "Outstanding",
+            currentValue: Number(kpis.outstandingCents) / 100,
+            unit: currency,
+          },
+          {
+            name: "Overdue",
+            currentValue: Number(kpis.overdueCents) / 100,
+            unit: currency,
+          },
+        ],
+      });
+      setSummary(r.summary);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "AI summary failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <section className="border-l-2 border-primary/60 pl-4 py-1 mb-10">
+      <div className="flex items-center justify-between mb-2">
+        <p className="eyebrow flex items-center gap-1.5">
+          <Sparkles className="size-3 text-primary" />
+          AI · How the month is going
+        </p>
+        <button
+          onClick={refresh}
+          disabled={loading || !kpis}
+          className="text-[11px] font-mono uppercase tracking-[0.14em] text-muted-foreground hover:text-foreground disabled:opacity-50 inline-flex items-center gap-1"
+        >
+          {loading ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
+          {summary ? "Refresh" : "Summarise"}
+        </button>
+      </div>
+      {summary === null ? (
+        <p className="text-sm text-muted-foreground italic">
+          Click Summarise for a narrative read of the numbers.
+        </p>
+      ) : (
+        <p className="text-base leading-relaxed">{summary}</p>
+      )}
+    </section>
+  );
 }
