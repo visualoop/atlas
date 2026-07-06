@@ -284,7 +284,7 @@ export async function POST(req: NextRequest) {
       fetchAction(api.copilotAgentKeys.chatKeysForAgent, {}, { token }),
     ]);
 
-    const system = systemWithBrand(setup.brand);
+    const system = setup.systemPrompt || systemWithBrand(setup.brand);
     const tools = buildTools(token);
 
     const modelMessages = (await convertToModelMessages(body.messages)).slice(-8);

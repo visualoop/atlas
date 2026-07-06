@@ -22,48 +22,14 @@ import { v, ConvexError } from "convex/values";
 import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { buildAgentSystem } from "./lib/agentPersona";
 
-const EMAIL_COLD_SYSTEM = `You draft cold outreach emails for a solo founder.
+// Silence unused Id import when only used in generics elsewhere.
+void ({} as Id<"companies"> | undefined);
 
-Voice:
-- Direct, human, Kenyan English. Never formal-corporate.
-- Never AI-slop ("delve", "leverage", "unlock value", "in today's fast-paced world", "hope this finds you well", em-dash filler).
-- Never marketing-speak. Write like a real person emailing another real person.
-- Never end with "Best regards" or fake signatures — that's added by the sender identity later.
-
-Structure:
-- 2 concise paragraphs. Max 100 words total including subject.
-- First line: acknowledge something specific about their business (from what you know).
-- Second line: one clear reason our product helps their specific situation.
-- Close with a single, low-friction ask (not a meeting request — a reply, a "worth a chat?", a link they'd click).
-- No bullet points. No headers. Prose only.
-
-CRITICAL: Return JSON exactly:
-{"subject": "…", "body": "…"}
-No prose outside the JSON. The subject must be under 60 chars and NOT include "" or their name — write like a colleague.`;
-
-const WHATSAPP_COLD_SYSTEM = `You draft cold WhatsApp opening messages for a solo founder.
-
-Voice:
-- Extremely short. WhatsApp isn't email — 1-2 sentences max.
-- Kenyan English + Sheng if it fits naturally.
-- Direct: identify yourself, name-drop something specific about their business, ask a small question.
-- Never marketing tone. Never "Hi, hope this finds you well".
-
-Structure:
-- Greeting → who you are + specific hook → small question.
-- Under 200 characters total.
-
-CRITICAL: Return ONLY the message text. No JSON, no prose around it. No signature block.`;
-
-interface Brand {
-  workspaceName?: string;
-  oneLiner?: string;
-  offerings?: string;
-  targetMarket?: string;
-  pricingSummary?: string;
-  brandVoice?: string;
-}
+/* System prompts moved to buildAgentSystem(persona, "email_cold" | "whatsapp_cold").
+   See convex/lib/agentPersona.ts. The prompt no longer says "You draft cold
+   outreach for a solo founder" — it names the workspace + owner explicitly. */
 
 interface CompanyContext {
   name: string;
@@ -108,18 +74,6 @@ function buildProfile(company: CompanyContext, contact?: ContactContext): string
   return lines.join("\n");
 }
 
-function buildBrandBlock(brand: Brand | null): string {
-  if (!brand) return "(no brand context set — keep the pitch generic)";
-  const parts: string[] = [];
-  if (brand.workspaceName) parts.push(`Our business: ${brand.workspaceName}`);
-  if (brand.oneLiner) parts.push(`We: ${brand.oneLiner}`);
-  if (brand.offerings) parts.push(`Offer: ${brand.offerings.slice(0, 400)}`);
-  if (brand.targetMarket) parts.push(`Ideal customer: ${brand.targetMarket.slice(0, 300)}`);
-  if (brand.pricingSummary) parts.push(`Pricing: ${brand.pricingSummary.slice(0, 200)}`);
-  if (brand.brandVoice) parts.push(`Voice guidelines: ${brand.brandVoice.slice(0, 200)}`);
-  return parts.join("\n");
-}
-
 /* ============================================================ */
 /* draftColdOutreach                                              */
 /* ============================================================ */
@@ -161,12 +115,18 @@ export const draftColdOutreach = action({
     }
     const { company, contact, workspace, userId } = context;
 
-    const brandBlock = buildBrandBlock(context.brand);
-    const profile = buildProfile(company, contact);
-    const userPrompt = `${brandBlock}\n\nProspect:\n${profile}\n\nDraft the message.`;
+    const persona = await ctx.runQuery(
+      internal.aiWorkflowHelpers.loadAgentPersonaForWorkspace,
+      { workspaceId: workspace._id },
+    );
+    if (!persona) throw new ConvexError({ code: "NO_PERSONA", message: "Workspace not configured." });
+    const system = buildAgentSystem(
+      persona,
+      args.channel === "email" ? "email_cold" : "whatsapp_cold",
+    );
 
-    const system =
-      args.channel === "email" ? EMAIL_COLD_SYSTEM : WHATSAPP_COLD_SYSTEM;
+    const profile = buildProfile(company, contact);
+    const userPrompt = `Prospect to reach out to:\n${profile}\n\nDraft the message ${persona.ownerFirstName} will send from ${persona.workspaceName}.`;
 
     const result = await ctx.runAction(internal.ai.runFeature, {
       workspaceId: workspace._id,
@@ -237,11 +197,18 @@ export const autoDraftForCompany = internalAction({
     if (!context) return { ok: false };
     const { company, contact, workspace, userId } = context;
 
-    const brandBlock = buildBrandBlock(context.brand);
+    const persona = await ctx.runQuery(
+      internal.aiWorkflowHelpers.loadAgentPersonaForWorkspace,
+      { workspaceId: workspace._id },
+    );
+    if (!persona) return { ok: false };
+
+    const system = buildAgentSystem(
+      persona,
+      args.channel === "email" ? "email_cold" : "whatsapp_cold",
+    );
     const profile = buildProfile(company, contact);
-    const userPrompt = `${brandBlock}\n\nProspect:\n${profile}\n\nDraft the message.`;
-    const system =
-      args.channel === "email" ? EMAIL_COLD_SYSTEM : WHATSAPP_COLD_SYSTEM;
+    const userPrompt = `Prospect to reach out to:\n${profile}\n\nDraft the message ${persona.ownerFirstName} will send from ${persona.workspaceName}.`;
 
     try {
       const result = await ctx.runAction(internal.ai.runFeature, {

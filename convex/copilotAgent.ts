@@ -19,6 +19,7 @@ import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { requireUser } from "./lib/authHelpers";
 import type { QueryCtx } from "./_generated/server";
+import { buildAgentSystem, loadAgentPersonaContext } from "./lib/agentPersona";
 
 async function requireWs(ctx: QueryCtx) {
   const user = await requireUser(ctx);
@@ -479,9 +480,13 @@ export const chatSetupForAgent = query({
     const setup = await requireWs(ctx);
     const ws = await ctx.db.get(setup.workspaceId);
     if (!ws || !("name" in ws)) throw new Error("workspace_not_found");
+    const persona = await loadAgentPersonaContext(ctx, setup.workspaceId);
+    const systemPrompt = persona ? buildAgentSystem(persona, "copilot_chat") : "";
     return {
       workspaceId: setup.workspaceId,
       organizationId: setup.organizationId,
+      systemPrompt,
+      assistantName: persona?.assistantName ?? "Atlas",
       brand: {
         workspaceName: (ws as unknown as { name: string }).name,
         website: (ws as unknown as { website?: string }).website,

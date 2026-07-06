@@ -16,6 +16,7 @@ import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { buildAgentSystem } from "./lib/agentPersona";
 
 const BATCH = 30;
 
@@ -33,9 +34,15 @@ export const classifyRottingDeals = internalAction({
       );
       if (!key) continue;
 
-      const prompt = `You are a sales coach. Score this deal 0-100 for how likely it is to still close, give one crisp reason why, and suggest ONE concrete next action the founder should take today.
+      // Persona harness — same identity every AI feature uses
+      const persona = await ctx.runQuery(
+        internal.aiWorkflowHelpers.loadAgentPersonaForWorkspace,
+        { workspaceId: d.workspaceId },
+      );
+      if (!persona) continue;
+      const systemPrompt = buildAgentSystem(persona, "deal_analyst");
 
-${d.brandBlock ? d.brandBlock + "\n\n" : ""}Deal:
+      const prompt = `Deal to analyse:
 - Name: ${d.name}
 - Stage: ${d.stageName}
 - Amount: ${d.amountCents} ${d.currency}
@@ -43,12 +50,7 @@ ${d.brandBlock ? d.brandBlock + "\n\n" : ""}Deal:
 - Age (days): ${d.ageDays}
 - Notes: ${d.notes ?? "none"}
 
-Return JSON:
-{
-  "healthScore": 0-100,
-  "healthNotes": "one short reason why the deal is where it is",
-  "nextAction": "one specific move — 'Nudge Kimton with a case study', 'Ask for a decision date on the current proposal', 'Send a Loom summary of the demo'. Max 12 words."
-}`;
+Only refer to this deal by its exact name above. ${persona.ownerFirstName} works alone — do NOT suggest assigning to teammates.`;
 
       let healthScore = 50;
       let healthNotes = "";
@@ -63,7 +65,7 @@ Return JSON:
           body: JSON.stringify({
             model: "llama-3.3-70b-versatile",
             messages: [
-              { role: "system", content: "You are a concise sales coach. Return only JSON." },
+              { role: "system", content: systemPrompt },
               { role: "user", content: prompt },
             ],
             temperature: 0.3,

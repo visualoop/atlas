@@ -152,16 +152,10 @@ export const draftEmailReply = action({
 /* Draft WhatsApp reply                                                  */
 /* ------------------------------------------------------------------ */
 
-const WHATSAPP_SYSTEM = `You are Justine's WhatsApp assistant.
+const WHATSAPP_SYSTEM_DEPRECATED = `deprecated — see buildAgentSystem`;
+void WHATSAPP_SYSTEM_DEPRECATED;
 
-Style rules:
-- Short and casual — WhatsApp is not email.
-- Kenyan English + Sheng where it fits naturally.
-- 1–2 sentences unless the ask needs more.
-- No AI-slop, no marketing voice.
-- Never send a formal signature.
-
-Return ONLY the message body.`;
+/* System prompt is now composed via buildAgentSystem(persona, "whatsapp_reply"). */
 
 export const draftWhatsAppReply = action({
   args: {
@@ -175,9 +169,16 @@ export const draftWhatsAppReply = action({
     if (!context) {
       throw new ConvexError({ code: "NOT_FOUND", message: "Conversation not found." });
     }
+    const persona = await ctx.runQuery(
+      internal.aiWorkflowHelpers.loadAgentPersonaForWorkspace,
+      { workspaceId: context.workspace._id },
+    );
+    if (!persona) throw new ConvexError({ code: "NO_PERSONA", message: "Workspace not configured." });
+    const systemPrompt = buildAgentSystem(persona, "whatsapp_reply");
+
     const transcript = context.messages
       .map((m) => {
-        const who = m.direction === "inbound" ? "them" : "you";
+        const who = m.direction === "inbound" ? `Them (${m.senderName ?? "external"})` : `You (${persona.ownerFirstName})`;
         return `${who}: ${m.bodyText}`;
       })
       .join("\n");
@@ -185,7 +186,9 @@ export const draftWhatsAppReply = action({
       "WhatsApp conversation:",
       transcript,
       "",
-      args.intent ? `Intent: ${args.intent}` : "Write the best next reply.",
+      args.intent
+        ? `${persona.ownerFirstName}'s intent: ${args.intent}`
+        : `Write the best next reply ${persona.ownerFirstName} could send.`,
     ].join("\n");
 
     const result = await ctx.runAction(internal.ai.runFeature, {
@@ -194,7 +197,7 @@ export const draftWhatsAppReply = action({
       actorId: context.userId,
       featureId: "draft_whatsapp_reply",
       messages: [
-        { role: "system", content: WHATSAPP_SYSTEM },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       resourceType: "conversation",
@@ -438,17 +441,8 @@ front-matter, no meta commentary, no "here is the document" preamble.`;
 
 /* ============================================================ */
 /* Compose assist — help write outbound emails from the inbox    */
+/* Uses the unified persona harness (compose_assist role).       */
 /* ============================================================ */
-
-const COMPOSE_SYSTEM = `You help a founder draft outbound emails from their inbox.
-
-Voice:
-- Direct, human, Kenyan English. Never formal-corporate.
-- Never AI-slop ("delve", "leverage", "unlock value", "in today's fast-paced world", "hope this finds you well", em-dash filler).
-- Match the length + tone the user asked for.
-- Never end with fake signatures — that's added by the sender identity later.
-
-Return ONLY the message body. No preamble, no meta commentary, no code fences.`;
 
 export const composeAssist = action({
   args: {
@@ -476,35 +470,34 @@ export const composeAssist = action({
       });
     }
 
-    const brandParts: string[] = [];
-    if (setup.brand?.workspaceName)
-      brandParts.push(`Workspace: ${setup.brand.workspaceName}`);
-    if (setup.brand?.oneLiner) brandParts.push(`One-liner: ${setup.brand.oneLiner}`);
-    if (setup.brand?.offerings)
-      brandParts.push(`Offer: ${setup.brand.offerings.slice(0, 300)}`);
-    if (setup.brand?.brandVoice)
-      brandParts.push(`Voice guidance: ${setup.brand.brandVoice.slice(0, 200)}`);
+    const persona = await ctx.runQuery(
+      internal.aiWorkflowHelpers.loadAgentPersonaForWorkspace,
+      { workspaceId: setup.workspaceId },
+    );
+    if (!persona) {
+      throw new ConvexError({
+        code: "PERSONA_MISSING",
+        message: "Workspace not configured.",
+      });
+    }
+    const systemPrompt = buildAgentSystem(persona, "compose_assist");
 
     let userPrompt = "";
     switch (args.mode) {
       case "draft":
         userPrompt = [
-          brandParts.join("\n"),
-          "",
           args.recipientName ? `Recipient: ${args.recipientName}` : "",
           args.subject ? `Subject: ${args.subject}` : "",
           args.hint ? `About: ${args.hint}` : "",
           "",
-          "Draft the email body. 100-150 words unless the topic needs more.",
+          `Draft the email body as ${persona.ownerFirstName}. 100-150 words unless the topic needs more.`,
         ]
           .filter(Boolean)
           .join("\n");
         break;
       case "improve":
         userPrompt = [
-          brandParts.join("\n"),
-          "",
-          "Improve this email — tighten prose, remove any AI-slop, keep the meaning:",
+          "Improve this email — tighten prose, remove any AI-slop, keep the meaning + the ask:",
           "",
           args.currentBody ?? "",
         ].join("\n");
@@ -518,8 +511,6 @@ export const composeAssist = action({
         break;
       case "longer":
         userPrompt = [
-          brandParts.join("\n"),
-          "",
           "Expand this email — add one supporting sentence that helps the ask land. Do not add filler:",
           "",
           args.currentBody ?? "",
@@ -527,8 +518,6 @@ export const composeAssist = action({
         break;
       case "different_angle":
         userPrompt = [
-          brandParts.join("\n"),
-          "",
           "Rewrite this email from a different angle — different opening hook, different framing, same ask:",
           "",
           args.currentBody ?? "",
@@ -542,7 +531,7 @@ export const composeAssist = action({
       actorId: setup.userId,
       featureId: "draft_email_reply",
       messages: [
-        { role: "system", content: COMPOSE_SYSTEM },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       resourceType: "compose",
@@ -559,20 +548,8 @@ export const composeAssist = action({
 
 /* ============================================================ */
 /* Fit scoring — score a contact or company vs ICP               */
+/* System prompt now via buildAgentSystem(persona, "fit_score"). */
 /* ============================================================ */
-
-const FIT_SYSTEM = `You score how well a prospect fits the founder's ideal customer profile (ICP).
-
-Rules:
-- Return JSON only: {"score": 0-100, "reason": "<one sentence>"}
-- 90+ = perfect fit, buy signals visible
-- 70-89 = strong fit, worth investment
-- 50-69 = plausible, needs qualification
-- 30-49 = wrong segment but salvageable
-- 0-29 = wrong entirely
-- Reason must be specific: mention title, industry, or company traits — never generic ("could be a good fit").
-
-Return only the JSON, no code fences.`;
 
 function parseFitResult(text: string): { score: number; reason: string } {
   const clean = text.replace(/```json|```/g, "").trim();
@@ -595,17 +572,21 @@ export const scoreContactFit = action({
     const setup = await ctx.runQuery(internal.copilotHelpers.prepare, {});
     if (!setup) throw new ConvexError({ code: "NO_WORKSPACE", message: "No workspace." });
 
-    const contact = await ctx.runQuery(
-      internal.aiWorkflowHelpers.loadContactForScoring,
-      { contactId: args.contactId },
-    );
+    const [contact, persona] = await Promise.all([
+      ctx.runQuery(internal.aiWorkflowHelpers.loadContactForScoring, {
+        contactId: args.contactId,
+      }),
+      ctx.runQuery(internal.aiWorkflowHelpers.loadAgentPersonaForWorkspace, {
+        workspaceId: setup.workspaceId,
+      }),
+    ]);
     if (!contact) throw new ConvexError({ code: "NOT_FOUND", message: "Contact not found." });
+    if (!persona) throw new ConvexError({ code: "NO_PERSONA", message: "Workspace not configured." });
+
+    const systemPrompt = buildAgentSystem(persona, "fit_score");
 
     const userPrompt = [
-      `ICP: ${setup.brand?.targetMarket ?? "not defined"}`,
-      `Offering: ${setup.brand?.oneLiner ?? setup.brand?.offerings ?? "not defined"}`,
-      "",
-      `Contact:`,
+      `Contact to score:`,
       `- Name: ${contact.firstName} ${contact.lastName ?? ""}`.trim(),
       contact.title ? `- Title: ${contact.title}` : "",
       contact.email ? `- Email: ${contact.email}` : "",
@@ -622,7 +603,7 @@ export const scoreContactFit = action({
       actorId: setup.userId,
       featureId: "extract_json",
       messages: [
-        { role: "system", content: FIT_SYSTEM },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       resourceType: "contact_fit",
@@ -630,7 +611,6 @@ export const scoreContactFit = action({
     });
 
     const parsed = parseFitResult(result.text);
-    // Persist to contact.fitScore for sort-by-priority
     await ctx.runMutation(internal.aiWorkflowHelpers.saveContactFitScore, {
       contactId: args.contactId,
       score: parsed.score,
@@ -649,17 +629,21 @@ export const scoreCompanyFit = action({
     const setup = await ctx.runQuery(internal.copilotHelpers.prepare, {});
     if (!setup) throw new ConvexError({ code: "NO_WORKSPACE", message: "No workspace." });
 
-    const company = await ctx.runQuery(
-      internal.aiWorkflowHelpers.loadCompanyForScoring,
-      { companyId: args.companyId },
-    );
+    const [company, persona] = await Promise.all([
+      ctx.runQuery(internal.aiWorkflowHelpers.loadCompanyForScoring, {
+        companyId: args.companyId,
+      }),
+      ctx.runQuery(internal.aiWorkflowHelpers.loadAgentPersonaForWorkspace, {
+        workspaceId: setup.workspaceId,
+      }),
+    ]);
     if (!company) throw new ConvexError({ code: "NOT_FOUND", message: "Company not found." });
+    if (!persona) throw new ConvexError({ code: "NO_PERSONA", message: "Workspace not configured." });
+
+    const systemPrompt = buildAgentSystem(persona, "fit_score");
 
     const userPrompt = [
-      `ICP: ${setup.brand?.targetMarket ?? "not defined"}`,
-      `Offering: ${setup.brand?.oneLiner ?? setup.brand?.offerings ?? "not defined"}`,
-      "",
-      `Company:`,
+      `Company to score:`,
       `- Name: ${company.name}`,
       company.industry ? `- Industry: ${company.industry}` : "",
       company.description ? `- Description: ${company.description.slice(0, 400)}` : "",
@@ -675,7 +659,7 @@ export const scoreCompanyFit = action({
       actorId: setup.userId,
       featureId: "extract_json",
       messages: [
-        { role: "system", content: FIT_SYSTEM },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       resourceType: "company_fit",
