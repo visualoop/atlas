@@ -119,6 +119,7 @@ import type * as trendsActions from "../trendsActions.js";
 import type * as trendsActionsHelpers from "../trendsActionsHelpers.js";
 import type * as webhookDelivery from "../webhookDelivery.js";
 import type * as webhookDeliveryHelpers from "../webhookDeliveryHelpers.js";
+import type * as webhookDiagnostics from "../webhookDiagnostics.js";
 import type * as whatsapp from "../whatsapp.js";
 import type * as whatsappInbound from "../whatsappInbound.js";
 import type * as whatsappOut from "../whatsappOut.js";
@@ -244,6 +245,7 @@ declare const fullApi: ApiFromModules<{
   trendsActionsHelpers: typeof trendsActionsHelpers;
   webhookDelivery: typeof webhookDelivery;
   webhookDeliveryHelpers: typeof webhookDeliveryHelpers;
+  webhookDiagnostics: typeof webhookDiagnostics;
   whatsapp: typeof whatsapp;
   whatsappInbound: typeof whatsappInbound;
   whatsappOut: typeof whatsappOut;
