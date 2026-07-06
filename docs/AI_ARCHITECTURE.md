@@ -1,298 +1,235 @@
 # Atlas AI Architecture
 
-How the assistant persona, model routing, inbound handling, and
-proactive AI features fit together as of the Persona + Router +
-Inbound wave.
+Atlas is a founder's operating system with a unified AI agent
+running under it. Every AI feature — reply drafts, cold outreach,
+briefings, per-page recommendations, newsletter drafts, social
+posts, fit scoring, deal nudges, Copilot — is built on the same
+four foundations.
 
-## Overview
+## The four foundations
 
-Atlas is designed so its user reviews AI work rather than doing it:
+### 1. Persona harness (`convex/lib/agentPersona.ts`)
 
-- **Copilot** — always-visible tool-using agent that answers questions about the workspace
-- **Inbound auto-draft** — every reply email lands with a suggested response ready to review
-- **Compose AI** — no blank pages; every email starts with a draft option
-- **Today briefing** — AI paragraph summarizes the day's actual state
-- **Deal nudges** — daily AI-generated next actions on rotting deals
-- **Auto-draft on prospect import** — cold emails written silently in background
-- **Fit scoring** — one-click AI scoring for contacts + companies
-- **Live notifications** — toasts surface hot leads, rotting deals, inbound replies
-- **Configurable persona** — every workspace names their assistant + tunes its voice
+One function, `buildAgentSystem(persona, role)`, is the single
+source of every AI system prompt. It emits six blocks in order:
 
-Model choice is decoupled from feature code — a task-aware router
-picks the best available model for each call.
+- **Identity** — who the assistant is (default "Atlas", per-workspace
+  configurable), who the founder is (first name from users table),
+  what workspace they run.
+- **Business** — one-liner, offerings, ideal customer, pricing,
+  currency, timezone. Any blank field is omitted.
+- **Voice** — brand voice from settings, plus a hard ban on AI-slop
+  patterns ("delve", "leverage", "hope this finds you", em-dashes as
+  filler, etc.).
+- **Grounding rules** — forbid inventing names, numbers, or
+  teammates. Solo founders never get "assign to Alex".
+- **Perspective** — role-specific. `email_reply` says "you're the
+  seller, replying as ${firstName}." `email_cold` says "you're
+  drafting from ${workspaceName} to a prospect." Each role has its
+  own perspective. See `PROMPT_MAP.md` for every one.
+- **Output** — role-specific format contract (JSON schema, Markdown,
+  plain body, etc.).
 
-## Model routing
+Roles: `email_reply`, `email_cold`, `whatsapp_cold`, `whatsapp_reply`,
+`briefing`, `compose_assist`, `fit_score`, `deal_analyst`,
+`copilot_chat`, `newsletter_draft`, `social_post`, `content_idea`,
+`campaign_personalize`, `analytics_summary`, `general`.
+
+Every AI feature calls this. Fixed for good the class of bug where
+one feature had one identity and another had a different one.
+
+### 2. Task-aware model routing (`convex/ai/router.ts`)
+
+`pickModelChain(taskCategory, options)` returns an ordered fallback
+chain of `{provider, model, ...}` steps. Task categories map to
+model preferences: `chat_agentic` prefers Claude Sonnet or GPT-4o,
+`extract_json` prefers Gemini Flash, `long_context` prefers
+Gemini 1.5 Pro.
+
+Chain filter is `providersFromKeys(workspaceKeys)` — only providers
+the workspace actually configured are eligible. The chain always
+ends with `openrouter/auto` as a universal safety net if the
+workspace has OpenRouter.
+
+### 3. Long-term memory (`convex/workspaceKnowledge.ts`)
+
+A `workspaceKnowledge` table stores atomic facts about contacts,
+companies, deals, or the workspace itself. Every write is
+subject-scoped (e.g. `subjectType: "contact", subjectId: "..."`)
+and carries confidence + freshness fields.
+
+Two write paths:
+
+- **Auto-extract** — every inbound message body is scheduled through
+  `extractFactsFromMessage` (2s after ingest). The model returns up
+  to 5 atomic facts as JSON (`"Prefers WhatsApp over email"`,
+  `"Uses Kimton POS today"`, etc.). Dedupe on write bumps
+  `lastVerifiedAt` instead of creating duplicates.
+- **Manual** — `remember` mutation. Copilot can call this via a tool
+  in future. Users can call it directly.
+
+One read path: `retrieveInternal(workspaceId, subjectType, subjectId, limit)`
+returns the top-N most recently verified facts. Retrofits like
+`draftEmailReply` call this before building the prompt and inject a
+`# What you already know` block into the system prompt.
+
+### 4. Proactive per-page agents (`convex/pageAgents.ts`)
+
+Instead of surfacing "count of X, count of Y" on each list page,
+Atlas surfaces **verdicts**:
+
+- `/contacts` → "AI · Reach out to these first" with three cards
+- `/companies` → same shape
+- `/pipelines` → "AI · Save these deals today" — three deals ranked
+  by worst health + oldest idle
+- `/today` → "Do these next" — three specific moves, each with a
+  deep-link to the record
+
+Every ranker action loads the persona harness, hands the model a
+list of real record ids + fields, and asks for 3 picks with a
+one-sentence "why". The response is validated against the input id
+set so the model can't invent records.
+
+## How the pieces fit
 
 ```
-convex/ai/
-├── catalog.ts    — 15 models across 6 providers, tagged by task fit
-├── router.ts     — pickModelChain(taskCategory, options)
-└── ...
-convex/lib/
-└── tokenEstimate.ts — chars/4 heuristic for context sizing
+                                       ┌──────────────────────┐
+                                       │  workspaceKnowledge  │
+                                       │   (fact retrieval)   │
+                                       └──────────┬───────────┘
+                                                  │
+                                                  ▼
+   User action  ──►  Feature action  ──►  buildAgentSystem(persona, role)
+   (compose,          (draftEmailReply,       │
+    score fit,         composeAssist,         ├─►  ai/runFeature
+    draft cold,        scoreContactFit,       │      │
+    newsletter,        rankDealsToSaveToday,  │      ├─► pickModelChain(taskCategory)
+    ...)               draftNewsletter, ...)  │      │      │
+                                              │      │      ▼
+                                              │      │   Groq/Gemini/Cerebras/
+                                              │      │   OpenAI/Anthropic/OpenRouter
+                                              │      │
+                                              │      ▼
+                                              │   Response
+                                              ▼
+                                    Result (grounded, persona-consistent)
 ```
 
-`pickModelChain(taskCategory, options)` returns a fallback chain
-of `{provider, model, contextWindow, ...}` tuples. Task categories:
+## Feature index
 
-| category | who calls it | example models |
+| Feature | Role | File |
 |---|---|---|
-| `chat_agentic` | Copilot tool-using turns | llama-3.3-70b, claude-sonnet, gpt-4o |
-| `chat_fast` | quick chat replies | llama-3.1-8b, gemini-flash |
-| `draft_short` | short outreach | claude-haiku, gemini-flash |
-| `draft_long` | long emails, docs | claude-sonnet, gpt-4o |
-| `summarize` | briefings, thread summaries | gemini-flash |
-| `long_context` | huge doc analysis | gemini-1.5-pro (2M tokens) |
-| `extract_json` | fit scoring, ranker | gemini-flash w/ JSON mode |
-| `reason_hard` | deal nudges, complex analysis | claude-sonnet, gpt-4o |
+| Reply draft (email) | `email_reply` | `convex/aiWorkflows.ts` |
+| Reply draft (WhatsApp) | `whatsapp_reply` | `convex/aiWorkflows.ts` |
+| Cold email | `email_cold` | `convex/coldOutreach.ts` |
+| Cold WhatsApp | `whatsapp_cold` | `convex/coldOutreach.ts` |
+| Auto-draft on inbound | `email_reply` | `convex/aiWorkflows.ts draftEmailReply` |
+| Auto-draft on prospect import | `email_cold` | `convex/coldOutreach.ts autoDraftForCompany` |
+| Fact extraction from inbound | `extract_json` featureId | `convex/aiWorkflows.ts extractFactsFromMessage` |
+| Compose assist | `compose_assist` | `convex/aiWorkflows.ts` |
+| Fit score (contact) | `fit_score` | `convex/aiWorkflows.ts` |
+| Fit score (company) | `fit_score` | `convex/aiWorkflows.ts` |
+| Rotting deal classifier | `deal_analyst` | `convex/pipelinesActions.ts` |
+| Daily briefing | `briefing` | `convex/dailyBriefings.ts` |
+| Copilot chat | `copilot_chat` | `app/api/copilot/route.ts` + `convex/copilotAgent.ts` |
+| Contacts picks bar | `general` + hint | `convex/pageAgents.ts rankContactsForOutreach` |
+| Companies picks bar | `general` + hint | `convex/pageAgents.ts rankCompaniesForOutreach` |
+| Pipelines picks bar | `deal_analyst` + hint | `convex/pageAgents.ts rankDealsToSaveToday` |
+| Today "Do these next" | `briefing` + hint | `convex/pageAgents.ts rankTodayActions` |
+| Newsletter draft | `newsletter_draft` | `convex/publisherAI.ts` |
+| Social post draft | `social_post` | `convex/publisherAI.ts` |
+| Content ideas | `content_idea` | `convex/publisherAI.ts` |
+| Analytics summary | `analytics_summary` | `convex/publisherAI.ts` |
 
-Sort order within a task: quality DESC → latency DESC (if speed
-matters) → contextWindow DESC (if long context) → cost ASC →
-latency ASC.
+## Grounding contract
 
-Consumers:
-- `convex/copilot.ts` — `chat_agentic`, filters to providers with SDKs
-- `convex/prospectorRanking.ts` — `extract_json`
-- `app/api/copilot/route.ts` — `chat_agentic` for the Next.js streaming route
+Every AI feature meets these three grounding rules. If any is
+violated, that's a bug to fix, not to tolerate:
 
-Cold outreach + document generation still route through
-`convex/ai.ts runFeature` (feature-registry chains). Both systems
-coexist.
+1. **No invented names.** If a briefing has zero rotting deals, it
+   must not mention rotting deals. If contacts has 2 people, the
+   ranker skips the model and returns them directly. Empty data →
+   canned message, never invented data.
+2. **No invented teammates.** The grounding block in the harness
+   says the founder works alone. No AI feature should say "assign
+   to Alex" or "loop in your marketing lead" unless the workspace
+   actually has multiple members.
+3. **Correct perspective.** The founder is the seller. Reply drafts,
+   cold outreach, newsletters, social posts — all speak as the
+   workspace, not as the recipient. If the model outputs the
+   opposite (as happened before the harness), that's the
+   perspective block failing.
 
-## Assistant persona
+## Self-echo detection
 
-Per-workspace. Fields on the `workspaces` table:
-- `assistantName` — defaults to "Atlas" if unset
-- `assistantPersonaTraits` — freeform character notes
+Two layers stop the assistant replying to itself:
 
-`convex/lib/workspaceContextAi.ts` builds a `workspaceBrandBlock`
-that appends a `## Your persona` section with the name + traits.
-Every AI feature that reads brand context automatically gets the
-persona injection.
-
-UI:
-- `/settings/workspace` — "Your assistant" section with name + traits inputs
-- Copilot panel header shows the workspace's chosen name via
-  `api.copilotHelpers.workspaceBrandInfo`
-
-## Resend inbound v2
-
-```
-HTTP webhook → convex/http.ts (parses email.received + legacy formats)
-             → messagesInbound.ingest mutation
-             → scheduler.runAfter(0, emailsInboundFetch.fetchInboundBody)
-                 → GET api.resend.com/emails/received/{id}   [Node]
-                 → updateMessageBody(bodyText, bodyHtml)      [V8 mutation]
-                 → for each attachment: download + storage.store + attach
-                 → scheduleAutoDraft(messageId)               [V8 mutation]
-                     → scheduler.runAfter(0, draftEmailReply {system: true})
-                         → aiWorkflows.draftEmailReply (session-less path)
-                             → saveAutoDraft(msg.aiDraftReply)
-                     → notify(kind: inbound_arrived)
-```
-
-Webhook URL: `${CONVEX_SITE_URL}/inbound/email` — copy-able from
-`/settings/integrations`. Requires `RESEND_INBOUND_SECRET` env var
-matching the Svix secret Resend sends.
-
-## Auto-draft (inbound + prospect)
-
-**Inbound**: `messages.aiDraftReply` + `aiDraftedAt` fields. Thread
-reader shows a primary-tinted chip above the Reply button when
-present. `[Use it]` copies the draft into the composer.
-
-**Prospect import**: On every `importResult`, `bulkImport`, and
-`importMapPlace` call, schedules
-`internal.coldOutreach.autoDraftForCompany` 3 seconds later. The
-draft is stored on `companies.enrichmentData.aiDraft = {email:
-{subject, body, draftedAt}, whatsapp: {body, draftedAt}}`.
-
-`OutreachDrafter` component subscribes to
-`api.coldOutreachQueries.companyAiDraft` and auto-populates when
-the cached draft exists.
-
-## Session-less pattern
-
-Schedulers, crons, and webhooks run without a user session. To do
-brand-aware AI work we resolve the org owner as the actor:
-
-```ts
-const ws = await ctx.db.get(workspaceId);
-const members = await ctx.db.query("members")
-  .withIndex("by_org", (q) => q.eq("organizationId", ws.organizationId))
-  .collect();
-const owner = members.find((m) => m.role === "owner") ?? members[0];
-// owner.userId → actorId for getOrgKey decryption + audit
-```
-
-Session-less loaders in `aiWorkflowHelpers.ts`:
-- `loadConversationForReplyForSystem`
-- `loadProspectorResultForSystem`
-- `loadCompanyForOutreachForSystem`
-
-Session-less setup in `copilotHelpers.ts`:
-- `prepareForWorkspace` (mirrors `prepare` but takes a workspaceId)
-
-## Compose AI
-
-`convex/aiWorkflows.ts composeAssist` action — 5 modes:
-
-- `draft` — from an empty body + a hint string
-- `improve` — tighten current body, strip AI-slop
-- `shorter` — halve length, keep the ask
-- `longer` — expand with one supporting sentence
-- `different_angle` — same ask, new hook + framing
-
-Uses `draft_email_reply` feature chain. Prompt threads workspace
-brand context in every call.
-
-UI: `AIAssistBar` component above the RichComposer in
-`app/(app)/inbox/compose-sheet.tsx`.
-
-## Today briefing
-
-`convex/dailyBriefings.ts` (Node) + `dailyBriefingsHelpers.ts` (V8):
-
-- Cron: 03/09/15 UTC = 06/12/18 Africa/Nairobi
-- Per workspace, gathers: unread conversations, tasks due today,
-  meetings today, rotting deals count, uncontacted prospects, top
-  open deal by amount, stalest deal, recent inbound subjects
-- Prompts `summarize` task → Gemini Flash → 2-3 sentence paragraph
-- Stores in `dailyBriefings` table (keeps last 3)
-- Today page reads latest via `latestForWorkspace`, refreshes on
-  demand via public `refreshMine` action
-
-## Fit scoring
-
-`convex/aiWorkflows.ts` — `scoreContactFit` + `scoreCompanyFit`
-actions. Uses `extract_json` task → Gemini Flash → strict JSON
-`{score: 0-100, reason: string}`.
-
-Results persist to `contacts.fitScore + fitScoreReason` and
-`companies.fitScore + fitScoreReason`.
-
-UI: row-action dropdowns on `/contacts` and `/companies` tables.
-Toast reads `Fit: 87/100 · Head of ops matches ICP exactly.`
-
-## Deal nudges
-
-`convex/pipelinesActions.ts classifyRottingDeals` cron runs daily
-at 04:00 UTC. For each rotting deal:
-- Groq llama-3.3-70b returns JSON `{healthScore, healthNotes, nextAction}`
-- `updateDealHealth` mutation persists all three, including
-  `deals.aiNextAction`
-- Below score 40: emits `rotting_deal` notification
-
-Deal cards render the nudge under the health chip with a
-Sparkles icon + border-top separator.
-
-## Notifications
-
-Central bus in `convex/notifications.ts`:
-- `notify(workspaceId, kind, title, body?, actionLink?)` — internalMutation
-- `recent` — public query, workspace-scoped, unarchived, last 30
-- `markRead / markAllRead` — public mutations
-- `trimOld` — daily cron, deletes entries older than 30 days
-
-Kinds: `inbound_arrived`, `rotting_deal`, `hot_lead`, `enrichment_complete`, `ai_scored`
-
-`components/atlas/notification-subscriber.tsx` subscribes reactively
-in the app shell. Any notification created after mount that hasn't
-been read toasts via sonner with an "Open" action linking to
-`actionLink`.
-
-## Trigger points table
-
-| trigger | kind | fired from |
-|---|---|---|
-| Inbound reply body fetched | `inbound_arrived` | `emailsInboundFetch_helpers.scheduleAutoDraft` |
-| Deal healthScore < 40 | `rotting_deal` | `pipelinesActions.classifyRottingDeals` |
-| Company fitScore ≥ 90 | `hot_lead` | `aiWorkflows.scoreCompanyFit` |
-
-More can be added by calling `internal.notifications.notify` from
-any mutation or action.
+1. **At ingest** — `emails.ingestInbound` checks the sender email
+   against workspace `senderIdentities`. If it matches, the message
+   never becomes a conversation (`status: "self_echo"`).
+2. **At draft time** — `draftEmailReply` also checks `ownAddresses`
+   returned by the session-less loader. Even if a message got
+   through ingest, the drafter still skips it and returns
+   `skipped: "self_echo"`.
 
 ## Convex runtime split
 
-Two categories of files:
+- Files with `"use node"` at top run in Node. Can `fetch`, use
+  crypto, do I/O. Only host `action` / `internalAction`.
+- Files without run in V8. Host `query` / `mutation` /
+  `internalQuery` / `internalMutation`. No `await import(...)`.
+- V8 files can import pure utilities from Node files as long as
+  the utility isn't tree-shaken through a Node-only path. In
+  practice: `agentPersona.ts` is V8 (no I/O), so both Node and V8
+  callers import it freely.
 
-1. **Node (`"use node"` at top)**: can `fetch()`, `import "node:crypto"`,
-   do I/O. Contains only `action` / `internalAction`. Cannot host
-   queries or mutations.
-2. **V8 sandbox (no header)**: default. Can define query, mutation,
-   internalQuery, internalMutation. **No `await import(...)` — hard
-   fail.** All imports static top-of-file.
+Query and mutation splits (e.g. `coldOutreach.ts` Node ↔
+`coldOutreachQueries.ts` V8, `pageAgents.ts` Node ↔
+`pageAgentsHelpers.ts` V8) exist because Convex won't let you
+export a query from a Node module.
 
-Non-Node files **cannot import from Node files** — bundling fails.
-Query splits (like `coldOutreachQueries.ts`) exist because
-`coldOutreach.ts` is Node.
+## Verification checklist
 
-## File index
+Every deploy should pass these smoke tests. See
+`docs/PROMPT_MAP.md` for the exact prompt each role generates so
+you can eyeball whether the model got what it should have.
 
-**Model catalog + routing:**
-- `convex/ai/catalog.ts`
-- `convex/ai/router.ts`
-- `convex/lib/tokenEstimate.ts`
+- [ ] Send yourself an email from a workspace sender identity to
+  your personal inbox → should be dropped as `self_echo` at ingest,
+  no conversation created.
+- [ ] Send yourself an email from a personal Gmail to your
+  workspace address → should ingest, auto-draft, and the draft
+  should reply *as you the seller* not *as the buyer*.
+- [ ] Delete a conversation with the Trash button → conversation +
+  messages + attachments + storage blobs all gone.
+- [ ] Open `/today` with an empty workspace → shows canned
+  briefing, no invented names, no "assign to Alex".
+- [ ] Open `/today` with real data → briefing mentions actual
+  record names + counts. "Do these next" shows three moves that
+  link to real records.
+- [ ] Open `/contacts` with 4+ contacts → AI picks bar renders
+  three cards with specific reasons + working "Draft outreach"
+  buttons.
+- [ ] Open `/pipelines` → picks bar surfaces worst-health deals
+  with reasons matching the daily-cron `aiNextAction`.
+- [ ] Copilot chat sidebar → "help me draft a reply to Kimton"
+  should never invent Kimton if it doesn't exist; if it does exist,
+  the reply should be grounded in `workspaceKnowledge` facts.
+- [ ] Draft cold outreach on a prospect → subject + body speak as
+  the workspace to the prospect, not the other way around.
 
-**Router consumers:**
-- `convex/copilot.ts`
-- `convex/prospectorRanking.ts`
-- `app/api/copilot/route.ts`
+## Roadmap
 
-**Persona:**
-- `convex/lib/workspaceContextAi.ts` — `workspaceBrandBlock` +
-  `workspaceAssistantName`
-- `convex/schema.ts` — `workspaces.assistantName` + `assistantPersonaTraits`
-- `app/(app)/settings/workspace/page.tsx` — settings UI
-- `convex/copilotHelpers.ts workspaceBrandInfo` — UI-facing name
-- `components/atlas/copilot-panel.tsx` — dynamic panel header
-
-**Inbound:**
-- `convex/http.ts` — webhook handler with v2 detection
-- `convex/emailsInboundFetch.ts` — Node body-fetch action
-- `convex/emailsInboundFetch_helpers.ts` — V8 helpers
-- `app/(app)/settings/integrations/page.tsx` — webhook URL copy card
-
-**Auto-draft (inbound reply):**
-- `convex/aiWorkflows.ts draftEmailReply` — accepts `system` + `persistToInboundMessage`
-- `convex/aiWorkflowHelpers.ts` — `loadConversationForReplyForSystem`, `saveAutoDraft`
-- `app/(app)/inbox/page.tsx` — auto-draft chip in thread reader
-
-**Auto-draft (cold outreach):**
-- `convex/coldOutreach.ts autoDraftForCompany`
-- `convex/coldOutreachQueries.ts companyAiDraft`
-- `convex/aiWorkflowHelpers.ts` — `loadCompanyForOutreachForSystem`, `saveCompanyAiDraft`
-- `convex/prospector.ts` — schedules from `importResult`, `bulkImport`, `importMapPlace`
-- `components/atlas/outreach-drafter.tsx` — reads cached draft on mount
-
-**Compose AI:**
-- `convex/aiWorkflows.ts composeAssist`
-- `app/(app)/inbox/compose-sheet.tsx AIAssistBar`
-
-**Today briefing:**
-- `convex/dailyBriefings.ts` + `dailyBriefingsHelpers.ts`
-- `convex/crons.ts` — 3x/day
-- `app/(app)/today/page.tsx`
-
-**Fit scoring:**
-- `convex/aiWorkflows.ts` — `scoreContactFit`, `scoreCompanyFit`
-- `convex/aiWorkflowHelpers.ts` — 4 helpers
-- `app/(app)/contacts/page.tsx ContactRowActions`
-- `app/(app)/companies/page.tsx CompanyRowActions`
-
-**Deal nudges:**
-- `convex/pipelinesActions.ts classifyRottingDeals` — daily cron
-- `convex/pipelines.ts updateDealHealth`
-- `app/(app)/pipelines/page.tsx DealCard`
-
-**Notifications:**
-- `convex/notifications.ts`
-- `components/atlas/notification-subscriber.tsx`
-- `components/atlas/app-shell.tsx` — mounts subscriber
-
-## Migration notes
-
-- All new schema fields are `v.optional(...)` — no data migration needed
-- Cron additions are additive
-- Legacy inbound format still parsed alongside `email.received` v2
-- Cold outreach still uses feature-registry chains — router adoption there is future work
+- **Copilot memory tool** — expose `remember` as a Copilot tool so
+  the chat interface can write facts.
+- **Memory retrieval on cold outreach + fit scoring** — currently
+  only reply drafts read from `workspaceKnowledge`; the other
+  features should too.
+- **Publisher UI** — `/content`, `/social`, `/campaigns`,
+  `/analytics` need to actually call the new `publisherAI`
+  actions.
+- **Prospector picks bar** — same pattern for prospector results,
+  ranking by fit + reachability.
+- **Outreach queue picks bar** — batches by shared context.
+- **Memory management UI** — `/settings/memory` to browse/edit/forget
+  the workspace's stored facts.
