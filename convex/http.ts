@@ -109,11 +109,61 @@ http.route({
   path: "/inbound/email",
   method: "POST",
   handler: httpAction(async (ctx, req) => {
+    return await handleInboundEmail(ctx, req, undefined);
+  }),
+});
+
+http.route({
+  pathPrefix: "/inbound/email/",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const url = new URL(req.url);
+    // Extract workspace id from path: /inbound/email/{workspaceId}
+    const workspaceIdPath = url.pathname.replace(/^\/inbound\/email\//, "").trim();
+    return await handleInboundEmail(
+      ctx,
+      req,
+      workspaceIdPath ? (workspaceIdPath as Id<"workspaces">) : undefined,
+    );
+  }),
+});
+
+/**
+ * Shared handler for both the legacy /inbound/email path and the
+ * new workspace-scoped /inbound/email/{workspaceId} path.
+ *
+ * Verification order for the signing secret:
+ *   1. If workspaceId is provided AND that workspace has
+ *      resendInboundSecret set → use that
+ *   2. Otherwise fall back to process.env.RESEND_INBOUND_SECRET
+ *      (deployment default, back-compat)
+ *   3. If neither is set, skip signature verification but accept
+ *      the event (dev-mode) — production should always set one.
+ */
+async function handleInboundEmail(
+  ctx: Parameters<Parameters<typeof httpAction>[0]>[0],
+  req: Request,
+  scopedWorkspaceId: Id<"workspaces"> | undefined,
+): Promise<Response> {
     // 1. Read raw body once — needed for both signature check + parse
     const rawBody = await req.text();
 
-    // 2. Verify Svix signature (Resend inbound uses Svix)
-    const secret = process.env.RESEND_INBOUND_SECRET;
+    // 2. Resolve the signing secret. Per-workspace secret wins if the
+    // caller hit /inbound/email/{workspaceId} and the workspace has
+    // one saved; otherwise fall back to the deployment env var.
+    let secret: string | undefined = process.env.RESEND_INBOUND_SECRET;
+    if (scopedWorkspaceId) {
+      try {
+        const wsSecret: string | null = await ctx.runQuery(
+          internal.emailsInbound.getWorkspaceInboundSecret,
+          { workspaceId: scopedWorkspaceId },
+        );
+        if (wsSecret) secret = wsSecret;
+      } catch {
+        // fall through to env-var default
+      }
+    }
+
     if (secret) {
       const svixId = req.headers.get("svix-id");
       const svixTs = req.headers.get("svix-timestamp");
@@ -185,12 +235,17 @@ http.route({
       });
     }
 
-    // 5. Resolve workspace via senderIdentities matching one of the `to` addresses
+    // 5. Resolve workspace. If the caller hit /inbound/email/{id},
+    // trust that id (we already verified with that workspace's secret).
+    // Otherwise fall back to matching senderIdentities against the
+    // `to` addresses (legacy /inbound/email path).
     const toEmails = payload.to.map((a) => a.email.trim().toLowerCase());
-    const workspaceId: Id<"workspaces"> | null = await ctx.runQuery(
-      internal.emailsInbound.resolveWorkspaceByAddress,
-      { addresses: toEmails },
-    );
+    const workspaceId: Id<"workspaces"> | null =
+      scopedWorkspaceId ??
+      (await ctx.runQuery(
+        internal.emailsInbound.resolveWorkspaceByAddress,
+        { addresses: toEmails },
+      ));
     if (!workspaceId) {
       // Log event but drop — no workspace claims this recipient
       await ctx.runMutation(internal.emailsInbound.recordWebhookEvent, {
@@ -289,8 +344,7 @@ http.route({
       }),
       { status: 200, headers: { "content-type": "application/json" } },
     );
-  }),
-});
+}
 
 /* ------------------------------------------------------------------ */
 /* UTM short-link redirect — GET /go/<shortCode>                        */

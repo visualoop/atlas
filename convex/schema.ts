@@ -231,6 +231,10 @@ export default defineSchema({
     emailFooterHtml: v.optional(v.string()),
     // Brand primary color for email header accent (hex, e.g. "#111827")
     emailAccentColor: v.optional(v.string()),
+    // Per-workspace signing secret for the inbound Resend webhook.
+    // Set from Settings → Integrations. Falls back to the deployment
+    // env var RESEND_INBOUND_SECRET if unset.
+    resendInboundSecret: v.optional(v.string()),
     // Prospector guardrails — max Places imports per day per workspace,
     // stops the AI from blowing through credits. Default 100.
     prospectorDailyCap: v.optional(v.number()),

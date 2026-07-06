@@ -8,7 +8,7 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 
 export const resolveWorkspaceByAddress = internalQuery({
@@ -63,5 +63,54 @@ export const recordWebhookEvent = internalMutation({
       processedAt: args.error ? undefined : now,
       processingError: args.error,
     });
+  },
+});
+
+
+/* ============================================================ */
+/* Per-workspace Resend inbound signing secret                    */
+/* ============================================================ */
+
+import { requireUser } from "./lib/authHelpers";
+
+export const getWorkspaceInboundSecret = internalQuery({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, args): Promise<string | null> => {
+    const ws = await ctx.db.get(args.workspaceId);
+    return ws?.resendInboundSecret ?? null;
+  },
+});
+
+/** UI-facing — save/update the per-workspace webhook signing secret. */
+export const saveWorkspaceInboundSecret = mutation({
+  args: { secret: v.string() },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const profile = await ctx.db
+      .query("userProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .first();
+    if (!profile?.lastActiveWorkspaceId) {
+      throw new Error("No active workspace");
+    }
+    const trimmed = args.secret.trim();
+    await ctx.db.patch(profile.lastActiveWorkspaceId, {
+      resendInboundSecret: trimmed.length > 0 ? trimmed : undefined,
+    });
+  },
+});
+
+/** UI-facing — report whether the workspace has a secret set (not the value). */
+export const workspaceInboundSecretStatus = query({
+  args: {},
+  handler: async (ctx): Promise<{ hasSecret: boolean }> => {
+    const user = await requireUser(ctx);
+    const profile = await ctx.db
+      .query("userProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .first();
+    if (!profile?.lastActiveWorkspaceId) return { hasSecret: false };
+    const ws = await ctx.db.get(profile.lastActiveWorkspaceId);
+    return { hasSecret: Boolean(ws?.resendInboundSecret) };
   },
 });

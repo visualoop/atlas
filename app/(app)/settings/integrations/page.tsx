@@ -229,38 +229,21 @@ export default function IntegrationsPage() {
           </p>
           <InboundWebhookCopy />
           <div className="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-2">
-            <p className="text-xs font-medium">Signing secret</p>
+            <p className="text-xs font-medium">Signing secret (workspace-scoped)</p>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              When you create the webhook in Resend, they show a{" "}
-              <code className="font-mono">whsec_…</code> secret. Copy it and
-              save it as <code className="font-mono">RESEND_INBOUND_SECRET</code>{" "}
-              in the Convex deployment env. Two ways:
+              Resend shows a <code className="font-mono">whsec_…</code> secret
+              when you create the webhook. Paste it here — it's saved on this
+              workspace only, so different workspaces on the same deployment
+              can use different Resend accounts.
             </p>
-            <ul className="text-[11px] text-muted-foreground space-y-1 list-disc pl-4">
-              <li>
-                CLI:{" "}
-                <code className="font-mono bg-background px-1.5 py-0.5">
-                  npx convex env set RESEND_INBOUND_SECRET whsec_...
-                </code>
-              </li>
-              <li>
-                Dashboard:{" "}
-                <a
-                  href="https://dashboard.convex.dev"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  dashboard.convex.dev
-                </a>
-                {" "}→ your deployment → Settings → Environment Variables →
-                add key <code className="font-mono">RESEND_INBOUND_SECRET</code>.
-              </li>
-            </ul>
-            <p className="text-[11px] text-muted-foreground italic">
-              Until this is set, the webhook still accepts events (no
-              signature check), but production traffic should always
-              set it.
+            <InboundSecretInput />
+            <p className="text-[10px] text-muted-foreground italic pt-1 border-t border-primary/20">
+              Advanced: if you'd rather set it as a deployment-wide default
+              (single-Resend-account setups), use the CLI:{" "}
+              <code className="font-mono bg-background px-1.5 py-0.5">
+                npx convex env set RESEND_INBOUND_SECRET whsec_...
+              </code>
+              . The workspace-scoped secret above always wins if set.
             </p>
           </div>
         </section>
@@ -276,8 +259,8 @@ export default function IntegrationsPage() {
             → Settings → Environment Variables.
           </p>
           <ul className="text-xs text-muted-foreground space-y-1 pt-2">
-            <li><code className="font-mono">RESEND_API_KEY</code> — auth OTP + platform emails</li>
-            <li><code className="font-mono">RESEND_INBOUND_SECRET</code> — Svix signing key for the inbound webhook above</li>
+            <li><code className="font-mono">RESEND_API_KEY</code> — auth OTP + platform emails (workspace outbound uses per-workspace keys from Integrations above)</li>
+            <li><code className="font-mono">RESEND_INBOUND_SECRET</code> — optional deployment-wide fallback for the inbound webhook signature. Per-workspace secret in the inbound webhook card above always wins.</li>
             <li><code className="font-mono">AUTH_FROM_EMAIL</code> — sender for platform emails</li>
             <li><code className="font-mono">CONFIG_ENCRYPTION_KEY</code> — never rotate without a migration</li>
             <li><code className="font-mono">SITE_URL</code>, <code className="font-mono">JWT_PRIVATE_KEY</code>, <code className="font-mono">JWKS</code> — auto-seeded by deploy</li>
@@ -318,10 +301,13 @@ function TierBadge({ tier }: { tier: "free" | "paid" | "freemium" }) {
 }
 
 function InboundWebhookCopy() {
+  const bootstrap = useQuery(api.organizations.currentBootstrap);
   const [copied, setCopied] = useState(false);
-  const url =
-    (process.env.NEXT_PUBLIC_CONVEX_SITE_URL ??
-      "https://3221.blyss.co.ke") + "/inbound/email";
+  const base =
+    process.env.NEXT_PUBLIC_CONVEX_SITE_URL ??
+    "https://3221.blyss.co.ke";
+  const wsId = bootstrap?.activeWorkspace?._id;
+  const url = wsId ? `${base}/inbound/email/${wsId}` : `${base}/inbound/email`;
   return (
     <div className="flex items-center gap-2">
       <code className="flex-1 min-w-0 px-3 py-2 text-xs font-mono bg-muted rounded truncate">
@@ -345,6 +331,65 @@ function InboundWebhookCopy() {
       >
         Resend →
       </a>
+    </div>
+  );
+}
+
+function InboundSecretInput() {
+  const status = useQuery(api.emailsInbound.workspaceInboundSecretStatus);
+  const save = useMutation(api.emailsInbound.saveWorkspaceInboundSecret);
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const hasSecret = status?.hasSecret ?? false;
+
+  async function submit() {
+    setSaving(true);
+    try {
+      await save({ secret: value });
+      toast.success(value.trim().length === 0 ? "Secret cleared" : "Secret saved");
+      setValue("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <input
+          type="password"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={hasSecret ? "•••••••••••• (secret saved)" : "whsec_..."}
+          className="flex-1 h-9 px-3 text-xs font-mono bg-transparent border border-border rounded focus:border-foreground focus:outline-none"
+        />
+        <button
+          onClick={submit}
+          disabled={saving || value.trim().length < 6}
+          className="text-[10px] font-mono uppercase tracking-[0.12em] h-9 px-3 bg-primary text-primary-foreground rounded disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+        {hasSecret && (
+          <button
+            onClick={() => {
+              if (!confirm("Clear the saved signing secret?")) return;
+              setValue("");
+              void save({ secret: "" }).then(() => toast.success("Cleared."));
+            }}
+            className="text-[10px] font-mono uppercase tracking-[0.12em] h-9 px-3 border border-border hover:border-destructive rounded"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+      <p className="text-[10px] text-muted-foreground">
+        {hasSecret
+          ? "A workspace-scoped secret is saved. Webhook signatures verify against it."
+          : "No workspace-scoped secret yet. Add one below OR set RESEND_INBOUND_SECRET as a deployment env var."}
+      </p>
     </div>
   );
 }
