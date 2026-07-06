@@ -12,6 +12,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { resolveConvexSiteUrl } from "@/lib/convexSiteUrl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -303,10 +304,24 @@ function TierBadge({ tier }: { tier: "free" | "paid" | "freemium" }) {
 function InboundWebhookCopy() {
   const bootstrap = useQuery(api.organizations.currentBootstrap);
   const [copied, setCopied] = useState(false);
-  const base =
-    process.env.NEXT_PUBLIC_CONVEX_SITE_URL ??
-    "https://3221.blyss.co.ke";
+  const base = resolveConvexSiteUrl();
   const wsId = bootstrap?.activeWorkspace?._id;
+  if (!base) {
+    return (
+      <div className="rounded-md border border-[var(--warning)] bg-[var(--warning)]/5 p-3 text-xs">
+        <p className="font-medium text-[var(--warning)]">
+          Webhook URL not configured
+        </p>
+        <p className="text-muted-foreground mt-1">
+          Set{" "}
+          <code className="font-mono">NEXT_PUBLIC_CONVEX_SITE_URL</code>{" "}
+          in Vercel (e.g. <code className="font-mono">https://actions.atlas.blyss.co.ke</code>) or in
+          <code className="font-mono">.env.local</code> for dev. This is the
+          Convex HTTP-actions site URL, not the WebSocket URL.
+        </p>
+      </div>
+    );
+  }
   const url = wsId ? `${base}/inbound/email/${wsId}` : `${base}/inbound/email`;
   return (
     <div className="flex items-center gap-2">

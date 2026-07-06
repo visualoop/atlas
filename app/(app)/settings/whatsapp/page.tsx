@@ -7,6 +7,7 @@ import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { resolveConvexSiteUrl } from "@/lib/convexSiteUrl";
 
 export default function WhatsAppSettingsPage() {
   const connections = useQuery(api.whatsapp.listConnections, {});
@@ -77,7 +78,10 @@ export default function WhatsAppSettingsPage() {
 function ConnectionRow({ connection: c }: { connection: Doc<"whatsappConnections"> }) {
   const [copied, setCopied] = useState<"url" | "token" | null>(null);
   const disconnect = useMutation(api.whatsapp.disconnect);
-  const webhookUrl = `${process.env.NEXT_PUBLIC_CONVEX_URL?.replace(".convex.cloud", ".convex.site") ?? "https://3221.blyss.co.ke"}/webhook/whatsapp`;
+  const webhookUrl = (() => {
+    const base = resolveConvexSiteUrl();
+    return base ? `${base}/webhook/whatsapp` : "";
+  })();
 
   return (
     <div className="px-4 py-4 space-y-2">
@@ -111,20 +115,26 @@ function ConnectionRow({ connection: c }: { connection: Doc<"whatsappConnections
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
             <span className="eyebrow">Webhook URL</span>
           </div>
-          <div className="flex items-center gap-2">
-            <code className="font-mono text-xs bg-muted px-2 py-1 flex-1 truncate">{webhookUrl}</code>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(webhookUrl);
-                setCopied("url");
-                setTimeout(() => setCopied(null), 1500);
-              }}
-              className="size-7 grid place-items-center hover:bg-muted transition-colors"
-              title="Copy"
-            >
-              {copied === "url" ? <Check className="size-3.5 text-[var(--success)]" /> : <Copy className="size-3.5" />}
-            </button>
-          </div>
+          {webhookUrl ? (
+            <div className="flex items-center gap-2">
+              <code className="font-mono text-xs bg-muted px-2 py-1 flex-1 truncate">{webhookUrl}</code>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(webhookUrl);
+                  setCopied("url");
+                  setTimeout(() => setCopied(null), 1500);
+                }}
+                className="size-7 grid place-items-center hover:bg-muted transition-colors"
+                title="Copy"
+              >
+                {copied === "url" ? <Check className="size-3.5 text-[var(--success)]" /> : <Copy className="size-3.5" />}
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-[var(--warning)]">
+              Set <code className="font-mono">NEXT_PUBLIC_CONVEX_SITE_URL</code> in Vercel to reveal.
+            </p>
+          )}
         </div>
         <div>
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
