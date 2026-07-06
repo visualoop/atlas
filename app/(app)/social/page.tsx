@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import {
   Facebook, Instagram, Linkedin, Send, Calendar as CalendarIcon,
-  Plus, Loader2, X, ExternalLink, Image as ImageIcon,
+  Plus, Loader2, X, ExternalLink, Image as ImageIcon, Sparkles,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
@@ -243,8 +243,48 @@ function ComposeSheet({
   const [selected, setSelected] = useState<Set<Id<"socialConnections">>>(new Set());
   const [scheduleTime, setScheduleTime] = useState("");
   const [saving, setSaving] = useState(false);
+  const [aiDrafting, setAiDrafting] = useState(false);
   const createPost = useMutation(api.social.createPost);
   const publishNow = useMutation(api.social.publishPostNow);
+  const draftSocial = useAction(api.publisherAI.draftSocialPost);
+
+  async function handleAIDraft() {
+    if (selected.size === 0) {
+      toast.error("Pick at least one platform first.");
+      return;
+    }
+    // Pick the primary platform from the first selected connection.
+    const firstSelected = Array.from(selected)[0];
+    const firstPlatform: string | undefined = firstSelected
+      ? connections.find((c) => c._id === firstSelected)?.platform
+      : undefined;
+    function platformFamily(slug: string | undefined): "twitter" | "linkedin" | "instagram" | "facebook" {
+      if (!slug) return "linkedin";
+      if (slug.startsWith("twitter")) return "twitter";
+      if (slug.startsWith("linkedin")) return "linkedin";
+      if (slug.startsWith("instagram")) return "instagram";
+      if (slug.startsWith("facebook")) return "facebook";
+      return "linkedin";
+    }
+    const primaryPlatform = platformFamily(firstPlatform);
+    const brief = caption.trim().length > 0
+      ? `Rewrite this post: ${caption.trim().slice(0, 400)}`
+      : `Write a post about ${prompt("What's the post about?") ?? ""}`.trim();
+    if (brief.length < 5) {
+      setAiDrafting(false);
+      return;
+    }
+    setAiDrafting(true);
+    try {
+      const r = await draftSocial({ platform: primaryPlatform, brief });
+      setCaption(r.body);
+      toast.success("AI drafted a caption.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "AI draft failed.");
+    } finally {
+      setAiDrafting(false);
+    }
+  }
 
   const canSubmit = caption.trim().length > 0 && selected.size > 0;
 
@@ -334,9 +374,20 @@ function ComposeSheet({
 
           {/* Caption */}
           <label className="block space-y-1.5">
-            <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
-              Caption
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
+                Caption
+              </span>
+              <button
+                type="button"
+                onClick={handleAIDraft}
+                disabled={aiDrafting || selected.size === 0}
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 text-[11px] font-mono uppercase tracking-[0.12em] border border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 disabled:opacity-50"
+              >
+                {aiDrafting ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3" />}
+                {caption.trim() ? "Redraft with AI" : "Draft with AI"}
+              </button>
+            </div>
             <textarea
               autoFocus
               value={caption}
