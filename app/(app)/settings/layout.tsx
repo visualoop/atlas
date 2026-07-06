@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 const ITEMS = [
   { href: "/settings/profile", label: "Profile" },
   { href: "/settings/workspace", label: "Workspace" },
+  { href: "/settings/memory", label: "Memory" },
   { href: "/settings/security", label: "Security" },
   { href: "/settings/integrations", label: "Integrations" },
   { href: "/settings/senders", label: "Senders" },
