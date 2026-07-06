@@ -120,6 +120,7 @@ import type * as whatsappInbound from "../whatsappInbound.js";
 import type * as whatsappOut from "../whatsappOut.js";
 import type * as whatsappOutHelpers from "../whatsappOutHelpers.js";
 import type * as whatsappTemplatesActions from "../whatsappTemplatesActions.js";
+import type * as workspaceKnowledge from "../workspaceKnowledge.js";
 
 import type {
   ApiFromModules,
@@ -240,6 +241,7 @@ declare const fullApi: ApiFromModules<{
   whatsappOut: typeof whatsappOut;
   whatsappOutHelpers: typeof whatsappOutHelpers;
   whatsappTemplatesActions: typeof whatsappTemplatesActions;
+  workspaceKnowledge: typeof workspaceKnowledge;
 }>;
 
 /**

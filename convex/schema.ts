@@ -2255,4 +2255,43 @@ export default defineSchema({
   })
     .index("by_workspace_created", ["workspaceId"])
     .index("by_workspace_unread", ["workspaceId", "readAt"]),
+
+  /* ============================================================ */
+  /* Long-term AI memory — facts the assistant writes to itself   */
+  /* Auto-extracted from message threads + can be added manually. */
+  /* Retrieved by every AI feature to ground responses.           */
+  /* ============================================================ */
+  workspaceKnowledge: defineTable({
+    workspaceId: v.id("workspaces"),
+    // Subject the fact is about — links to a workspace record
+    subjectType: v.union(
+      v.literal("contact"),
+      v.literal("company"),
+      v.literal("deal"),
+      v.literal("workspace"),                    // global facts about the org
+    ),
+    subjectId: v.optional(v.string()),            // Id or undefined for workspace-global
+    // The fact itself — short, atomic
+    fact: v.string(),
+    // How we know it
+    source: v.union(
+      v.literal("message_extraction"),           // pulled from a reply
+      v.literal("meeting_note"),
+      v.literal("manual"),                        // user typed it
+      v.literal("prospector_enrichment"),
+    ),
+    sourceMessageId: v.optional(v.id("messages")),
+    // Confidence score (0-100) — lower means AI was less sure
+    confidence: v.number(),
+    // Freshness — facts older than 90 days are re-verified
+    lastVerifiedAt: v.number(),
+    // Soft-delete when superseded or corrected
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_workspace_subject", ["workspaceId", "subjectType", "subjectId"])
+    .index("by_workspace_time", ["workspaceId"])
+    .searchIndex("search_fact", {
+      searchField: "fact",
+      filterFields: ["workspaceId", "subjectType"],
+    }),
 });
