@@ -228,9 +228,41 @@ export default function IntegrationsPage() {
             with the address that should route here.
           </p>
           <InboundWebhookCopy />
-          <p className="text-[11px] text-muted-foreground italic">
-            Set <code className="font-mono">RESEND_INBOUND_SECRET</code> to Resend's webhook signing secret so we can verify signatures.
-          </p>
+          <div className="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-2">
+            <p className="text-xs font-medium">Signing secret</p>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              When you create the webhook in Resend, they show a{" "}
+              <code className="font-mono">whsec_…</code> secret. Copy it and
+              save it as <code className="font-mono">RESEND_INBOUND_SECRET</code>{" "}
+              in the Convex deployment env. Two ways:
+            </p>
+            <ul className="text-[11px] text-muted-foreground space-y-1 list-disc pl-4">
+              <li>
+                CLI:{" "}
+                <code className="font-mono bg-background px-1.5 py-0.5">
+                  npx convex env set RESEND_INBOUND_SECRET whsec_...
+                </code>
+              </li>
+              <li>
+                Dashboard:{" "}
+                <a
+                  href="https://dashboard.convex.dev"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  dashboard.convex.dev
+                </a>
+                {" "}→ your deployment → Settings → Environment Variables →
+                add key <code className="font-mono">RESEND_INBOUND_SECRET</code>.
+              </li>
+            </ul>
+            <p className="text-[11px] text-muted-foreground italic">
+              Until this is set, the webhook still accepts events (no
+              signature check), but production traffic should always
+              set it.
+            </p>
+          </div>
         </section>
 
         {/* System-level env vars notice */}
@@ -245,6 +277,7 @@ export default function IntegrationsPage() {
           </p>
           <ul className="text-xs text-muted-foreground space-y-1 pt-2">
             <li><code className="font-mono">RESEND_API_KEY</code> — auth OTP + platform emails</li>
+            <li><code className="font-mono">RESEND_INBOUND_SECRET</code> — Svix signing key for the inbound webhook above</li>
             <li><code className="font-mono">AUTH_FROM_EMAIL</code> — sender for platform emails</li>
             <li><code className="font-mono">CONFIG_ENCRYPTION_KEY</code> — never rotate without a migration</li>
             <li><code className="font-mono">SITE_URL</code>, <code className="font-mono">JWT_PRIVATE_KEY</code>, <code className="font-mono">JWKS</code> — auto-seeded by deploy</li>
