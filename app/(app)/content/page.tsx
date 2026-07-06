@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import Link from "next/link";
 import {
   Send, Users as UsersIcon, FileText, Globe, Sparkles, Plus, Loader2,
@@ -510,7 +510,32 @@ function SeoTab() {
   const ideas = useQuery(api.content.listSeoIdeas, { status, limit: 200 });
   const updateStatus = useMutation(api.content.updateSeoIdeaStatus);
   const createIdea = useMutation(api.content.createSeoIdea);
+  const brainstorm = useAction(api.publisherAI.brainstormContentIdeas);
   const [newOpen, setNewOpen] = useState(false);
+  const [brainstorming, setBrainstorming] = useState(false);
+
+  async function handleBrainstorm() {
+    setBrainstorming(true);
+    try {
+      const r = await brainstorm({ count: 5 });
+      if (r.ideas.length === 0) {
+        toast.error("AI returned no ideas — try refining workspace context.");
+        return;
+      }
+      for (const idea of r.ideas) {
+        await createIdea({
+          title: idea.title.slice(0, 200),
+          keywords: [],
+          angle: idea.angle.slice(0, 300),
+        });
+      }
+      toast.success(`Added ${r.ideas.length} ideas to backlog.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "AI brainstorm failed.");
+    } finally {
+      setBrainstorming(false);
+    }
+  }
 
   const STATUSES = ["new", "shortlisted", "drafting", "published", "dismissed"] as const;
 
@@ -536,6 +561,14 @@ function SeoTab() {
           className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
         >
           <Plus className="size-3.5" /> New idea
+        </button>
+        <button
+          onClick={handleBrainstorm}
+          disabled={brainstorming}
+          className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] border border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 disabled:opacity-50"
+        >
+          {brainstorming ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+          Brainstorm with AI
         </button>
       </div>
       {ideas === undefined ? (
