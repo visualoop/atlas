@@ -74,10 +74,23 @@ export const recordWebhookEvent = internalMutation({
 import { requireUser } from "./lib/authHelpers";
 
 export const getWorkspaceInboundSecret = internalQuery({
-  args: { workspaceId: v.id("workspaces") },
-  handler: async (ctx, args): Promise<string | null> => {
-    const ws = await ctx.db.get(args.workspaceId);
-    return ws?.resendInboundSecret ?? null;
+  args: { workspaceId: v.string() },
+  handler: async (ctx, args): Promise<{
+    secret: string | null;
+    workspaceId: Id<"workspaces"> | null;
+  }> => {
+    // Convex ids embed the table name in their prefix. If the string
+    // isn't a workspaces id, ctx.db.get returns null instead of throwing.
+    const ws = await ctx.db.get(
+      args.workspaceId as Id<"workspaces">,
+    ).catch(() => null);
+    if (!ws || !("resendInboundSecret" in ws)) {
+      return { secret: null, workspaceId: null };
+    }
+    return {
+      secret: ws.resendInboundSecret ?? null,
+      workspaceId: ws._id,
+    };
   },
 });
 

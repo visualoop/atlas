@@ -118,12 +118,13 @@ http.route({
   method: "POST",
   handler: httpAction(async (ctx, req) => {
     const url = new URL(req.url);
-    // Extract workspace id from path: /inbound/email/{workspaceId}
-    const workspaceIdPath = url.pathname.replace(/^\/inbound\/email\//, "").trim();
+    const workspaceIdPath = url.pathname
+      .replace(/^\/inbound\/email\//, "")
+      .trim();
     return await handleInboundEmail(
       ctx,
       req,
-      workspaceIdPath ? (workspaceIdPath as Id<"workspaces">) : undefined,
+      workspaceIdPath || undefined,
     );
   }),
 });
@@ -143,24 +144,28 @@ http.route({
 async function handleInboundEmail(
   ctx: Parameters<Parameters<typeof httpAction>[0]>[0],
   req: Request,
-  scopedWorkspaceId: Id<"workspaces"> | undefined,
+  scopedWorkspaceIdRaw: string | undefined,
 ): Promise<Response> {
     // 1. Read raw body once — needed for both signature check + parse
     const rawBody = await req.text();
 
-    // 2. Resolve the signing secret. Per-workspace secret wins if the
-    // caller hit /inbound/email/{workspaceId} and the workspace has
-    // one saved; otherwise fall back to the deployment env var.
+    // 2. Resolve the signing secret + validated workspace id. Per-workspace
+    // secret wins if the caller hit /inbound/email/{workspaceId} and the
+    // workspace has one saved; otherwise fall back to the deployment env var.
     let secret: string | undefined = process.env.RESEND_INBOUND_SECRET;
-    if (scopedWorkspaceId) {
+    let scopedWorkspaceId: Id<"workspaces"> | undefined;
+    if (scopedWorkspaceIdRaw) {
       try {
-        const wsSecret: string | null = await ctx.runQuery(
+        const wsResult = await ctx.runQuery(
           internal.emailsInbound.getWorkspaceInboundSecret,
-          { workspaceId: scopedWorkspaceId },
+          { workspaceId: scopedWorkspaceIdRaw },
         );
-        if (wsSecret) secret = wsSecret;
+        if (wsResult.workspaceId) {
+          scopedWorkspaceId = wsResult.workspaceId;
+          if (wsResult.secret) secret = wsResult.secret;
+        }
       } catch {
-        // fall through to env-var default
+        // fall through to env-var default; scopedWorkspaceId stays undefined
       }
     }
 

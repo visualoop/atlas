@@ -284,6 +284,16 @@ export const sendReply = action({
       headers["References"] = setup.referencesChain.join(" ");
     }
 
+    // Chrome-wrap the reply body so replies match the branded look
+    // of outbound sends.
+    const wrappedHtml = wrapInChrome(args.bodyHtml, {
+      workspaceName: setup.workspace?.name,
+      workspaceWebsite: setup.workspace?.website,
+      accent: setup.workspace?.emailAccentColor,
+      headerHtml: setup.workspace?.emailHeaderHtml,
+      footerHtml: setup.workspace?.emailFooterHtml,
+    });
+
     let result: SendResult = { status: "queued" };
     if (setup.resendApiKey) {
       result = await sendViaResend({
@@ -291,7 +301,7 @@ export const sendReply = action({
         from,
         to: setup.replyTo,
         subject: setup.subject,
-        html: args.bodyHtml,
+        html: wrappedHtml,
         text: args.bodyText,
         headers,
         attachments,
@@ -308,7 +318,7 @@ export const sendReply = action({
         to: setup.replyTo,
         subject: setup.subject,
         bodyText: args.bodyText,
-        bodyHtml: args.bodyHtml,
+        bodyHtml: wrappedHtml,
         inReplyTo: setup.inReplyTo,
         referencesChain: setup.referencesChain,
         attachmentFileIds: args.attachmentFileIds ?? [],
