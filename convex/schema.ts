@@ -2294,4 +2294,54 @@ export default defineSchema({
       searchField: "fact",
       filterFields: ["workspaceId", "subjectType"],
     }),
+
+  /* ============================================================ */
+  /* Email templates — reusable subject + body scaffolds picked   */
+  /* from the composer. Seeded with a defaults on workspace init  */
+  /* and extended manually or via AI.                              */
+  /* ============================================================ */
+  emailTemplates: defineTable({
+    workspaceId: v.id("workspaces"),
+    /** Short human-readable name shown in the picker */
+    name: v.string(),
+    /** Category groups templates in the picker */
+    category: v.union(
+      v.literal("cold_outreach"),
+      v.literal("follow_up"),
+      v.literal("meeting"),
+      v.literal("proposal"),
+      v.literal("invoice"),
+      v.literal("thank_you"),
+      v.literal("newsletter"),
+      v.literal("nurture"),
+      v.literal("re_engage"),
+      v.literal("general"),
+    ),
+    /** One-line preview shown under the name */
+    description: v.optional(v.string()),
+    /** Subject line — may include {{merge_tags}} */
+    subject: v.string(),
+    /** Body HTML — may include {{merge_tags}} */
+    bodyHtml: v.string(),
+    /** Plaintext version (falls back to auto-strip if missing) */
+    bodyText: v.optional(v.string()),
+    /** Optional preheader (email-client preview text) */
+    preheader: v.optional(v.string()),
+    /** Which sender identity this template prefers, if any */
+    defaultSenderIdentityId: v.optional(v.id("senderIdentities")),
+    /** true = seeded system default; false = user-created */
+    isSystem: v.boolean(),
+    /** Ordering within the picker — lower is higher */
+    sortOrder: v.number(),
+    /** Available merge tags this template expects — e.g. ["contact.firstName", "workspace.name"] */
+    mergeTags: v.optional(v.array(v.string())),
+    archivedAt: v.optional(v.number()),
+    createdBy: v.optional(v.id("users")),
+  })
+    .index("by_workspace_sort", ["workspaceId", "sortOrder"])
+    .index("by_workspace_category", ["workspaceId", "category"])
+    .searchIndex("search_template", {
+      searchField: "name",
+      filterFields: ["workspaceId", "category"],
+    }),
 });

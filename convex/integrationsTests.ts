@@ -217,13 +217,17 @@ export const testProvider = action({
           return { ok: true, detail: "authenticated" };
         }
         case "composio": {
-          const res = await fetch("https://backend.composio.dev/api/v1/apps?limit=1", {
-            headers: { "x-api-key": key },
-          });
-          if (!res.ok) return { ok: false, detail: `HTTP ${res.status}` };
-          const j = (await res.json()) as { items?: unknown[]; data?: unknown[] };
-          const count = j.items?.length ?? j.data?.length ?? 0;
-          return { ok: true, detail: `authenticated, ${count} apps visible` };
+          const res = await fetch(
+            "https://backend.composio.dev/api/v3.1/connected_accounts?limit=1",
+            { headers: { "x-api-key": key } },
+          );
+          if (!res.ok) {
+            const body = (await res.text()).slice(0, 200);
+            return { ok: false, detail: `HTTP ${res.status}: ${body}` };
+          }
+          const j = (await res.json()) as { items?: unknown[]; total_pages?: number };
+          const count = j.items?.length ?? 0;
+          return { ok: true, detail: `authenticated, ${count} connected accounts visible` };
         }
         default:
           return { ok: false, detail: "no_test_for_provider" };
