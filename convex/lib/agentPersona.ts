@@ -25,6 +25,11 @@ export type AgentRole =
   | "fit_score"               // ICP scoring
   | "deal_analyst"            // rotting-deal classifier
   | "copilot_chat"            // interactive tool-using agent
+  | "newsletter_draft"        // long-form email newsletter body
+  | "social_post"             // short social media post
+  | "content_idea"            // blog/newsletter topic brainstorm
+  | "campaign_personalize"    // per-recipient personalization variables
+  | "analytics_summary"       // narrative around metrics
   | "general";                // catch-all
 
 export interface AgentPersonaContext {
@@ -213,6 +218,39 @@ questions about the workspace using the tools provided. Never invent data —
 if a tool returns nothing, say so plainly. When referencing records, cite
 their type + id so ${ownerFirstName} can click through.`;
 
+    case "newsletter_draft":
+      return `# Perspective
+You are drafting a newsletter that will go out from ${workspaceName} to
+${workspaceName}'s subscribers. Write in first person as ${ownerFirstName}.
+Assume readers already know ${workspaceName} exists — do not re-introduce
+the brand or explain what it is. Focus on one story or one insight per issue.`;
+
+    case "social_post":
+      return `# Perspective
+You are writing a short social post for ${workspaceName}'s account. Write in
+first person as the ${workspaceName} brand. Match how ${ownerFirstName}
+actually talks on socials — direct, punchy, no marketing filler, no hashtags
+unless specifically asked for.`;
+
+    case "content_idea":
+      return `# Perspective
+You are brainstorming content topics for ${workspaceName}. Each idea must be
+one that ${workspaceName}'s audience would actually click. Prefer topics
+grounded in ${workspaceName}'s own product, customers, or industry — not
+generic advice.`;
+
+    case "campaign_personalize":
+      return `# Perspective
+You are computing per-recipient personalization variables for an email
+campaign going out from ${workspaceName}. Return only the variables the
+template needs. Never rewrite the whole email — just the fields.`;
+
+    case "analytics_summary":
+      return `# Perspective
+You are summarising metrics for ${ownerFirstName}. Be direct: which numbers
+went up, which went down, and one specific reason why. Never editorialise or
+sugar-coat. If a number is flat, say so.`;
+
     default:
       return "";
   }
@@ -248,6 +286,29 @@ No code fences.`;
 Return JSON exactly:
 {"healthScore": 0-100, "healthNotes": "one short reason", "nextAction": "≤12 words"}
 No code fences.`;
+    case "newsletter_draft":
+      return `# Output
+Return Markdown. Use ## for section headings, - for bullets, ** for bold.
+No front-matter, no meta commentary, no "here is the newsletter" preamble.
+Aim for 300-500 words unless the brief says otherwise.`;
+    case "social_post":
+      return `# Output
+Return ONLY the post text. No hashtags unless explicitly asked for. No
+"here's a post about ..." preamble. Under 280 characters unless the brief
+says otherwise.`;
+    case "content_idea":
+      return `# Output
+Return JSON exactly:
+{"ideas": [{"title": "punchy title", "angle": "one sentence explaining why this specific idea works for our audience"}]}
+Max 5 ideas. No code fences.`;
+    case "campaign_personalize":
+      return `# Output
+Return JSON exactly:
+{"variables": {"key1": "value1", "key2": "value2"}}
+Only include keys the caller asked for. No code fences.`;
+    case "analytics_summary":
+      return `# Output
+Return 2-3 sentences of plain prose. Max 80 words. No headers, no bullets.`;
     default:
       return "";
   }
