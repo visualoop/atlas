@@ -140,8 +140,8 @@ async function executeNode(
       if (!node.connectionId || !node.action) throw new Error("composio_node_missing_fields");
       return await ctx.runAction(internal.composioActions.executeAction, {
         connectionId: node.connectionId,
-        action: node.action,
-        params: node.args ?? {},
+        toolSlug: node.action,
+        input: node.args ?? {},
       });
     case "ai":
       return await executeAiNode(ctx, node, context);

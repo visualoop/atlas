@@ -60,8 +60,8 @@ export const publishOne = internalAction({
     // Execute via Composio
     const res = await ctx.runAction(internal.composioActions.executeAction, {
       connectionId: setup.composioConnectionId,
-      action: actionSlug,
-      params: {
+      toolSlug: actionSlug,
+      input: {
         text: setup.body,
         // Media handling — Composio expects URLs for most connectors.
         // Convex storage URLs work if the file is public-readable.
