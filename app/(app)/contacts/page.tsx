@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { ListLayout } from "@/components/atlas/list-layout";
+import { AgentPicksBar } from "@/components/atlas/agent-picks-bar";
 import { FilterChips } from "@/components/atlas/filter-chips";
 import { BulkActionBar } from "@/components/atlas/bulk-action-bar";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -106,6 +107,34 @@ export default function ContactsPage() {
           <EmptyState onCreate={() => setNewOpen(true)} />
         ) : (
           <>
+            {contacts.length >= 4 && (
+              <div className="mb-4">
+                <AgentPicksBar
+                  actionRef={api.pageAgents.rankContactsForOutreach}
+                  title="AI · Reach out to these first"
+                  emptyLabel="Nothing to prioritise right now."
+                  renderTitle={(r) => {
+                    const rec = r as {
+                      firstName?: string;
+                      lastName?: string;
+                      companyName?: string;
+                      title?: string;
+                    };
+                    const name = [rec.firstName, rec.lastName].filter(Boolean).join(" ");
+                    return rec.companyName ? `${name} · ${rec.companyName}` : name || "Contact";
+                  }}
+                  renderPrimaryAction={(r, pick) => ({
+                    label: "Draft outreach",
+                    onClick: () => {
+                      const params = new URLSearchParams(searchParams.toString());
+                      params.set("open", pick.id);
+                      params.set("drafter", "1");
+                      router.replace(`${pathname}?${params.toString()}`);
+                    },
+                  })}
+                />
+              </div>
+            )}
             <ContactsTable
               contacts={contacts}
               onOpen={setActiveId}

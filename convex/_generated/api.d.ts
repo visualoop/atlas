@@ -84,6 +84,8 @@ import type * as notes from "../notes.js";
 import type * as notifications from "../notifications.js";
 import type * as organizations from "../organizations.js";
 import type * as outreachSuggestions from "../outreachSuggestions.js";
+import type * as pageAgents from "../pageAgents.js";
+import type * as pageAgentsHelpers from "../pageAgentsHelpers.js";
 import type * as payments from "../payments.js";
 import type * as paymentsActions from "../paymentsActions.js";
 import type * as paymentsHelpers from "../paymentsHelpers.js";
@@ -205,6 +207,8 @@ declare const fullApi: ApiFromModules<{
   notifications: typeof notifications;
   organizations: typeof organizations;
   outreachSuggestions: typeof outreachSuggestions;
+  pageAgents: typeof pageAgents;
+  pageAgentsHelpers: typeof pageAgentsHelpers;
   payments: typeof payments;
   paymentsActions: typeof paymentsActions;
   paymentsHelpers: typeof paymentsHelpers;

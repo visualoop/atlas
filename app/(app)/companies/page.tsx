@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { ListLayout } from "@/components/atlas/list-layout";
+import { AgentPicksBar } from "@/components/atlas/agent-picks-bar";
 import { Button } from "@/components/ui/button";
 import { FilterChips } from "@/components/atlas/filter-chips";
 import { BulkActionBar } from "@/components/atlas/bulk-action-bar";
@@ -153,6 +154,33 @@ export default function CompaniesPage() {
           <EmptyState onCreate={() => setNewOpen(true)} />
         ) : (
           <>
+            {companies.length >= 4 && (
+              <div className="mb-4">
+                <AgentPicksBar
+                  actionRef={api.pageAgents.rankCompaniesForOutreach}
+                  title="AI · Reach out to these first"
+                  emptyLabel="Nothing to prioritise right now."
+                  renderTitle={(r) => {
+                    const rec = r as {
+                      name?: string;
+                      industry?: string;
+                    };
+                    return rec.industry
+                      ? `${rec.name} · ${rec.industry}`
+                      : rec.name ?? "Company";
+                  }}
+                  renderPrimaryAction={(_r, pick) => ({
+                    label: "Draft outreach",
+                    onClick: () => {
+                      const params = new URLSearchParams(searchParams.toString());
+                      params.set("open", pick.id);
+                      params.set("drafter", "1");
+                      router.replace(`${pathname}?${params.toString()}`);
+                    },
+                  })}
+                />
+              </div>
+            )}
             <CompaniesTable
               companies={companies}
               onOpen={setActiveId}
