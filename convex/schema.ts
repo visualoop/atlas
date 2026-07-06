@@ -225,6 +225,12 @@ export default defineSchema({
     // team names + tunes their own assistant. Default "Atlas" if unset.
     assistantName: v.optional(v.string()),
     assistantPersonaTraits: v.optional(v.string()), // freeform description of tone/style
+    // Email chrome — wrapped around every template body at send time.
+    // If unset, a sensible workspace-branded default is generated.
+    emailHeaderHtml: v.optional(v.string()),
+    emailFooterHtml: v.optional(v.string()),
+    // Brand primary color for email header accent (hex, e.g. "#111827")
+    emailAccentColor: v.optional(v.string()),
     // Prospector guardrails — max Places imports per day per workspace,
     // stops the AI from blowing through credits. Default 100.
     prospectorDailyCap: v.optional(v.number()),
