@@ -30,6 +30,52 @@ import type { Id } from "./_generated/dataModel";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
+/**
+ * Wrap a template body in the workspace's email chrome. Uses the
+ * workspace's header/footer HTML when set, otherwise falls back to
+ * a sensible branded default. Conservative HTML for email-client
+ * compatibility.
+ */
+function wrapInChrome(
+  bodyHtml: string,
+  opts: {
+    workspaceName?: string;
+    workspaceWebsite?: string;
+    accent?: string;
+    headerHtml?: string;
+    footerHtml?: string;
+  },
+): string {
+  const accent = opts.accent && /^#?[0-9a-fA-F]{3,8}$/.test(opts.accent)
+    ? opts.accent.startsWith("#")
+      ? opts.accent
+      : `#${opts.accent}`
+    : "#111827";
+  const wsName = opts.workspaceName ?? "";
+  const wsWebsite = opts.workspaceWebsite ?? "";
+
+  const defaultHeader = wsName
+    ? `<div style="border-bottom: 2px solid ${accent}; padding: 12px 0 16px; margin-bottom: 24px;"><div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: ${accent}; font-weight: 600;">${wsName}</div></div>`
+    : "";
+
+  const defaultFooter = wsName
+    ? `<div style="border-top: 1px solid #e5e7eb; margin-top: 32px; padding-top: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; color: #6b7280; line-height: 1.5;"><p style="margin: 0 0 4px;">${wsName}${wsWebsite ? ` · <a href="${wsWebsite}" style="color: ${accent}; text-decoration: none;">${wsWebsite.replace(/^https?:\/\//, "")}</a>` : ""}</p><p style="margin: 0; color: #9ca3af;">Sent from Atlas · reply to unsubscribe.</p></div>`
+    : "";
+
+  const header =
+    opts.headerHtml && opts.headerHtml.trim().length > 0
+      ? opts.headerHtml
+      : defaultHeader;
+  const footer =
+    opts.footerHtml && opts.footerHtml.trim().length > 0
+      ? opts.footerHtml
+      : defaultFooter;
+
+  if (/^\s*<!DOCTYPE|^\s*<html/i.test(bodyHtml)) return bodyHtml;
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin: 0; padding: 24px; background: #ffffff;"><div style="max-width: 640px; margin: 0 auto;">${header}${bodyHtml}${footer}</div></body></html>`;
+}
+
 interface SendResult {
   status: "sent" | "queued" | "failed";
   messageId?: string;
@@ -143,6 +189,16 @@ export const sendNew = action({
       ? `${setup.senderIdentity.displayName} <${setup.senderIdentity.address}>`
       : setup.senderIdentity.address;
 
+    // Wrap the body in the workspace's email chrome (header + footer)
+    // so every send looks branded. Falls back to a sensible default.
+    const wrappedHtml = wrapInChrome(args.bodyHtml, {
+      workspaceName: setup.workspace?.name,
+      workspaceWebsite: setup.workspace?.website,
+      accent: setup.workspace?.emailAccentColor,
+      headerHtml: setup.workspace?.emailHeaderHtml,
+      footerHtml: setup.workspace?.emailFooterHtml,
+    });
+
     let result: SendResult = { status: "queued" };
     if (setup.resendApiKey) {
       result = await sendViaResend({
@@ -152,7 +208,7 @@ export const sendNew = action({
         cc: args.cc,
         bcc: args.bcc,
         subject: args.subject,
-        html: args.bodyHtml,
+        html: wrappedHtml,
         text: args.bodyText,
         attachments,
       });
@@ -174,7 +230,7 @@ export const sendNew = action({
       bcc: args.bcc,
       subject: args.subject,
       bodyText: args.bodyText,
-      bodyHtml: args.bodyHtml,
+      bodyHtml: wrappedHtml,
       attachmentFileIds: args.attachmentFileIds ?? [],
       resendMessageId: result.messageId,
       status: result.status,

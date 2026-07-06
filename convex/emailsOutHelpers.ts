@@ -75,6 +75,13 @@ export const prepareSend = internalQuery({
 
     return {
       workspaceId: wsCtx.workspace._id,
+      workspace: {
+        name: wsCtx.workspace.name,
+        website: wsCtx.workspace.website,
+        emailHeaderHtml: wsCtx.workspace.emailHeaderHtml,
+        emailFooterHtml: wsCtx.workspace.emailFooterHtml,
+        emailAccentColor: wsCtx.workspace.emailAccentColor,
+      },
       senderIdentity,
       resendApiKey,
       attachments: attachments.filter((a): a is NonNullable<typeof a> => a !== null),
