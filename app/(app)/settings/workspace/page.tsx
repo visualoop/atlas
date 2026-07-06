@@ -32,6 +32,9 @@ export default function WorkspacePage() {
     pricingSummary: "",
     assistantName: "",
     assistantPersonaTraits: "",
+    emailHeaderHtml: "",
+    emailFooterHtml: "",
+    emailAccentColor: "",
     prospectorDailyCap: 100,
     googleMapsDailySearchCap: 150,
   });
@@ -52,6 +55,9 @@ export default function WorkspacePage() {
       pricingSummary: ws.pricingSummary ?? "",
       assistantName: ws.assistantName ?? "",
       assistantPersonaTraits: ws.assistantPersonaTraits ?? "",
+      emailHeaderHtml: ws.emailHeaderHtml ?? "",
+      emailFooterHtml: ws.emailFooterHtml ?? "",
+      emailAccentColor: ws.emailAccentColor ?? "",
       prospectorDailyCap: ws.prospectorDailyCap ?? 100,
       googleMapsDailySearchCap: ws.googleMapsDailySearchCap ?? 150,
     });
@@ -76,6 +82,9 @@ export default function WorkspacePage() {
           pricingSummary: values.pricingSummary.trim() || undefined,
           assistantName: values.assistantName.trim() || undefined,
           assistantPersonaTraits: values.assistantPersonaTraits.trim() || undefined,
+          emailHeaderHtml: values.emailHeaderHtml.trim() || undefined,
+          emailFooterHtml: values.emailFooterHtml.trim() || undefined,
+          emailAccentColor: values.emailAccentColor.trim() || undefined,
           prospectorDailyCap: values.prospectorDailyCap,
           googleMapsDailySearchCap: values.googleMapsDailySearchCap,
         },
@@ -294,6 +303,63 @@ export default function WorkspacePage() {
             }
             placeholder="Direct, warm, uses Sheng occasionally. Never uses corporate jargon. Confident but never salesy. Always signs off with the founder's first name only."
             className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none"
+          />
+        </Field>
+      </section>
+
+      <section className="space-y-5 border border-border p-6">
+        <div>
+          <p className="eyebrow">
+            <Sparkles className="size-3 inline mr-1 text-primary" />
+            Email chrome
+          </p>
+          <p className="text-xs text-muted-foreground mt-1 max-w-prose">
+            Header + footer HTML wrapped around every outbound email
+            template. Leave blank for a sensible auto-generated default
+            (workspace name in the header, website + unsubscribe in the
+            footer). Uses your accent color for the header rule.
+          </p>
+        </div>
+        <Field
+          label="Accent colour (hex)"
+          hint="Used for the header rule + link colour. Blank = #111827."
+        >
+          <input
+            value={values.emailAccentColor}
+            onChange={(e) =>
+              setValues({ ...values, emailAccentColor: e.target.value })
+            }
+            placeholder="#111827"
+            className="w-32 h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+            maxLength={9}
+          />
+        </Field>
+        <Field
+          label="Custom header HTML"
+          hint="Optional. Overrides the auto-generated header. Inline styles only — most email clients strip <style>."
+        >
+          <textarea
+            rows={5}
+            value={values.emailHeaderHtml}
+            onChange={(e) =>
+              setValues({ ...values, emailHeaderHtml: e.target.value })
+            }
+            placeholder={`<div style="border-bottom: 2px solid #111827; padding: 12px 0;">…</div>`}
+            className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none font-mono"
+          />
+        </Field>
+        <Field
+          label="Custom footer HTML"
+          hint="Optional. Overrides the auto-generated footer. Same inline-styles rule."
+        >
+          <textarea
+            rows={5}
+            value={values.emailFooterHtml}
+            onChange={(e) =>
+              setValues({ ...values, emailFooterHtml: e.target.value })
+            }
+            placeholder={`<div style="border-top: 1px solid #e5e7eb; margin-top: 32px;…">…</div>`}
+            className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none font-mono"
           />
         </Field>
       </section>
