@@ -249,36 +249,3 @@ jobs:
 
           echo "==> Env vars now set:"
           npx convex env list | grep -E "SITE_URL|CONFIG_ENCRYPTION_KEY|JWT_PRIVATE_KEY|JWKS|RESEND|AUTH_FROM" || true
-
-      - name: Seed Vercel env vars (idempotent)
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        # Configures the frontend's public env vars in Vercel so the
-        # deployed app knows where the Convex backend lives + which
-        # public URLs to render (webhook copy cards etc). Idempotent —
-        # skips silently if the var already has the same value.
-        if: ${{ env.VERCEL_TOKEN != '' }}
-        run: |
-          set -e
-          npm i -g vercel@latest >/dev/null 2>&1
-
-          # Values are fixed for this deployment target
-          declare -A VARS=(
-            [NEXT_PUBLIC_CONVEX_URL]="https://api.atlas.blyss.co.ke"
-            [NEXT_PUBLIC_CONVEX_SITE_URL]="https://actions.atlas.blyss.co.ke"
-            [NEXT_PUBLIC_APP_URL]="https://atlas.blyss.co.ke"
-          )
-
-          for KEY in "${!VARS[@]}"; do
-            VAL="${VARS[$KEY]}"
-            for ENVNAME in production preview; do
-              # Remove existing then re-add so the value is always exact.
-              vercel env rm "$KEY" "$ENVNAME" --token "$VERCEL_TOKEN" --yes >/dev/null 2>&1 || true
-              printf "%s" "$VAL" | vercel env add "$KEY" "$ENVNAME" --token "$VERCEL_TOKEN" >/dev/null 2>&1 && \
-                echo "✓ set $KEY=$VAL ($ENVNAME)" || echo "✗ failed to set $KEY ($ENVNAME)"
-            done
-          done
-
-          echo "==> Vercel env vars set. Redeploying the frontend will pick them up."
