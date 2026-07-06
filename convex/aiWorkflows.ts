@@ -18,24 +18,16 @@ import { v, ConvexError } from "convex/values";
 import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { buildAgentSystem } from "./lib/agentPersona";
 
 /* ------------------------------------------------------------------ */
 /* Draft email reply                                                     */
 /* ------------------------------------------------------------------ */
 
-const EMAIL_REPLY_SYSTEM = `You are Justine's email assistant.
-
-Style rules — non-negotiable:
-- Match the sender's tone (formal for enterprise, casual for peers).
-- Kenyan English spelling.
-- No AI-slop tells: no "I hope this email finds you well", no
-  "delve", no em-dashes as filler, no "That's a great question".
-- One idea per paragraph. Short sentences.
-- Address the actual ask. If you're unsure what to say, ask a
-  clarifying question.
-- Don't invent facts. If something is unknown, say so.
-
-Return ONLY the reply body — no subject, no signature, no meta commentary.`;
+// System prompt is now composed via buildAgentSystem(persona, "email_reply").
+// See convex/lib/agentPersona.ts. The old hardcoded EMAIL_REPLY_SYSTEM was
+// removed because it was frozen to "Justine" and had no workspace context,
+// causing the assistant to reply as the wrong party.
 
 export const draftEmailReply = action({
   args: {
@@ -44,7 +36,7 @@ export const draftEmailReply = action({
     system: v.optional(v.boolean()),                            // scheduler-invoked, no user session
     persistToInboundMessage: v.optional(v.id("messages")),      // if set, save the draft on this message row
   },
-  handler: async (ctx, args): Promise<{ draft: string; provider: string; model: string }> => {
+  handler: async (ctx, args): Promise<{ draft: string; provider: string; model: string; skipped?: string }> => {
     const context = args.system
       ? await ctx.runQuery(
           internal.aiWorkflowHelpers.loadConversationForReplyForSystem,
@@ -57,10 +49,49 @@ export const draftEmailReply = action({
       throw new ConvexError({ code: "NOT_FOUND", message: "Conversation not found." });
     }
 
-    // Build the conversation transcript
+    // Guard: if the inbound sender is one of our own sender identities,
+    // this is a self-echo (test email, forwarded broadcast, marketing
+    // Bcc-to-self). Skip auto-drafting so we don't reply to ourselves.
+    if (args.system && args.persistToInboundMessage) {
+      const ownAddresses =
+        "ownAddresses" in context && Array.isArray(context.ownAddresses)
+          ? (context.ownAddresses as string[])
+          : [];
+      const lastInbound = [...context.messages]
+        .reverse()
+        .find((m) => m.direction === "inbound");
+      const sender = lastInbound?.senderEmail?.toLowerCase();
+      if (sender && ownAddresses.includes(sender)) {
+        return {
+          draft: "",
+          provider: "skipped",
+          model: "self_echo",
+          skipped: "self_echo",
+        };
+      }
+    }
+
+    const persona = await ctx.runQuery(
+      internal.aiWorkflowHelpers.loadAgentPersonaForWorkspace,
+      { workspaceId: context.workspace._id },
+    );
+    if (!persona) {
+      throw new ConvexError({
+        code: "PERSONA_MISSING",
+        message: "Workspace not fully configured for AI.",
+      });
+    }
+    const systemPrompt = buildAgentSystem(persona, "email_reply");
+
+    // Build the conversation transcript with clear labels so the model
+    // knows exactly which side we are on. "You" = us (the workspace),
+    // "Them" = the other party.
     const transcript = context.messages
       .map((m) => {
-        const who = m.direction === "inbound" ? (m.senderName ?? m.senderEmail ?? "them") : "You";
+        const who =
+          m.direction === "inbound"
+            ? `Them (${m.senderName ?? m.senderEmail ?? "external"})`
+            : `You (${persona.ownerFirstName})`;
         return `${who}:\n${m.bodyText}`;
       })
       .join("\n\n---\n\n");
@@ -71,7 +102,9 @@ export const draftEmailReply = action({
       "Transcript:",
       transcript,
       "",
-      args.intent ? `Intent: ${args.intent}` : "Write the best next reply Justine could send.",
+      args.intent
+        ? `${persona.ownerFirstName}'s intent for this reply: ${args.intent}`
+        : `Write the best next reply ${persona.ownerFirstName} could send.`,
     ].join("\n");
 
     const result = await ctx.runAction(internal.ai.runFeature, {
@@ -80,12 +113,24 @@ export const draftEmailReply = action({
       actorId: context.userId,
       featureId: "draft_email_reply",
       messages: [
-        { role: "system", content: EMAIL_REPLY_SYSTEM },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       resourceType: "conversation",
       resourceId: args.conversationId,
     });
+
+    // If the model returned INTERNAL_ECHO, the transcript is our own
+    // outreach echoing back — skip saving so we don't reply to ourselves.
+    const trimmed = result.text.trim();
+    if (/^internal_echo\b/i.test(trimmed)) {
+      return {
+        draft: "",
+        provider: result.provider,
+        model: result.model,
+        skipped: "self_echo",
+      };
+    }
 
     // If asked, persist the draft on the inbound message row so the
     // thread reader can offer a one-click use-the-draft UX.

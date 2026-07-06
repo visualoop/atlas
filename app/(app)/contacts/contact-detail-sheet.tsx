@@ -27,14 +27,16 @@ export function ContactDetailSheet({
   contactId,
   open,
   onOpenChange,
+  initialDrafterOpen,
 }: {
   contactId: Id<"contacts">;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialDrafterOpen?: boolean;
 }) {
   const data = useQuery(api.contacts.get, { id: contactId });
   const archive = useMutation(api.contacts.archive);
-  const [outreachOpen, setOutreachOpen] = useState(false);
+  const [outreachOpen, setOutreachOpen] = useState(Boolean(initialDrafterOpen));
 
   if (!data) {
     return (
@@ -233,6 +235,7 @@ export function ContactDetailSheet({
         primaryPhone={contact.phone}
         open={outreachOpen}
         onOpenChange={setOutreachOpen}
+        autoGenerate={Boolean(initialDrafterOpen)}
       />
     )}
     </>

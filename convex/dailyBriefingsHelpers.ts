@@ -28,12 +28,13 @@ export const gatherBriefingContext = internalQuery({
     unreadConversations: number;
     tasksDueToday: number;
     meetingsToday: number;
-    rottingDeals: number;
-    uncontactedProspects: number;
-    topOpenDeal: { name: string; amount: string | null } | null;
-    recentInboundSubjects: string[];
-    stalestDealName: string | null;
-    stalestDealDaysStale: number | null;
+    rottingDealsCount: number;
+    uncontactedProspectsCount: number;
+    topOpenDeals: Array<{ name: string; amount: string | null; daysStale: number }>;
+    rottingDeals: Array<{ name: string; daysStale: number }>;
+    uncontactedCompanies: string[];
+    recentInbounds: Array<{ from: string; subject: string }>;
+    upcomingMeetings: Array<{ title: string; at: string }>;
   }> => {
     const now = Date.now();
     const startOfDay = new Date();
@@ -64,6 +65,7 @@ export const gatherBriefingContext = internalQuery({
     ).length;
 
     // Meetings today
+    const upcomingMeetings: Array<{ title: string; at: string }> = [];
     let meetingsToday = 0;
     try {
       const meetings = await ctx.db
@@ -72,49 +74,55 @@ export const gatherBriefingContext = internalQuery({
           q.eq("workspaceId", args.workspaceId),
         )
         .take(200);
-      meetingsToday = meetings.filter(
-        (m) => m.startAt >= startTs && m.startAt < endTs,
-      ).length;
+      for (const m of meetings) {
+        if (m.startAt >= startTs && m.startAt < endTs) {
+          meetingsToday++;
+          upcomingMeetings.push({
+            title: m.title,
+            at: new Date(m.startAt).toISOString().slice(11, 16),
+          });
+        }
+      }
     } catch {
-      // calendarEvents may not exist yet
+      // no-op
     }
 
-    // Rotting deals
+    // Deals — real names, not just counts
     const deals = await ctx.db
       .query("deals")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
       .take(500);
     const openDeals = deals.filter((d) => !d.wonAt && !d.lostAt && !d.archivedAt);
-    const rottingDeals = openDeals.filter(
-      (d) => d.lastActivityAt < now - 7 * DAY_MS,
-    ).length;
+    const rottingCutoff = now - 7 * DAY_MS;
+    const rotting = openDeals
+      .filter((d) => d.lastActivityAt < rottingCutoff)
+      .sort((a, b) => a.lastActivityAt - b.lastActivityAt)
+      .slice(0, 5)
+      .map((d) => ({
+        name: d.name,
+        daysStale: Math.floor((now - d.lastActivityAt) / DAY_MS),
+      }));
 
-    // Top open deal by amount
-    const topOpen = openDeals.sort((a, b) => {
-      const av = a.amountCents ? Number(a.amountCents) : 0;
-      const bv = b.amountCents ? Number(b.amountCents) : 0;
-      return bv - av;
-    })[0];
-    const topOpenDeal = topOpen
-      ? {
-          name: topOpen.name,
-          amount: topOpen.amountCents
-            ? `${topOpen.currency} ${(Number(topOpen.amountCents) / 100).toLocaleString()}`
-            : null,
-        }
-      : null;
-
-    // Stalest deal
-    const stalest = openDeals
+    // Top open deals by amount, with staleness
+    const topOpenDeals = openDeals
       .slice()
-      .sort((a, b) => a.lastActivityAt - b.lastActivityAt)[0];
-    const stalestDealName = stalest ? stalest.name : null;
-    const stalestDealDaysStale = stalest
-      ? Math.floor((now - stalest.lastActivityAt) / DAY_MS)
-      : null;
+      .sort((a, b) => {
+        const av = a.amountCents ? Number(a.amountCents) : 0;
+        const bv = b.amountCents ? Number(b.amountCents) : 0;
+        return bv - av;
+      })
+      .slice(0, 3)
+      .map((d) => ({
+        name: d.name,
+        amount: d.amountCents
+          ? `${d.currency} ${(Number(d.amountCents) / 100).toLocaleString()}`
+          : null,
+        daysStale: Math.floor((now - d.lastActivityAt) / DAY_MS),
+      }));
 
-    // Uncontacted prospects (companies without any outbound email yet)
-    let uncontactedProspects = 0;
+    // Uncontacted companies — real names, top 5 by recency
+    let uncontactedCompanies: string[] = [];
+    let uncontactedProspectsCount = 0;
     try {
       const companies = await ctx.db
         .query("companies")
@@ -122,39 +130,47 @@ export const gatherBriefingContext = internalQuery({
           q.eq("workspaceId", args.workspaceId),
         )
         .take(500);
-      // Proxy: companies not marked as active customers
-      uncontactedProspects = companies.filter(
+      const filtered = companies.filter(
         (c) => !c.archivedAt && c.lifecycleStage !== "customer",
-      ).length;
+      );
+      uncontactedProspectsCount = filtered.length;
+      uncontactedCompanies = filtered
+        .sort((a, b) => b._creationTime - a._creationTime)
+        .slice(0, 5)
+        .map((c) => c.name);
     } catch {
       // no-op
     }
 
-    // Recent inbound subjects (last 24h)
-    const recentInbound = await ctx.db
+    // Recent inbound (last 24h) — sender name + subject
+    const recentInboundMsgs = await ctx.db
       .query("messages")
       .withIndex("by_workspace_time", (q) =>
         q.eq("workspaceId", args.workspaceId),
       )
       .order("desc")
       .take(50);
-    const recentInboundSubjects = recentInbound
+    const recentInbounds = recentInboundMsgs
       .filter(
         (m) => m.direction === "inbound" && m._creationTime > now - DAY_MS,
       )
-      .map((m) => m.subject ?? "(no subject)")
-      .slice(0, 5);
+      .slice(0, 5)
+      .map((m) => ({
+        from: m.senderName ?? m.senderEmail ?? "unknown",
+        subject: m.subject ?? "(no subject)",
+      }));
 
     return {
       unreadConversations,
       tasksDueToday,
       meetingsToday,
-      rottingDeals,
-      uncontactedProspects,
-      topOpenDeal,
-      recentInboundSubjects,
-      stalestDealName,
-      stalestDealDaysStale,
+      rottingDealsCount: rotting.length,
+      uncontactedProspectsCount,
+      topOpenDeals,
+      rottingDeals: rotting,
+      uncontactedCompanies,
+      recentInbounds,
+      upcomingMeetings,
     };
   },
 });

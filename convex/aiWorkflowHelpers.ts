@@ -57,11 +57,21 @@ export const loadConversationForReplyForSystem = internalQuery({
       .withIndex("by_conversation_time", (q) => q.eq("conversationId", conv._id))
       .order("asc")
       .take(30);
+    // Load workspace sender identities so callers can detect
+    // self-addressed / echoed emails and skip drafting.
+    const senderIdentities = await ctx.db
+      .query("senderIdentities")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspace._id))
+      .collect();
+    const ownAddresses = senderIdentities
+      .map((s) => s.address?.toLowerCase())
+      .filter((a): a is string => Boolean(a));
     return {
       conversation: conv,
       messages,
       workspace,
       userId: owner.userId,
+      ownAddresses,
     };
   },
 });
@@ -558,5 +568,19 @@ export const saveCompanyAiDraft = internalMutation({
     await ctx.db.patch(args.companyId, {
       enrichmentData: enrichment,
     });
+  },
+});
+
+
+/* ============================================================ */
+/* Central persona harness loader — used by every AI action      */
+/* ============================================================ */
+
+import { loadAgentPersonaContext } from "./lib/agentPersona";
+
+export const loadAgentPersonaForWorkspace = internalQuery({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, args) => {
+    return await loadAgentPersonaContext(ctx, args.workspaceId);
   },
 });

@@ -67,6 +67,7 @@ import type * as http from "../http.js";
 import type * as integrations from "../integrations.js";
 import type * as integrationsTests from "../integrationsTests.js";
 import type * as integrationsTestsHelpers from "../integrationsTestsHelpers.js";
+import type * as lib_agentPersona from "../lib/agentPersona.js";
 import type * as lib_attribution from "../lib/attribution.js";
 import type * as lib_authHelpers from "../lib/authHelpers.js";
 import type * as lib_emailThread from "../lib/emailThread.js";
@@ -186,6 +187,7 @@ declare const fullApi: ApiFromModules<{
   integrations: typeof integrations;
   integrationsTests: typeof integrationsTests;
   integrationsTestsHelpers: typeof integrationsTestsHelpers;
+  "lib/agentPersona": typeof lib_agentPersona;
   "lib/attribution": typeof lib_attribution;
   "lib/authHelpers": typeof lib_authHelpers;
   "lib/emailThread": typeof lib_emailThread;

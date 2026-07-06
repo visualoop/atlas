@@ -17,6 +17,7 @@ import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { buildAgentSystem } from "./lib/agentPersona";
 
 const BRIEFING_SYSTEM = `You write a founder's daily briefing.
 
@@ -57,52 +58,80 @@ export const generateOne = internalAction({
     ctx,
     args,
   ): Promise<{ briefing: string; model: string }> => {
-    // Load setup (org owner as actor for keys + brand)
+    // Persona harness — same identity block every AI feature gets
+    const persona = await ctx.runQuery(
+      internal.aiWorkflowHelpers.loadAgentPersonaForWorkspace,
+      { workspaceId: args.workspaceId },
+    );
+    if (!persona) throw new Error("no_persona");
+    const systemPrompt = buildAgentSystem(persona, "briefing");
+
+    // Setup — used for AI keys + audit actorId
     const setup = await ctx.runQuery(
       internal.copilotHelpers.prepareForWorkspace,
       { workspaceId: args.workspaceId },
     );
     if (!setup) throw new Error("no_setup");
 
-    // Load today's snapshot data
+    // Grounded snapshot — real names, real numbers only
     const snapshot = await ctx.runQuery(
       internal.dailyBriefingsHelpers.gatherBriefingContext,
       { workspaceId: args.workspaceId },
     );
 
-    const assistantName = setup.brand?.workspaceName ?? "Atlas";
-    const contextLines: string[] = [];
-    contextLines.push(`Workspace: ${assistantName}`);
-    if (setup.brand?.oneLiner)
-      contextLines.push(`Business: ${setup.brand.oneLiner}`);
-    contextLines.push("");
-    contextLines.push("### Today's numbers");
-    contextLines.push(
-      `Unread conversations: ${snapshot.unreadConversations}`,
-    );
-    contextLines.push(`Tasks due today: ${snapshot.tasksDueToday}`);
-    contextLines.push(`Meetings today: ${snapshot.meetingsToday}`);
-    contextLines.push(`Rotting deals: ${snapshot.rottingDeals}`);
-    contextLines.push(`Uncontacted prospects: ${snapshot.uncontactedProspects}`);
-    if (snapshot.topOpenDeal) {
-      contextLines.push(
-        `Top open deal: ${snapshot.topOpenDeal.name} · ${snapshot.topOpenDeal.amount ?? "no amount"}`,
-      );
-    }
-    if (snapshot.recentInboundSubjects.length > 0) {
-      contextLines.push(
-        `Recent messages: ${snapshot.recentInboundSubjects.slice(0, 3).join(" · ")}`,
-      );
-    }
-    if (snapshot.stalestDealName) {
-      contextLines.push(
-        `Stalest deal: ${snapshot.stalestDealName} — ${snapshot.stalestDealDaysStale} days`,
-      );
+    // If nothing is actually happening, skip the AI call entirely and
+    // return a canned briefing. Avoids hallucination when data is empty.
+    const totalActivity =
+      snapshot.unreadConversations +
+      snapshot.tasksDueToday +
+      snapshot.meetingsToday +
+      snapshot.rottingDealsCount +
+      snapshot.uncontactedProspectsCount +
+      snapshot.topOpenDeals.length +
+      snapshot.recentInbounds.length;
+    if (totalActivity === 0) {
+      const canned = `Your queue is clear, ${persona.ownerFirstName}. No replies waiting, no deals rotting, no tasks due, calendar is empty. Good time to run a prospector search or refine the workspace context.`;
+      await ctx.runMutation(internal.dailyBriefingsHelpers.saveBriefing, {
+        workspaceId: args.workspaceId,
+        briefing: canned,
+        modelUsed: "canned:no_activity",
+      });
+      return { briefing: canned, model: "canned:no_activity" };
     }
 
-    contextLines.push("");
-    contextLines.push(
-      "Now write the 2-3 sentence briefing for the founder.",
+    // Build a data block the model MUST ground its briefing in.
+    const lines: string[] = ["# Today's data", ""];
+    lines.push(`Unread inbound conversations: ${snapshot.unreadConversations}`);
+    lines.push(`Open tasks due today: ${snapshot.tasksDueToday}`);
+    lines.push(`Meetings today: ${snapshot.meetingsToday}`);
+    if (snapshot.upcomingMeetings.length > 0) {
+      lines.push(`  - ${snapshot.upcomingMeetings.map((m) => `${m.at} · ${m.title}`).join("; ")}`);
+    }
+    lines.push(`Uncontacted prospect companies: ${snapshot.uncontactedProspectsCount}`);
+    if (snapshot.uncontactedCompanies.length > 0) {
+      lines.push(`  - Names in system: ${snapshot.uncontactedCompanies.join(", ")}`);
+    }
+    lines.push(`Rotting deals (>7 days idle): ${snapshot.rottingDealsCount}`);
+    if (snapshot.rottingDeals.length > 0) {
+      for (const d of snapshot.rottingDeals) {
+        lines.push(`  - ${d.name} · ${d.daysStale} days idle`);
+      }
+    }
+    if (snapshot.topOpenDeals.length > 0) {
+      lines.push("Top open deals by size:");
+      for (const d of snapshot.topOpenDeals) {
+        lines.push(`  - ${d.name}${d.amount ? ` · ${d.amount}` : ""} · ${d.daysStale} days idle`);
+      }
+    }
+    if (snapshot.recentInbounds.length > 0) {
+      lines.push("Recent inbound (last 24h):");
+      for (const i of snapshot.recentInbounds) {
+        lines.push(`  - From ${i.from}: ${i.subject}`);
+      }
+    }
+    lines.push("");
+    lines.push(
+      `Write ${persona.ownerFirstName}'s briefing now. 2-3 sentences max. Only reference records above by their exact names. If a section has zero, do NOT mention it.`,
     );
 
     const result = await ctx.runAction(internal.ai.runFeature, {
@@ -111,8 +140,8 @@ export const generateOne = internalAction({
       actorId: setup.userId,
       featureId: "summarize_thread",
       messages: [
-        { role: "system", content: BRIEFING_SYSTEM },
-        { role: "user", content: contextLines.join("\n") },
+        { role: "system", content: systemPrompt },
+        { role: "user", content: lines.join("\n") },
       ],
       resourceType: "daily_briefing",
       resourceId: `briefing-${args.workspaceId}-${Date.now()}`,

@@ -150,6 +150,7 @@ export default function ContactsPage() {
           contactId={openId}
           open={true}
           onOpenChange={(o) => !o && setActiveId(null)}
+          initialDrafterOpen={searchParams.get("drafter") === "1"}
         />
       )}
     </>
@@ -359,6 +360,9 @@ function ContactRowActions({
   email?: string;
   onOpen: () => void;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const scoreFit = useAction(api.aiWorkflows.scoreContactFit);
   const [busy, setBusy] = useState<"score" | null>(null);
 
@@ -373,6 +377,14 @@ function ContactRowActions({
     } finally {
       setBusy(null);
     }
+  }
+
+  function openDrafter(e: React.MouseEvent) {
+    e.stopPropagation();
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("open", contactId);
+    params.set("drafter", "1");
+    router.replace(`${pathname}?${params.toString()}`);
   }
 
   async function copyEmail(e: React.MouseEvent) {
@@ -400,14 +412,9 @@ function ContactRowActions({
           <Mail className="size-3.5 mr-2" />
           Open details
         </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpen();
-          }}
-        >
+        <DropdownMenuItem onClick={openDrafter}>
           <Sparkles className="size-3.5 mr-2 text-primary" />
-          Draft outreach
+          Draft outreach with AI
         </DropdownMenuItem>
         <DropdownMenuItem onClick={handleScore}>
           <Gauge className="size-3.5 mr-2" />
