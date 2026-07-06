@@ -220,6 +220,47 @@ function buildTools(token: string) {
           { token },
         ),
     }),
+
+    remember: tool({
+      description:
+        "Save a fact to Atlas long-term memory. Call this whenever the user tells you something worth remembering about a contact, company, deal, or the workspace itself — 'kimpton prefers whatsapp', 'we don't do work under 100k', 'grace is the actual decision maker at NairobiCafe'. Never invent facts to remember. Only call when the user explicitly asserted something.",
+      inputSchema: z.object({
+        subjectType: z.enum(["contact", "company", "deal", "workspace"]),
+        subjectId: z
+          .string()
+          .optional()
+          .describe(
+            "The Convex id of the contact/company/deal. Omit for workspace-global facts.",
+          ),
+        fact: z
+          .string()
+          .describe(
+            "One short atomic sentence — one attribute per fact. Example: 'Prefers WhatsApp over email'.",
+          ),
+      }),
+      execute: async ({ subjectType, subjectId, fact }) =>
+        fetchMutation(
+          api.workspaceKnowledge.remember,
+          { subjectType, subjectId, fact },
+          { token },
+        ),
+    }),
+
+    recall: tool({
+      description:
+        "Look up what Atlas already knows about a specific contact, company, or deal, or the workspace at large. Call this before drafting messages, scoring fit, or answering questions about a specific record.",
+      inputSchema: z.object({
+        subjectType: z.enum(["contact", "company", "deal", "workspace"]),
+        subjectId: z.string().optional(),
+        limit: z.number().optional().default(10),
+      }),
+      execute: async ({ subjectType, subjectId, limit }) =>
+        fetchQuery(
+          api.workspaceKnowledge.list,
+          { subjectType, subjectId, limit: limit ?? 10 },
+          { token },
+        ),
+    }),
   };
 }
 
