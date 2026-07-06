@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery, useAction } from "convex/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Mail, AlertTriangle, ListTodo, Calendar, ArrowRight, Sparkles, RefreshCw, Loader2,
 } from "lucide-react";
@@ -88,6 +89,9 @@ export default function TodayPage() {
           </>
         )}
       </section>
+
+      {/* AI action bar — 3 concrete moves for right now */}
+      <TodayActionBar />
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-px bg-border border border-border">
         <QueueCard
@@ -308,5 +312,86 @@ function ChecklistItem({ label, href }: { label: string; href: string }) {
         <ArrowRight className="size-3.5 text-muted-foreground" />
       </Link>
     </li>
+  );
+}
+
+
+/* ============================================================ */
+/* TodayActionBar — three moves for right now                    */
+/* ============================================================ */
+
+function TodayActionBar() {
+  const router = useRouter();
+  const runAgent = useAction(api.pageAgents.rankTodayActions);
+  const [actions, setActions] = useState<
+    Array<{ kind: string; title: string; actionLink: string }> | null
+  >(null);
+  const [loading, setLoading] = useState(false);
+
+  async function runOnce() {
+    setLoading(true);
+    try {
+      const r = await runAgent({});
+      setActions(r.actions ?? []);
+    } catch {
+      setActions([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (actions === null && !loading) {
+      void runOnce();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (actions === null || loading) {
+    return (
+      <section className="rounded-md border bg-muted/30 p-3 flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-3.5 animate-spin" />
+        Working out today's priorities…
+      </section>
+    );
+  }
+  if (actions.length === 0) return null;
+
+  return (
+    <section className="border-l-2 border-primary/60 pl-4 py-1 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="eyebrow flex items-center gap-1.5">
+          <Sparkles className="size-3 text-primary" />
+          Do these next
+        </p>
+        <button
+          onClick={runOnce}
+          className="text-[11px] font-mono uppercase tracking-[0.14em] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+        >
+          <RefreshCw className="size-3" />
+          Refresh
+        </button>
+      </div>
+      <ol className="space-y-1.5">
+        {actions.map((a, i) => (
+          <li
+            key={i}
+            className="flex items-start gap-3 text-sm border-b border-border/50 last:border-b-0 pb-2 last:pb-0"
+          >
+            <span className="w-5 text-right text-xs font-mono text-muted-foreground shrink-0 pt-0.5">
+              {i + 1}.
+            </span>
+            <span className="flex-1 leading-snug">{a.title}</span>
+            <button
+              onClick={() => router.push(a.actionLink)}
+              className="text-[11px] font-mono uppercase tracking-[0.12em] text-primary hover:underline shrink-0 inline-flex items-center gap-1"
+            >
+              Open
+              <ArrowRight className="size-3" />
+            </button>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }

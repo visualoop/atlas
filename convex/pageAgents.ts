@@ -313,3 +313,123 @@ export const rankDealsToSaveToday = action({
     };
   },
 });
+
+
+/* ============================================================ */
+/* Today — three moves for right now                              */
+/* ============================================================ */
+
+const TODAY_SYSTEM_HINT = `You are picking the three most important moves the founder should make today.
+
+Return JSON exactly:
+{"actions": [{"kind": "reply|nudge|outreach|task", "title": "one specific sentence", "actionLink": "/inbox?conversation=... or /pipelines?deal=... or /contacts?open=..."}]}
+
+Rules:
+- Each action must reference an actual record by id in actionLink.
+- Titles must be specific: mention names + counts + amounts.
+- Never invent — if a section has no data, omit it.
+- Max 3 actions total, prioritized: replies waiting > rotting deals > uncontacted top-fit prospects > tasks.
+- No prose, no code fences.`;
+
+interface TodayAction {
+  kind: "reply" | "nudge" | "outreach" | "task";
+  title: string;
+  actionLink: string;
+}
+
+export const rankTodayActions = action({
+  args: {},
+  handler: async (ctx): Promise<{ actions: TodayAction[] }> => {
+    const setup = await ctx.runQuery(internal.copilotHelpers.prepare, {});
+    if (!setup) return { actions: [] };
+    const persona = await ctx.runQuery(
+      internal.aiWorkflowHelpers.loadAgentPersonaForWorkspace,
+      { workspaceId: setup.workspaceId },
+    );
+    if (!persona) return { actions: [] };
+
+    const snapshot = await ctx.runQuery(
+      internal.dailyBriefingsHelpers.gatherBriefingContext,
+      { workspaceId: setup.workspaceId },
+    );
+
+    // No activity → no AI call, return empty (Today page will show
+    // its own "queue is clear" state).
+    const total =
+      snapshot.unreadConversations +
+      snapshot.rottingDeals.length +
+      snapshot.uncontactedCompanies.length +
+      snapshot.tasksDueToday;
+    if (total === 0) return { actions: [] };
+
+    const systemPrompt = buildAgentSystem(persona, "briefing") +
+      "\n\n" +
+      TODAY_SYSTEM_HINT;
+
+    const rotting = await ctx.runQuery(
+      internal.pageAgentsHelpers.rottingDealsWithIds,
+      { workspaceId: setup.workspaceId, limit: 5 },
+    );
+
+    const uncontacted = await ctx.runQuery(
+      internal.pageAgentsHelpers.uncontactedCompaniesWithIds,
+      { workspaceId: setup.workspaceId, limit: 5 },
+    );
+
+    const unreadThreads = await ctx.runQuery(
+      internal.pageAgentsHelpers.unreadConversationsWithIds,
+      { workspaceId: setup.workspaceId, limit: 5 },
+    );
+
+    const lines: string[] = ["# Today's grounded data", ""];
+    if (unreadThreads.length > 0) {
+      lines.push("Unread conversations:");
+      for (const c of unreadThreads) {
+        lines.push(`- id=${c._id} from=${c.senderName ?? c.senderEmail ?? "unknown"} subject="${c.subject ?? "(no subject)"}"`);
+      }
+    }
+    if (rotting.length > 0) {
+      lines.push("Rotting deals:");
+      for (const d of rotting) {
+        lines.push(`- id=${d._id} name=${d.name} days_idle=${d.daysStale}${d.aiNextAction ? ` nudge=${d.aiNextAction}` : ""}`);
+      }
+    }
+    if (uncontacted.length > 0) {
+      lines.push("Top uncontacted companies:");
+      for (const c of uncontacted) {
+        lines.push(`- id=${c._id} name=${c.name}${c.industry ? ` industry=${c.industry}` : ""}${typeof c.fitScore === "number" ? ` fit=${c.fitScore}` : ""}`);
+      }
+    }
+    lines.push("");
+    lines.push(`Now pick 3 for ${persona.ownerFirstName}.`);
+
+    const result = await ctx.runAction(internal.ai.runFeature, {
+      workspaceId: setup.workspaceId,
+      organizationId: setup.organizationId,
+      actorId: setup.userId,
+      featureId: "extract_json",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: lines.join("\n") },
+      ],
+      resourceType: "page_agent",
+      resourceId: `today-rank-${Date.now()}`,
+    });
+
+    try {
+      const parsed = JSON.parse(
+        result.text
+          .trim()
+          .replace(/^```(?:json)?/i, "")
+          .replace(/```$/i, "")
+          .trim(),
+      ) as { actions?: TodayAction[] };
+      const actions = (parsed.actions ?? [])
+        .filter((a) => a && typeof a.title === "string" && typeof a.actionLink === "string")
+        .slice(0, 3);
+      return { actions };
+    } catch {
+      return { actions: [] };
+    }
+  },
+});

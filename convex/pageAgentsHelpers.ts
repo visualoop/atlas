@@ -186,3 +186,141 @@ export const dealsForRanking = internalQuery({
     }));
   },
 });
+
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export const rottingDealsWithIds = internalQuery({
+  args: {
+    workspaceId: v.id("workspaces"),
+    limit: v.number(),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    Array<{
+      _id: Id<"deals">;
+      name: string;
+      daysStale: number;
+      aiNextAction?: string;
+    }>
+  > => {
+    const now = Date.now();
+    const rows = await ctx.db
+      .query("deals")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .take(300);
+    return rows
+      .filter(
+        (d) =>
+          !d.wonAt &&
+          !d.lostAt &&
+          !d.archivedAt &&
+          d.lastActivityAt < now - 7 * DAY_MS,
+      )
+      .sort((a, b) => a.lastActivityAt - b.lastActivityAt)
+      .slice(0, args.limit)
+      .map((d) => ({
+        _id: d._id,
+        name: d.name,
+        daysStale: Math.floor((now - d.lastActivityAt) / DAY_MS),
+        aiNextAction: d.aiNextAction,
+      }));
+  },
+});
+
+export const uncontactedCompaniesWithIds = internalQuery({
+  args: {
+    workspaceId: v.id("workspaces"),
+    limit: v.number(),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    Array<{
+      _id: Id<"companies">;
+      name: string;
+      industry?: string;
+      fitScore?: number;
+    }>
+  > => {
+    const rows = await ctx.db
+      .query("companies")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .take(300);
+    return rows
+      .filter(
+        (c) =>
+          !c.archivedAt &&
+          c.lifecycleStage !== "customer" &&
+          c.lifecycleStage !== "lost",
+      )
+      .sort((a, b) => {
+        const af = a.fitScore ?? 0;
+        const bf = b.fitScore ?? 0;
+        if (af !== bf) return bf - af;
+        return b._creationTime - a._creationTime;
+      })
+      .slice(0, args.limit)
+      .map((c) => ({
+        _id: c._id,
+        name: c.name,
+        industry: c.industry,
+        fitScore: c.fitScore,
+      }));
+  },
+});
+
+export const unreadConversationsWithIds = internalQuery({
+  args: {
+    workspaceId: v.id("workspaces"),
+    limit: v.number(),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    Array<{
+      _id: Id<"conversations">;
+      subject?: string;
+      senderEmail?: string;
+      senderName?: string;
+    }>
+  > => {
+    const rows = await ctx.db
+      .query("conversations")
+      .withIndex("by_workspace_state_time", (q) =>
+        q.eq("workspaceId", args.workspaceId),
+      )
+      .order("desc")
+      .take(200);
+
+    const unread = rows.filter((c) => (c.unreadCount ?? 0) > 0 && !c.archivedAt);
+    const results: Array<{
+      _id: Id<"conversations">;
+      subject?: string;
+      senderEmail?: string;
+      senderName?: string;
+    }> = [];
+    for (const c of unread.slice(0, args.limit)) {
+      // Grab the latest inbound message for a sender hint
+      const lastInbound = await ctx.db
+        .query("messages")
+        .withIndex("by_conversation_time", (q) =>
+          q.eq("conversationId", c._id),
+        )
+        .order("desc")
+        .take(10);
+      const inbound = lastInbound.find((m) => m.direction === "inbound");
+      results.push({
+        _id: c._id,
+        subject: c.subject,
+        senderEmail: inbound?.senderEmail,
+        senderName: inbound?.senderName,
+      });
+    }
+    return results;
+  },
+});
