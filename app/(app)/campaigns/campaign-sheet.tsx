@@ -108,15 +108,28 @@ export function CampaignSheet({ campaignId, onClose }: Props) {
     }
   }
 
-  async function handleAddStep() {
+  async function handleAddStep(template?: {
+    subject: string;
+    bodyText?: string;
+    bodyHtml: string;
+  }) {
     const channel = campaign.channel === "whatsapp" ? "whatsapp" : "email";
+    const subject =
+      channel === "email" ? template?.subject ?? "New step subject" : undefined;
+    const bodyText =
+      channel === "email" ? template?.bodyText ?? "New step body." : undefined;
+    const bodyHtml =
+      channel === "email"
+        ? template?.bodyHtml ?? "<p>New step body.</p>"
+        : undefined;
+
     await addStep({
       campaignId,
       delayHours: steps.length === 0 ? 0 : 24,
       channel,
-      subject: channel === "email" ? "New step subject" : undefined,
-      bodyText: channel === "email" ? "New step body." : undefined,
-      bodyHtml: channel === "email" ? "<p>New step body.</p>" : undefined,
+      subject,
+      bodyText,
+      bodyHtml,
       templateName: channel === "whatsapp" ? "" : undefined,
       templateLanguage: channel === "whatsapp" ? "en" : undefined,
     });
@@ -185,9 +198,12 @@ export function CampaignSheet({ campaignId, onClose }: Props) {
         <section>
           <div className="flex items-center justify-between mb-2">
             <p className="eyebrow">Sequence</p>
-            {canEdit && (
+            {canEdit && campaign.channel !== "whatsapp" && (
+              <StepTemplatePicker onPick={handleAddStep} />
+            )}
+            {canEdit && campaign.channel === "whatsapp" && (
               <button
-                onClick={handleAddStep}
+                onClick={() => handleAddStep()}
                 className="text-xs font-mono uppercase tracking-[0.12em] text-primary hover:underline inline-flex items-center gap-1"
               >
                 <Plus className="size-3.5" /> Add step
@@ -391,5 +407,86 @@ function SheetShell({
         {children}
       </SheetContent>
     </Sheet>
+  );
+}
+
+
+/* ============================================================ */
+/* StepTemplatePicker — dropdown for adding a step from a       */
+/* seeded email template                                          */
+/* ============================================================ */
+
+function StepTemplatePicker({
+  onPick,
+}: {
+  onPick: (template?: {
+    subject: string;
+    bodyText?: string;
+    bodyHtml: string;
+  }) => void | Promise<void>;
+}) {
+  const templates = useQuery(api.emailTemplates.list, {});
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="text-xs font-mono uppercase tracking-[0.12em] text-primary hover:underline inline-flex items-center gap-1"
+      >
+        <Plus className="size-3.5" /> Add step
+      </button>
+      {open && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute right-0 top-full mt-1 z-50 w-64 border border-border bg-background shadow-lg divide-y divide-border max-h-96 overflow-y-auto">
+            <button
+              onClick={async () => {
+                setOpen(false);
+                await onPick();
+              }}
+              className="w-full text-left px-3 py-2 hover:bg-muted transition-colors"
+            >
+              <p className="text-xs font-medium">Blank step</p>
+              <p className="text-[10px] text-muted-foreground">
+                Empty subject + body, write from scratch
+              </p>
+            </button>
+            {templates === undefined ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground">
+                Loading templates…
+              </div>
+            ) : templates.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground">
+                No templates yet.
+              </div>
+            ) : (
+              templates.map((t) => (
+                <button
+                  key={t._id}
+                  onClick={async () => {
+                    setOpen(false);
+                    await onPick({
+                      subject: t.subject,
+                      bodyText: t.bodyText,
+                      bodyHtml: t.bodyHtml,
+                    });
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-muted transition-colors"
+                >
+                  <p className="text-xs font-medium">{t.name}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase font-mono tracking-[0.10em]">
+                    {t.category.replace(/_/g, " ")}
+                  </p>
+                </button>
+              ))
+            )}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
