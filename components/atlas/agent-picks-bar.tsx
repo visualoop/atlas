@@ -25,6 +25,7 @@ interface Pick {
 
 export function AgentPicksBar<A extends FunctionReference<"action">>({
   actionRef,
+  actionArgs,
   title,
   emptyLabel,
   renderTitle,
@@ -32,6 +33,7 @@ export function AgentPicksBar<A extends FunctionReference<"action">>({
   autoRun = true,
 }: {
   actionRef: A;
+  actionArgs?: Record<string, unknown>;
   title: string;
   emptyLabel: string;
   renderTitle: (record: Record<string, unknown>) => string;
@@ -48,7 +50,7 @@ export function AgentPicksBar<A extends FunctionReference<"action">>({
   async function runOnce() {
     setLoading(true);
     try {
-      const r = (await run({})) as { picks: Pick[] };
+      const r = (await run((actionArgs ?? {}) as Parameters<typeof run>[0])) as { picks: Pick[] };
       setPicks(r.picks ?? []);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "AI rank failed");

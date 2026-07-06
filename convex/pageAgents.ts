@@ -433,3 +433,169 @@ export const rankTodayActions = action({
     }
   },
 });
+
+
+/* ============================================================ */
+/* Prospector — pick top 3 unimported results to focus on         */
+/* ============================================================ */
+
+export const rankProspectorPicks = action({
+  args: { searchId: v.id("prospectorSearches") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ picks: Array<Pick & { record: Record<string, unknown> }> }> => {
+    const setup = await ctx.runQuery(internal.copilotHelpers.prepare, {});
+    if (!setup) return { picks: [] };
+    const persona = await ctx.runQuery(
+      internal.aiWorkflowHelpers.loadAgentPersonaForWorkspace,
+      { workspaceId: setup.workspaceId },
+    );
+    if (!persona) return { picks: [] };
+
+    const results = await ctx.runQuery(
+      internal.pageAgentsHelpers.prospectorResultsForRanking,
+      { workspaceId: setup.workspaceId, searchId: args.searchId, limit: 30 },
+    );
+    if (results.length === 0) return { picks: [] };
+    if (results.length <= 3) {
+      return {
+        picks: results.map((r) => ({
+          id: r._id,
+          reason: r.fitReasoning ?? "Unimported prospect with contactable channels.",
+          record: r as unknown as Record<string, unknown>,
+        })),
+      };
+    }
+
+    const systemPrompt =
+      buildAgentSystem(persona, "general") + "\n\n" + SYSTEM_ROLE_HINT;
+
+    const userPrompt = [
+      `Rank the top 3 prospects ${persona.ownerFirstName} should import + reach out to first.`,
+      "",
+      "Prospects:",
+      ...results.map((r) => {
+        const contactBits = [
+          r.phone ? "phone" : "",
+          r.email ? "email" : "",
+          r.website ? "web" : "",
+        ]
+          .filter(Boolean)
+          .join("+");
+        const parts = [
+          `- id=${r._id}`,
+          `name=${r.name}`,
+          r.category ? `type=${r.category}` : "",
+          typeof r.fitScore === "number" ? `fit=${r.fitScore}/100` : "",
+          contactBits ? `reach=${contactBits}` : "",
+        ].filter(Boolean);
+        return parts.join(" · ");
+      }),
+    ].join("\n");
+
+    const result = await ctx.runAction(internal.ai.runFeature, {
+      workspaceId: setup.workspaceId,
+      organizationId: setup.organizationId,
+      actorId: setup.userId,
+      featureId: "extract_json",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      resourceType: "page_agent",
+      resourceId: `prospector-rank-${args.searchId}`,
+    });
+
+    const validIds = new Set(results.map((r) => r._id as unknown as string));
+    const picks = parsePicks(result.text, validIds);
+    const byId = new Map(results.map((r) => [r._id as unknown as string, r]));
+
+    return {
+      picks: picks.map((p) => ({
+        ...p,
+        record: (byId.get(p.id) ?? {}) as unknown as Record<string, unknown>,
+      })),
+    };
+  },
+});
+
+/* ============================================================ */
+/* Outreach queue — pick top 3 companies whose auto-draft is    */
+/* ready to send today                                            */
+/* ============================================================ */
+
+export const rankOutreachQueuePicks = action({
+  args: {},
+  handler: async (
+    ctx,
+  ): Promise<{ picks: Array<Pick & { record: Record<string, unknown> }> }> => {
+    const setup = await ctx.runQuery(internal.copilotHelpers.prepare, {});
+    if (!setup) return { picks: [] };
+    const persona = await ctx.runQuery(
+      internal.aiWorkflowHelpers.loadAgentPersonaForWorkspace,
+      { workspaceId: setup.workspaceId },
+    );
+    if (!persona) return { picks: [] };
+
+    const queue = await ctx.runQuery(
+      internal.pageAgentsHelpers.outreachQueueForRanking,
+      { workspaceId: setup.workspaceId, limit: 30 },
+    );
+    if (queue.length === 0) return { picks: [] };
+    if (queue.length <= 3) {
+      return {
+        picks: queue.map((c) => ({
+          id: c._id,
+          reason: c.aiDraftSubject
+            ? `Auto-draft ready: "${c.aiDraftSubject.slice(0, 60)}"`
+            : "Auto-draft ready to send.",
+          record: c as unknown as Record<string, unknown>,
+        })),
+      };
+    }
+
+    const systemPrompt =
+      buildAgentSystem(persona, "general") + "\n\n" + SYSTEM_ROLE_HINT;
+
+    const userPrompt = [
+      `Rank the top 3 auto-drafted outreach messages ${persona.ownerFirstName} should send today.`,
+      "",
+      "Queue:",
+      ...queue.map((c) => {
+        const parts = [
+          `- id=${c._id}`,
+          `company=${c.name}`,
+          c.industry ? `industry=${c.industry}` : "",
+          typeof c.fitScore === "number" ? `fit=${c.fitScore}/100` : "",
+          c.aiDraftSubject ? `subject="${c.aiDraftSubject.slice(0, 80)}"` : "",
+        ].filter(Boolean);
+        return parts.join(" · ");
+      }),
+    ].join("\n");
+
+    const result = await ctx.runAction(internal.ai.runFeature, {
+      workspaceId: setup.workspaceId,
+      organizationId: setup.organizationId,
+      actorId: setup.userId,
+      featureId: "extract_json",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      resourceType: "page_agent",
+      resourceId: `outreach-rank-${Date.now()}`,
+    });
+
+    const validIds = new Set(queue.map((c) => c._id as unknown as string));
+    const picks = parsePicks(result.text, validIds);
+    const byId = new Map(queue.map((c) => [c._id as unknown as string, c]));
+
+    return {
+      picks: picks.map((p) => ({
+        ...p,
+        record: (byId.get(p.id) ?? {}) as unknown as Record<string, unknown>,
+      })),
+    };
+  },
+});

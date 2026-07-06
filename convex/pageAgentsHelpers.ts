@@ -324,3 +324,141 @@ export const unreadConversationsWithIds = internalQuery({
     return results;
   },
 });
+
+
+export const prospectorResultsForRanking = internalQuery({
+  args: {
+    workspaceId: v.id("workspaces"),
+    searchId: v.id("prospectorSearches"),
+    limit: v.number(),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    Array<{
+      _id: Id<"prospectorResults">;
+      name: string;
+      category?: string;
+      city?: string;
+      phone?: string;
+      email?: string;
+      website?: string;
+      fitScore?: number;
+      fitReasoning?: string;
+    }>
+  > => {
+    const rows = await ctx.db
+      .query("prospectorResults")
+      .withIndex("by_search", (q) => q.eq("searchId", args.searchId))
+      .take(args.limit * 4);
+
+    const filtered = rows.filter(
+      (r) =>
+        !r.importedAt &&
+        !r.rejectedAt &&
+        (r.phone || r.email || r.website),
+    );
+
+    filtered.sort((a, b) => {
+      const af = a.fitScore ?? 0;
+      const bf = b.fitScore ?? 0;
+      if (af !== bf) return bf - af;
+      return b._creationTime - a._creationTime;
+    });
+
+    return filtered.slice(0, args.limit).map((r) => ({
+      _id: r._id,
+      name: r.name,
+      category: r.types?.[0],
+      city: r.city,
+      phone: r.phone,
+      email: r.email,
+      website: r.website,
+      fitScore: r.fitScore,
+      fitReasoning: r.fitReasoning,
+    }));
+  },
+});
+
+export const outreachQueueForRanking = internalQuery({
+  args: {
+    workspaceId: v.id("workspaces"),
+    limit: v.number(),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    Array<{
+      _id: Id<"companies">;
+      name: string;
+      industry?: string;
+      fitScore?: number;
+      aiDraftSubject?: string;
+      aiDraftBody?: string;
+    }>
+  > => {
+    const rows = await ctx.db
+      .query("companies")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .take(args.limit * 8);
+
+    const withDrafts: Array<{
+      _id: Id<"companies">;
+      name: string;
+      industry?: string;
+      fitScore?: number;
+      aiDraftSubject?: string;
+      aiDraftBody?: string;
+      _creationTime: number;
+      lifecycleStage: string;
+      archivedAt?: number;
+    }> = [];
+
+    for (const c of rows) {
+      if (c.archivedAt) continue;
+      if (c.lifecycleStage === "customer" || c.lifecycleStage === "lost") continue;
+      const enrichment =
+        typeof c.enrichmentData === "object" && c.enrichmentData
+          ? (c.enrichmentData as Record<string, unknown>)
+          : null;
+      const draft =
+        enrichment && typeof enrichment.aiDraft === "object" && enrichment.aiDraft
+          ? (enrichment.aiDraft as Record<string, unknown>)
+          : null;
+      const email =
+        draft && typeof draft.email === "object" && draft.email
+          ? (draft.email as { subject?: string; body?: string })
+          : null;
+      if (!email?.body) continue;
+      withDrafts.push({
+        _id: c._id,
+        name: c.name,
+        industry: c.industry,
+        fitScore: c.fitScore,
+        aiDraftSubject: email.subject,
+        aiDraftBody: email.body,
+        _creationTime: c._creationTime,
+        lifecycleStage: c.lifecycleStage,
+        archivedAt: c.archivedAt,
+      });
+    }
+
+    withDrafts.sort((a, b) => {
+      const af = a.fitScore ?? 0;
+      const bf = b.fitScore ?? 0;
+      if (af !== bf) return bf - af;
+      return b._creationTime - a._creationTime;
+    });
+
+    return withDrafts.slice(0, args.limit).map((c) => ({
+      _id: c._id,
+      name: c.name,
+      industry: c.industry,
+      fitScore: c.fitScore,
+      aiDraftSubject: c.aiDraftSubject,
+      aiDraftBody: c.aiDraftBody,
+    }));
+  },
+});

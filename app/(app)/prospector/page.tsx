@@ -17,6 +17,7 @@ import { MapBrowse } from "./map-browse";
 import { MapBrowseOsm } from "./map-browse-osm";
 import { MapBrowseHybrid } from "./map-browse-hybrid";
 import { OutreachDrafter } from "@/components/atlas/outreach-drafter";
+import { AgentPicksBar } from "@/components/atlas/agent-picks-bar";
 
 /**
  * Popular Kenyan cities + Nairobi neighborhoods used as one-click
@@ -576,6 +577,29 @@ function ResultsPane({ searchId }: { searchId: Id<"prospectorSearches"> }) {
               : "No results."}
         </div>
       ) : (
+        <>
+          {filter === "unimported" && sortedResults.length >= 4 && (
+            <div className="mb-4">
+              <AgentPicksBar
+                actionRef={api.pageAgents.rankProspectorPicks}
+                actionArgs={{ searchId }}
+                title="AI · Import these first"
+                emptyLabel="No standout prospects to prioritise."
+                autoRun={false}
+                renderTitle={(r) => {
+                  const rec = r as { name?: string; category?: string; fitScore?: number };
+                  const bits = [rec.name];
+                  if (rec.category) bits.push(rec.category);
+                  if (typeof rec.fitScore === "number") bits.push(`fit ${rec.fitScore}`);
+                  return bits.filter(Boolean).join(" · ");
+                }}
+                renderPrimaryAction={(_r, pick) => ({
+                  label: "Draft outreach",
+                  onClick: () => setDrafterResultId(pick.id as Id<"prospectorResults">),
+                })}
+              />
+            </div>
+          )}
         <div className="border border-border divide-y divide-border">
           {filter === "unimported" && (
             <div className="px-4 h-9 flex items-center bg-muted/30">
@@ -623,6 +647,7 @@ function ResultsPane({ searchId }: { searchId: Id<"prospectorSearches"> }) {
             />
           ))}
         </div>
+        </>
       )}
       {drafterTarget && (
         <OutreachDrafter
