@@ -730,7 +730,24 @@ export const scoreContactFit = action({
     if (!contact) throw new ConvexError({ code: "NOT_FOUND", message: "Contact not found." });
     if (!persona) throw new ConvexError({ code: "NO_PERSONA", message: "Workspace not configured." });
 
-    const systemPrompt = buildAgentSystem(persona, "fit_score");
+    const systemPromptBase = buildAgentSystem(persona, "fit_score");
+
+    // Long-term memory — top facts about this contact + their company
+    const memories: Array<{ fact: string }> = [];
+    const contactFacts = await ctx.runQuery(
+      internal.workspaceKnowledge.retrieveInternal,
+      {
+        workspaceId: setup.workspaceId,
+        subjectType: "contact",
+        subjectId: args.contactId,
+        limit: 3,
+      },
+    );
+    memories.push(...contactFacts);
+    const memoryBlock = memories.length > 0
+      ? "\n\n# What you already know\n" + memories.map((m) => `- ${m.fact}`).join("\n")
+      : "";
+    const systemPrompt = systemPromptBase + memoryBlock;
 
     const userPrompt = [
       `Contact to score:`,
@@ -787,7 +804,21 @@ export const scoreCompanyFit = action({
     if (!company) throw new ConvexError({ code: "NOT_FOUND", message: "Company not found." });
     if (!persona) throw new ConvexError({ code: "NO_PERSONA", message: "Workspace not configured." });
 
-    const systemPrompt = buildAgentSystem(persona, "fit_score");
+    const systemPromptBase = buildAgentSystem(persona, "fit_score");
+
+    const companyFacts = await ctx.runQuery(
+      internal.workspaceKnowledge.retrieveInternal,
+      {
+        workspaceId: setup.workspaceId,
+        subjectType: "company",
+        subjectId: args.companyId,
+        limit: 5,
+      },
+    );
+    const memoryBlock = companyFacts.length > 0
+      ? "\n\n# What you already know\n" + companyFacts.map((m) => `- ${m.fact}`).join("\n")
+      : "";
+    const systemPrompt = systemPromptBase + memoryBlock;
 
     const userPrompt = [
       `Company to score:`,

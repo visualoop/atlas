@@ -120,10 +120,42 @@ export const draftColdOutreach = action({
       { workspaceId: workspace._id },
     );
     if (!persona) throw new ConvexError({ code: "NO_PERSONA", message: "Workspace not configured." });
-    const system = buildAgentSystem(
+    const systemBase = buildAgentSystem(
       persona,
       args.channel === "email" ? "email_cold" : "whatsapp_cold",
     );
+
+    // Pull memory for this company + contact so we don't repeat what
+    // we already learned in past conversations.
+    const memories: Array<{ fact: string }> = [];
+    if (args.companyId) {
+      const cf = await ctx.runQuery(
+        internal.workspaceKnowledge.retrieveInternal,
+        {
+          workspaceId: workspace._id,
+          subjectType: "company",
+          subjectId: args.companyId,
+          limit: 5,
+        },
+      );
+      memories.push(...cf);
+    }
+    if (args.contactId) {
+      const cf = await ctx.runQuery(
+        internal.workspaceKnowledge.retrieveInternal,
+        {
+          workspaceId: workspace._id,
+          subjectType: "contact",
+          subjectId: args.contactId,
+          limit: 3,
+        },
+      );
+      memories.push(...cf);
+    }
+    const memoryBlock = memories.length > 0
+      ? "\n\n# What you already know\n" + memories.map((m) => `- ${m.fact}`).join("\n")
+      : "";
+    const system = systemBase + memoryBlock;
 
     const profile = buildProfile(company, contact);
     const userPrompt = `Prospect to reach out to:\n${profile}\n\nDraft the message ${persona.ownerFirstName} will send from ${persona.workspaceName}.`;
@@ -203,10 +235,25 @@ export const autoDraftForCompany = internalAction({
     );
     if (!persona) return { ok: false };
 
-    const system = buildAgentSystem(
+    const systemBase = buildAgentSystem(
       persona,
       args.channel === "email" ? "email_cold" : "whatsapp_cold",
     );
+
+    const companyFacts = await ctx.runQuery(
+      internal.workspaceKnowledge.retrieveInternal,
+      {
+        workspaceId: workspace._id,
+        subjectType: "company",
+        subjectId: args.companyId,
+        limit: 5,
+      },
+    );
+    const memoryBlock = companyFacts.length > 0
+      ? "\n\n# What you already know\n" + companyFacts.map((m) => `- ${m.fact}`).join("\n")
+      : "";
+    const system = systemBase + memoryBlock;
+
     const profile = buildProfile(company, contact);
     const userPrompt = `Prospect to reach out to:\n${profile}\n\nDraft the message ${persona.ownerFirstName} will send from ${persona.workspaceName}.`;
 
