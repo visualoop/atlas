@@ -105,7 +105,7 @@ export function ComposeSheet({ open, onOpenChange, prefill }: ComposeSheetProps)
     <Sheet open={open} onOpenChange={(o) => !sending && onOpenChange(o)}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-2xl p-0 gap-0 flex flex-col"
+        className="w-full sm:max-w-none sm:w-[95vw] lg:w-[92vw] xl:w-[88vw] p-0 gap-0 flex flex-col"
       >
         <SheetHeader className="px-6 py-4 border-b space-y-1 shrink-0">
           <p className="text-[11px] font-mono uppercase tracking-[0.14em] text-muted-foreground">
@@ -117,7 +117,16 @@ export function ComposeSheet({ open, onOpenChange, prefill }: ComposeSheetProps)
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+        <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
+          <TemplatePickerSidebar
+            onPick={(t) => {
+              setSubject(t.subject);
+              setBodyHtml(t.bodyHtml);
+              setBodyText(t.bodyText ?? "");
+              toast.success(`Loaded: ${t.name}`);
+            }}
+          />
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-3">
           {noSender && (
             <div className="rounded-md border border-[var(--warning)] p-3 text-xs text-[var(--warning)]">
               <p className="font-medium">No sender identity configured.</p>
@@ -210,6 +219,7 @@ export function ComposeSheet({ open, onOpenChange, prefill }: ComposeSheetProps)
               key={bodyHtml.length === 0 ? "empty" : `filled-${bodyText.slice(0, 20)}`}
             />
           </div>
+        </div>
         </div>
 
         <SheetFooter className="border-t px-6 py-3 flex-row items-center gap-3 sm:justify-between">
@@ -521,5 +531,130 @@ function AIAssistBar({
         </div>
       )}
     </div>
+  );
+}
+
+
+/* ============================================================ */
+/* TemplatePickerSidebar — left column of the full-screen compose */
+/* ============================================================ */
+
+interface PickedTemplate {
+  name: string;
+  subject: string;
+  bodyHtml: string;
+  bodyText?: string;
+}
+
+function TemplatePickerSidebar({
+  onPick,
+}: {
+  onPick: (t: PickedTemplate) => void;
+}) {
+  const templates = useQuery(api.emailTemplates.list, {});
+  const [q, setQ] = useState("");
+  const [category, setCategory] = useState<string | "all">("all");
+
+  const categories = useMemo(() => {
+    if (!templates) return [];
+    const set = new Set<string>();
+    for (const t of templates) set.add(t.category);
+    return Array.from(set).sort();
+  }, [templates]);
+
+  const filtered = useMemo(() => {
+    if (!templates) return [];
+    const query = q.trim().toLowerCase();
+    return templates.filter((t) => {
+      if (category !== "all" && t.category !== category) return false;
+      if (
+        query &&
+        !t.name.toLowerCase().includes(query) &&
+        !(t.description ?? "").toLowerCase().includes(query) &&
+        !t.subject.toLowerCase().includes(query)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [templates, q, category]);
+
+  return (
+    <aside className="w-full md:w-72 lg:w-80 border-b md:border-b-0 md:border-r border-border shrink-0 flex flex-col bg-muted/20 max-h-[40vh] md:max-h-none">
+      <div className="px-4 py-3 border-b border-border shrink-0 space-y-2">
+        <p className="eyebrow flex items-center gap-1.5">
+          <Sparkles className="size-3 text-primary" />
+          Templates
+        </p>
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search templates…"
+          className="h-8 text-xs"
+        />
+        <div className="flex flex-wrap gap-1">
+          <button
+            onClick={() => setCategory("all")}
+            className={`h-6 px-2 rounded-sm text-[10px] font-mono uppercase tracking-[0.10em] transition-colors ${
+              category === "all"
+                ? "bg-foreground text-background"
+                : "border border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            All
+          </button>
+          {categories.map((c) => (
+            <button
+              key={c}
+              onClick={() => setCategory(c)}
+              className={`h-6 px-2 rounded-sm text-[10px] font-mono uppercase tracking-[0.10em] transition-colors ${
+                category === c
+                  ? "bg-foreground text-background"
+                  : "border border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {c.replace(/_/g, " ")}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {templates === undefined ? (
+          <div className="p-4 text-xs text-muted-foreground">Loading…</div>
+        ) : filtered.length === 0 ? (
+          <div className="p-4 text-xs text-muted-foreground italic">
+            No templates match.
+          </div>
+        ) : (
+          <ul className="divide-y divide-border">
+            {filtered.map((t) => (
+              <li key={t._id}>
+                <button
+                  onClick={() =>
+                    onPick({
+                      name: t.name,
+                      subject: t.subject,
+                      bodyHtml: t.bodyHtml,
+                      bodyText: t.bodyText,
+                    })
+                  }
+                  className="w-full text-left px-4 py-3 hover:bg-background transition-colors space-y-1"
+                >
+                  <p className="text-sm font-medium leading-snug">{t.name}</p>
+                  {t.description && (
+                    <p className="text-xs text-muted-foreground line-clamp-2">
+                      {t.description}
+                    </p>
+                  )}
+                  <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
+                    {t.category.replace(/_/g, " ")}
+                  </p>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </aside>
   );
 }
