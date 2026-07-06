@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
@@ -14,8 +15,10 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { NewDealDialog } from "./new-deal-dialog";
+import { AgentPicksBar } from "@/components/atlas/agent-picks-bar";
 
 export default function PipelinesPage() {
+  const router = useRouter();
   const pipelines = useQuery(api.pipelines.listPipelines, {});
   const seed = useMutation(api.pipelines.ensureDefaultPipelines);
   const [activePipelineId, setActivePipelineId] = useState<Id<"pipelines"> | null>(null);
@@ -107,7 +110,34 @@ export default function PipelinesPage() {
           </button>
         </header>
 
-        {activePipelineId && <KanbanBoard pipelineId={activePipelineId} />}
+        {activePipelineId && (
+          <>
+            <div className="mb-4">
+              <AgentPicksBar
+                actionRef={api.pageAgents.rankDealsToSaveToday}
+                title="AI · Save these deals today"
+                emptyLabel="No rotting deals — pipeline is healthy."
+                renderTitle={(r) => {
+                  const rec = r as {
+                    name?: string;
+                    stage?: string;
+                    daysStale?: number;
+                  };
+                  return rec.stage
+                    ? `${rec.name} · ${rec.stage}${rec.daysStale ? ` · ${rec.daysStale}d idle` : ""}`
+                    : rec.name ?? "Deal";
+                }}
+                renderPrimaryAction={(_r, pick) => ({
+                  label: "Open deal",
+                  onClick: () => {
+                    router.push(`/pipelines?deal=${pick.id}`);
+                  },
+                })}
+              />
+            </div>
+            <KanbanBoard pipelineId={activePipelineId} />
+          </>
+        )}
       </div>
 
       {activePipelineId && newDealOpen && (

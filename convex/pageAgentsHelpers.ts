@@ -129,3 +129,60 @@ export const companiesForRanking = internalQuery({
     }));
   },
 });
+
+
+export const dealsForRanking = internalQuery({
+  args: {
+    workspaceId: v.id("workspaces"),
+    limit: v.number(),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    Array<{
+      _id: Id<"deals">;
+      name: string;
+      stage?: string;
+      healthScore?: number;
+      healthNotes?: string;
+      aiNextAction?: string;
+      daysStale?: number;
+    }>
+  > => {
+    const now = Date.now();
+    const rows = await ctx.db
+      .query("deals")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+      .take(args.limit * 4);
+    const open = rows.filter(
+      (d) => !d.wonAt && !d.lostAt && !d.archivedAt,
+    );
+
+    // Look up stage names
+    const stageIds = Array.from(new Set(open.map((d) => d.stageId)));
+    const stagesById = new Map<string, string>();
+    for (const id of stageIds) {
+      const s = await ctx.db.get(id);
+      if (s) stagesById.set(id, s.name);
+    }
+
+    // Prefer worst health + longest idle
+    open.sort((a, b) => {
+      const ah = a.healthScore ?? 100;
+      const bh = b.healthScore ?? 100;
+      if (ah !== bh) return ah - bh;
+      return a.lastActivityAt - b.lastActivityAt;
+    });
+
+    return open.slice(0, args.limit).map((d) => ({
+      _id: d._id,
+      name: d.name,
+      stage: stagesById.get(d.stageId),
+      healthScore: d.healthScore,
+      healthNotes: d.healthNotes,
+      aiNextAction: d.aiNextAction,
+      daysStale: Math.floor((now - d.lastActivityAt) / (24 * 60 * 60 * 1000)),
+    }));
+  },
+});

@@ -230,3 +230,86 @@ export const rankCompaniesForOutreach = action({
     };
   },
 });
+
+
+/* ============================================================ */
+/* Pipelines — deals about to slip                                */
+/* ============================================================ */
+
+export const rankDealsToSaveToday = action({
+  args: { limit: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ picks: Array<Pick & { record: Record<string, unknown> }> }> => {
+    const setup = await ctx.runQuery(internal.copilotHelpers.prepare, {});
+    if (!setup) return { picks: [] };
+    const persona = await ctx.runQuery(
+      internal.aiWorkflowHelpers.loadAgentPersonaForWorkspace,
+      { workspaceId: setup.workspaceId },
+    );
+    if (!persona) return { picks: [] };
+
+    const deals = await ctx.runQuery(
+      internal.pageAgentsHelpers.dealsForRanking,
+      { workspaceId: setup.workspaceId, limit: args.limit ?? 30 },
+    );
+    if (deals.length === 0) return { picks: [] };
+    if (deals.length <= 3) {
+      return {
+        picks: deals.map((d) => ({
+          id: d._id,
+          reason:
+            d.aiNextAction ??
+            `${d.name} — ${d.daysStale ?? 0} days idle. ${d.healthNotes ?? "Worth a nudge."}`,
+          record: d as unknown as Record<string, unknown>,
+        })),
+      };
+    }
+
+    const systemPrompt = buildAgentSystem(persona, "deal_analyst") +
+      "\n\n" +
+      SYSTEM_ROLE_HINT;
+
+    const userPrompt = [
+      `Rank the top 3 deals ${persona.ownerFirstName} should save today.`,
+      "",
+      "Deals:",
+      ...deals.map((d) => {
+        const parts = [
+          `- id=${d._id}`,
+          `name=${d.name}`,
+          d.stage ? `stage=${d.stage}` : "",
+          typeof d.healthScore === "number" ? `health=${d.healthScore}` : "",
+          typeof d.daysStale === "number" ? `days_idle=${d.daysStale}` : "",
+          d.aiNextAction ? `nudge=${d.aiNextAction}` : "",
+        ].filter(Boolean);
+        return parts.join(" · ");
+      }),
+    ].join("\n");
+
+    const result = await ctx.runAction(internal.ai.runFeature, {
+      workspaceId: setup.workspaceId,
+      organizationId: setup.organizationId,
+      actorId: setup.userId,
+      featureId: "extract_json",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      resourceType: "page_agent",
+      resourceId: `deals-rank-${Date.now()}`,
+    });
+
+    const validIds = new Set(deals.map((d) => d._id as unknown as string));
+    const picks = parsePicks(result.text, validIds);
+
+    const byId = new Map(deals.map((d) => [d._id as unknown as string, d]));
+    return {
+      picks: picks.map((p) => ({
+        ...p,
+        record: (byId.get(p.id) ?? {}) as unknown as Record<string, unknown>,
+      })),
+    };
+  },
+});
