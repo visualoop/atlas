@@ -326,6 +326,19 @@ export const ingestInbound = internalMutation({
       return { status: "suppressed" as const };
     }
 
+    // Self-echo check — if the "inbound" sender is one of our own
+    // sender identities, this is our own outbound looping back (Bcc
+    // to self, marketing catch-all, test email). Drop it silently.
+    const ownIdentity = await ctx.db
+      .query("senderIdentities")
+      .withIndex("by_workspace_address", (q) =>
+        q.eq("workspaceId", args.workspaceId).eq("address", fromEmail),
+      )
+      .first();
+    if (ownIdentity) {
+      return { status: "self_echo" as const };
+    }
+
     // Find or create contact
     let contact = await ctx.db
       .query("contacts")
@@ -557,3 +570,93 @@ function capitalizeDomain(domain: string): string {
   const label = domain.split(".")[0];
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
+
+
+/* ============================================================ */
+/* Hard delete — remove conversation + all messages permanently  */
+/* Cascades to messageAttachments (Convex storage still held —   */
+/* garbage-collector cron would sweep orphaned _storage entries) */
+/* ============================================================ */
+
+export const hardDelete = mutation({
+  args: { id: v.id("conversations") },
+  handler: async (ctx, { id }) => {
+    const { wsCtx } = await assertMineOrThrow(ctx, id);
+
+    // Load all messages first so we know what to delete
+    const messages = await ctx.db
+      .query("messages")
+      .withIndex("by_conversation_time", (q) => q.eq("conversationId", id))
+      .collect();
+
+    // Delete attachments per message + their storage objects
+    for (const msg of messages) {
+      const attachments = await ctx.db
+        .query("messageAttachments")
+        .withIndex("by_message", (q) => q.eq("messageId", msg._id))
+        .collect();
+      for (const att of attachments) {
+        try {
+          await ctx.storage.delete(att.storageId);
+        } catch {
+          // storage may already be gone
+        }
+        await ctx.db.delete(att._id);
+      }
+      await ctx.db.delete(msg._id);
+    }
+
+    // Delete the conversation itself
+    await ctx.db.delete(id);
+
+    await recordAudit(ctx, {
+      organizationId: wsCtx.workspace.organizationId,
+      workspaceId: wsCtx.workspace._id,
+      actorId: wsCtx.user._id,
+      action: "deleted",
+      resourceType: "conversation",
+      resourceId: id,
+    });
+  },
+});
+
+export const bulkHardDelete = mutation({
+  args: { ids: v.array(v.id("conversations")) },
+  handler: async (ctx, { ids }) => {
+    for (const id of ids) {
+      const conv = await ctx.db.get(id);
+      if (!conv) continue;
+      const { wsCtx } = await assertMineOrThrow(ctx, id);
+
+      const messages = await ctx.db
+        .query("messages")
+        .withIndex("by_conversation_time", (q) => q.eq("conversationId", id))
+        .collect();
+      for (const msg of messages) {
+        const attachments = await ctx.db
+          .query("messageAttachments")
+          .withIndex("by_message", (q) => q.eq("messageId", msg._id))
+          .collect();
+        for (const att of attachments) {
+          try {
+            await ctx.storage.delete(att.storageId);
+          } catch {
+            // no-op
+          }
+          await ctx.db.delete(att._id);
+        }
+        await ctx.db.delete(msg._id);
+      }
+      await ctx.db.delete(id);
+      await recordAudit(ctx, {
+        organizationId: wsCtx.workspace.organizationId,
+        workspaceId: wsCtx.workspace._id,
+        actorId: wsCtx.user._id,
+        action: "deleted",
+        resourceType: "conversation",
+        resourceId: id,
+      });
+    }
+    return { deleted: ids.length };
+  },
+});

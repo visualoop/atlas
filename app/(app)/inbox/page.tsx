@@ -5,7 +5,7 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useQuery, useMutation, useAction } from "convex/react";
 import {
   Mail, MessageSquare, Inbox as InboxIcon, Star, Archive as ArchiveIcon,
-  Clock, Reply, Pen, Sparkles, Loader2, ChevronLeft,
+  Clock, Reply, Pen, Sparkles, Loader2, ChevronLeft, Trash2,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
@@ -362,6 +362,7 @@ function ThreadReader({ conversationId, onClose }: {
   const snooze = useMutation(api.emails.snooze);
   const pin = useMutation(api.emails.pin);
   const unpin = useMutation(api.emails.unpin);
+  const hardDelete = useMutation(api.emails.hardDelete);
   const draftEmail = useAction(api.aiWorkflows.draftEmailReply);
   const draftWa = useAction(api.aiWorkflows.draftWhatsAppReply);
 
@@ -498,6 +499,18 @@ function ThreadReader({ conversationId, onClose }: {
               });
             }}>
               <ArchiveIcon className="size-4" />
+            </ReaderButton>
+            <ReaderButton
+              title="Delete permanently"
+              onClick={() => {
+                if (!confirm("Delete this conversation permanently? This can't be undone.")) return;
+                hardDelete({ id: conversationId }).then(() => {
+                  toast.success("Deleted.");
+                  onClose();
+                });
+              }}
+            >
+              <Trash2 className="size-4" />
             </ReaderButton>
           </div>
         </div>
