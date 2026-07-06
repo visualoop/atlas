@@ -584,3 +584,58 @@ export const loadAgentPersonaForWorkspace = internalQuery({
     return await loadAgentPersonaContext(ctx, args.workspaceId);
   },
 });
+
+
+/* ============================================================ */
+/* Load a single message for fact extraction                     */
+/* Returns message body + resolved contact/company for the       */
+/* memory write.                                                  */
+/* ============================================================ */
+
+export const loadMessageForExtraction = internalQuery({
+  args: { messageId: v.id("messages") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    direction: "inbound" | "outbound";
+    bodyText: string;
+    subject?: string;
+    senderName?: string;
+    senderEmail?: string;
+    contactIdForSubject?: string;
+    companyIdForSubject?: string;
+  } | null> => {
+    const msg = await ctx.db.get(args.messageId);
+    if (!msg) return null;
+
+    const conv = await ctx.db.get(msg.conversationId);
+    if (!conv) return null;
+
+    // Prefer the conversation's contact + company links; fall back to
+    // looking up by senderEmail on the workspace if unlinked.
+    let contactIdForSubject: string | undefined = conv.contactIds?.[0];
+    if (!contactIdForSubject && msg.senderEmail) {
+      const c = await ctx.db
+        .query("contacts")
+        .withIndex("by_workspace_email", (q) =>
+          q
+            .eq("workspaceId", msg.workspaceId)
+            .eq("email", msg.senderEmail!.toLowerCase()),
+        )
+        .first();
+      contactIdForSubject = c?._id;
+    }
+    const companyIdForSubject: string | undefined = conv.companyId;
+
+    return {
+      direction: msg.direction,
+      bodyText: msg.bodyText ?? "",
+      subject: msg.subject,
+      senderName: msg.senderName,
+      senderEmail: msg.senderEmail,
+      contactIdForSubject,
+      companyIdForSubject,
+    };
+  },
+});

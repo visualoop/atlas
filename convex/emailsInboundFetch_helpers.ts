@@ -102,6 +102,17 @@ export const scheduleAutoDraft = internalMutation({
         persistToInboundMessage: args.messageId,
       },
     );
+    // Also extract long-term facts from the message body — runs in
+    // parallel to draft generation, writes to workspaceKnowledge so
+    // future turns already know what the sender said.
+    await ctx.scheduler.runAfter(
+      2000,
+      internal.aiWorkflows.extractFactsFromMessage,
+      {
+        messageId: args.messageId,
+        workspaceId: msg.workspaceId,
+      },
+    );
     // Notify the workspace that inbound arrived + a draft is coming
     const conversation = await ctx.db.get(msg.conversationId);
     if (conversation) {

@@ -15,7 +15,7 @@
  */
 
 import { v, ConvexError } from "convex/values";
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { buildAgentSystem } from "./lib/agentPersona";
@@ -81,7 +81,42 @@ export const draftEmailReply = action({
         message: "Workspace not fully configured for AI.",
       });
     }
-    const systemPrompt = buildAgentSystem(persona, "email_reply");
+    const systemPromptBase = buildAgentSystem(persona, "email_reply");
+
+    // Long-term memory — pull relevant facts about this conversation's
+    // subject (contact, company, or workspace-global) and prepend them
+    // to the system prompt.
+    const conv = context.conversation;
+    const memories: Array<{ fact: string }> = [];
+    const primaryContactId = conv.contactIds?.[0];
+    if (primaryContactId) {
+      const facts = await ctx.runQuery(
+        internal.workspaceKnowledge.retrieveInternal,
+        {
+          workspaceId: context.workspace._id,
+          subjectType: "contact",
+          subjectId: primaryContactId,
+          limit: 5,
+        },
+      );
+      memories.push(...facts);
+    }
+    if (conv.companyId) {
+      const facts = await ctx.runQuery(
+        internal.workspaceKnowledge.retrieveInternal,
+        {
+          workspaceId: context.workspace._id,
+          subjectType: "company",
+          subjectId: conv.companyId,
+          limit: 5,
+        },
+      );
+      memories.push(...facts);
+    }
+    const memoryBlock = memories.length > 0
+      ? "\n\n# What you already know\n" + memories.map((m) => `- ${m.fact}`).join("\n")
+      : "";
+    const systemPrompt = systemPromptBase + memoryBlock;
 
     // Build the conversation transcript with clear labels so the model
     // knows exactly which side we are on. "You" = us (the workspace),
@@ -438,6 +473,118 @@ Style rules — non-negotiable:
 
 Return Markdown — headings with ##, lists with -, bold with **. No
 front-matter, no meta commentary, no "here is the document" preamble.`;
+
+/* ============================================================ */
+/* Extract facts from a message — writes to workspaceKnowledge   */
+/* ============================================================ */
+
+const EXTRACT_SYSTEM = `Extract facts about the sender or their company from this message.
+
+Return JSON exactly:
+{"facts": [{"fact": "one short atomic sentence", "subjectType": "contact" | "company", "confidence": 0-100}]}
+
+Rules:
+- Facts must be atomic: one sentence, one attribute.
+- Prefer facts that will matter next time we talk to this person.
+- Examples of good facts:
+  · "Prefers WhatsApp over email for quick questions"
+  · "Uses Kimton Pharmacy as their inventory system today"
+  · "Decision maker is Grace, not the sender"
+  · "Budget is roughly KES 200k/month"
+- Ignore small talk, greetings, closings, and generic pleasantries.
+- Never invent — if no meaningful facts, return {"facts": []}.
+- Max 5 facts.
+
+No prose, no code fences.`;
+
+export const extractFactsFromMessage = internalAction({
+  args: {
+    messageId: v.id("messages"),
+    workspaceId: v.id("workspaces"),
+  },
+  handler: async (ctx, args): Promise<{ facts: number }> => {
+    const msg = await ctx.runQuery(
+      internal.aiWorkflowHelpers.loadMessageForExtraction,
+      { messageId: args.messageId },
+    );
+    if (!msg) return { facts: 0 };
+    if (msg.direction !== "inbound") return { facts: 0 };
+    if ((msg.bodyText ?? "").trim().length < 40) return { facts: 0 };
+
+    const setup = await ctx.runQuery(
+      internal.copilotHelpers.prepareForWorkspace,
+      { workspaceId: args.workspaceId },
+    );
+    if (!setup) return { facts: 0 };
+
+    const senderLabel = msg.senderName ?? msg.senderEmail ?? "sender";
+    const userPrompt = [
+      `Sender: ${senderLabel}`,
+      msg.subject ? `Subject: ${msg.subject}` : "",
+      "",
+      "Message:",
+      msg.bodyText.slice(0, 3000),
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    let extracted: {
+      facts?: Array<{
+        fact: string;
+        subjectType: "contact" | "company";
+        confidence: number;
+      }>;
+    } = {};
+    try {
+      const result = await ctx.runAction(internal.ai.runFeature, {
+        workspaceId: args.workspaceId,
+        organizationId: setup.organizationId,
+        actorId: setup.userId,
+        featureId: "extract_json",
+        messages: [
+          { role: "system", content: EXTRACT_SYSTEM },
+          { role: "user", content: userPrompt },
+        ],
+        resourceType: "fact_extraction",
+        resourceId: args.messageId,
+      });
+      extracted = JSON.parse(
+        result.text
+          .trim()
+          .replace(/^```(?:json)?/i, "")
+          .replace(/```$/i, "")
+          .trim(),
+      );
+    } catch {
+      return { facts: 0 };
+    }
+
+    const facts = extracted.facts ?? [];
+    if (!Array.isArray(facts) || facts.length === 0) return { facts: 0 };
+
+    let saved = 0;
+    for (const f of facts.slice(0, 5)) {
+      if (!f.fact || typeof f.fact !== "string") continue;
+      const subjectType = f.subjectType === "company" ? "company" : "contact";
+      const subjectId =
+        subjectType === "contact"
+          ? msg.contactIdForSubject ?? undefined
+          : msg.companyIdForSubject ?? undefined;
+      if (!subjectId) continue;
+      await ctx.runMutation(internal.workspaceKnowledge.rememberInternal, {
+        workspaceId: args.workspaceId,
+        subjectType,
+        subjectId,
+        fact: f.fact,
+        source: "message_extraction",
+        sourceMessageId: args.messageId,
+        confidence: Math.max(0, Math.min(100, f.confidence ?? 60)),
+      });
+      saved++;
+    }
+    return { facts: saved };
+  },
+});
 
 /* ============================================================ */
 /* Compose assist — help write outbound emails from the inbox    */
