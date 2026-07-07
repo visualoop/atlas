@@ -322,17 +322,25 @@ export const rankDealsToSaveToday = action({
 const TODAY_SYSTEM_HINT = `You are picking the three most important moves the founder should make today.
 
 Return JSON exactly:
-{"actions": [{"kind": "reply|nudge|outreach|task", "title": "one specific sentence", "actionLink": "/inbox?conversation=... or /pipelines?deal=... or /contacts?open=..."}]}
+{"actions": [{"kind": "reply|nudge|outreach", "id": "<record id from the data below>", "title": "one specific sentence"}]}
 
 Rules:
-- Each action must reference an actual record by id in actionLink.
+- kind="reply" means pick an unread conversation. id must be a conversation id from the data.
+- kind="nudge" means pick a rotting deal. id must be a deal id from the data.
+- kind="outreach" means pick an uncontacted company. id must be a company id from the data.
 - Titles must be specific: mention names + counts + amounts.
-- Never invent — if a section has no data, omit it.
-- Max 3 actions total, prioritized: replies waiting > rotting deals > uncontacted top-fit prospects > tasks.
+- Never invent — only use ids that appear in the data below.
+- Max 3 actions total, prioritized: replies > nudges > outreach.
 - No prose, no code fences.`;
 
+interface RawTodayAction {
+  kind: "reply" | "nudge" | "outreach" | string;
+  id: string;
+  title: string;
+}
+
 interface TodayAction {
-  kind: "reply" | "nudge" | "outreach" | "task";
+  kind: "reply" | "nudge" | "outreach";
   title: string;
   actionLink: string;
 }
@@ -383,19 +391,19 @@ export const rankTodayActions = action({
 
     const lines: string[] = ["# Today's grounded data", ""];
     if (unreadThreads.length > 0) {
-      lines.push("Unread conversations:");
+      lines.push("Unread conversations (kind=reply):");
       for (const c of unreadThreads) {
         lines.push(`- id=${c._id} from=${c.senderName ?? c.senderEmail ?? "unknown"} subject="${c.subject ?? "(no subject)"}"`);
       }
     }
     if (rotting.length > 0) {
-      lines.push("Rotting deals:");
+      lines.push("Rotting deals (kind=nudge):");
       for (const d of rotting) {
         lines.push(`- id=${d._id} name=${d.name} days_idle=${d.daysStale}${d.aiNextAction ? ` nudge=${d.aiNextAction}` : ""}`);
       }
     }
     if (uncontacted.length > 0) {
-      lines.push("Top uncontacted companies:");
+      lines.push("Top uncontacted companies (kind=outreach):");
       for (const c of uncontacted) {
         lines.push(`- id=${c._id} name=${c.name}${c.industry ? ` industry=${c.industry}` : ""}${typeof c.fitScore === "number" ? ` fit=${c.fitScore}` : ""}`);
       }
@@ -416,6 +424,12 @@ export const rankTodayActions = action({
       resourceId: `today-rank-${Date.now()}`,
     });
 
+    // Build validated id sets so we can reject any hallucinated ids
+    // before they escape as broken URLs.
+    const conversationIds = new Set(unreadThreads.map((c) => c._id as unknown as string));
+    const dealIds = new Set(rotting.map((d) => d._id as unknown as string));
+    const companyIds = new Set(uncontacted.map((c) => c._id as unknown as string));
+
     try {
       const parsed = JSON.parse(
         result.text
@@ -423,10 +437,43 @@ export const rankTodayActions = action({
           .replace(/^```(?:json)?/i, "")
           .replace(/```$/i, "")
           .trim(),
-      ) as { actions?: TodayAction[] };
-      const actions = (parsed.actions ?? [])
-        .filter((a) => a && typeof a.title === "string" && typeof a.actionLink === "string")
-        .slice(0, 3);
+      ) as { actions?: RawTodayAction[] };
+
+      const actions: TodayAction[] = [];
+      for (const a of parsed.actions ?? []) {
+        if (!a || typeof a.title !== "string" || typeof a.id !== "string") continue;
+
+        // Route each kind to the right page + validate the id.
+        // If a kind/id combination doesn't match, drop the action
+        // rather than emit a broken URL.
+        let actionLink: string | null = null;
+        switch (a.kind) {
+          case "reply":
+            if (conversationIds.has(a.id)) {
+              actionLink = `/inbox?id=${a.id}`;
+            }
+            break;
+          case "nudge":
+            if (dealIds.has(a.id)) {
+              actionLink = `/pipelines?deal=${a.id}`;
+            }
+            break;
+          case "outreach":
+            if (companyIds.has(a.id)) {
+              // Companies open in the companies list detail sheet
+              actionLink = `/companies?open=${a.id}&drafter=1`;
+            }
+            break;
+        }
+
+        if (!actionLink) continue;
+        actions.push({
+          kind: a.kind as TodayAction["kind"],
+          title: a.title,
+          actionLink,
+        });
+        if (actions.length >= 3) break;
+      }
       return { actions };
     } catch {
       return { actions: [] };

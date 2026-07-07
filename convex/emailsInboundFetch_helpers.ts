@@ -121,7 +121,7 @@ export const scheduleAutoDraft = internalMutation({
         kind: "inbound_arrived",
         title: `New reply${msg.senderName ? ` from ${msg.senderName}` : ""}`,
         body: msg.subject ?? (msg.bodyText ?? "").slice(0, 100),
-        actionLink: `/inbox?conversation=${msg.conversationId}`,
+        actionLink: `/inbox?id=${msg.conversationId}`,
       });
     }
   },

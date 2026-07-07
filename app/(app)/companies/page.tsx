@@ -235,7 +235,7 @@ export default function CompaniesPage() {
               );
             }
           }}
-          initialDrafterOpen={searchParams.get("draft") === "1"}
+          initialDrafterOpen={searchParams.get("drafter") === "1"}
         />
       )}
     </>
