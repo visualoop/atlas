@@ -113,6 +113,8 @@ import type * as securityActions from "../securityActions.js";
 import type * as social from "../social.js";
 import type * as socialActions from "../socialActions.js";
 import type * as socialActionsHelpers from "../socialActionsHelpers.js";
+import type * as socialComposio from "../socialComposio.js";
+import type * as socialComposioHelpers from "../socialComposioHelpers.js";
 import type * as tasks from "../tasks.js";
 import type * as trends from "../trends.js";
 import type * as trendsActions from "../trendsActions.js";
@@ -239,6 +241,8 @@ declare const fullApi: ApiFromModules<{
   social: typeof social;
   socialActions: typeof socialActions;
   socialActionsHelpers: typeof socialActionsHelpers;
+  socialComposio: typeof socialComposio;
+  socialComposioHelpers: typeof socialComposioHelpers;
   tasks: typeof tasks;
   trends: typeof trends;
   trendsActions: typeof trendsActions;

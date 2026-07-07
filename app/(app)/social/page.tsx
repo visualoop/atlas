@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import {
   Facebook, Instagram, Linkedin, Send, Calendar as CalendarIcon,
@@ -92,28 +92,11 @@ function ConnectionsBar({
 }) {
   if (connections === undefined) return <Skeleton className="h-16 w-full" />;
   if (connections.length === 0) {
-    return (
-      <div className="border border-dashed border-border p-6 text-center space-y-3">
-        <p className="font-display italic text-xl text-muted-foreground">
-          No accounts connected yet.
-        </p>
-        <p className="text-sm text-muted-foreground max-w-prose mx-auto">
-          Connect a Facebook Page, Instagram Business account, or LinkedIn
-          profile to start posting.
-        </p>
-        <p className="text-xs text-muted-foreground italic">
-          Connect via Composio at{" "}
-          <a href="/settings/integrations" className="text-primary underline">
-            Settings → Integrations → Composio
-          </a>{" "}
-          for a one-key OAuth flow across all three platforms. Direct
-          connection is also possible via the Convex dashboard.
-        </p>
-      </div>
-    );
+    return <ComposioConnectGrid />;
   }
   return (
-    <div className="flex items-center gap-3 flex-wrap">
+    <div className="space-y-3">
+      <div className="flex items-center gap-3 flex-wrap">
       {connections.map((c) => {
         const meta = PLATFORM_META[c.platform];
         const Icon = meta?.icon ?? ExternalLink;
@@ -135,6 +118,8 @@ function ConnectionsBar({
           </div>
         );
       })}
+    </div>
+      <ComposioConnectGrid compact />
     </div>
   );
 }
@@ -456,6 +441,185 @@ function ComposeSheet({
           </button>
         </footer>
       </div>
+    </div>
+  );
+}
+
+
+/* ============================================================ */
+/* ComposioConnectGrid — Connect LinkedIn/Facebook/Instagram    */
+/* ============================================================ */
+
+function ComposioConnectGrid({ compact = false }: { compact?: boolean }) {
+  const authConfigs = useAction(api.socialComposio.listSocialAuthConfigs);
+  const startConnect = useAction(api.socialComposio.startSocialConnect);
+  const finalize = useAction(api.socialComposio.finalizeSocialConnect);
+  const [configs, setConfigs] = useState<
+    Array<{
+      id: string;
+      name: string;
+      toolkitSlug: string;
+      status: string;
+      logo?: string;
+    }> | null
+  >(null);
+  const [loading, setLoading] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [pending, setPending] = useState<{
+    composioConnectionId: Id<"composioConnections">;
+    toolkitSlug: string;
+  } | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      try {
+        const r = await authConfigs({});
+        setConfigs(r);
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Failed to load Composio auth configs",
+        );
+        setConfigs([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Poll finalize while waiting for the user to complete auth in the new tab
+  useEffect(() => {
+    if (!pending) return;
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      try {
+        const r = await finalize({
+          composioConnectionId: pending.composioConnectionId,
+        });
+        if (cancelled) return;
+        if (r.status === "active") {
+          toast.success(`${r.displayName ?? pending.toolkitSlug} connected.`);
+          setPending(null);
+        } else if (r.status === "error") {
+          toast.error(r.error ?? "Composio connection failed");
+          setPending(null);
+        }
+      } catch {
+        // keep polling
+      }
+    }, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [pending, finalize]);
+
+  async function connect(cfg: {
+    id: string;
+    toolkitSlug: string;
+    name: string;
+  }) {
+    setBusyId(cfg.id);
+    try {
+      const r = await startConnect({
+        authConfigId: cfg.id,
+        toolkitSlug: cfg.toolkitSlug,
+      });
+      window.open(r.redirectUrl, "_blank", "noopener,noreferrer");
+      setPending({
+        composioConnectionId: r.composioConnectionId,
+        toolkitSlug: cfg.toolkitSlug,
+      });
+      toast.info("Authorize in the new tab. This page will refresh when done.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Connect failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (loading || configs === null) {
+    return <Skeleton className="h-24 w-full" />;
+  }
+
+  if (configs.length === 0) {
+    return (
+      <div className="border border-dashed border-border p-6 text-center space-y-3">
+        <p className="font-display italic text-xl text-muted-foreground">
+          No social auth configs on your Composio account.
+        </p>
+        <p className="text-sm text-muted-foreground max-w-prose mx-auto">
+          Go to{" "}
+          <a
+            href="https://dashboard.composio.dev/~/auth-configs"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline"
+          >
+            Composio → Auth Configs
+          </a>{" "}
+          and enable at least one of LinkedIn, Facebook, Instagram, or
+          Twitter. Then reload this page.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "border p-4",
+        compact ? "border-border" : "border-dashed border-border",
+      )}
+    >
+      {!compact && (
+        <div className="mb-4 space-y-1">
+          <p className="eyebrow">Connect a platform</p>
+          <p className="text-sm text-muted-foreground">
+            One-click Composio OAuth. Comments and messages flow into the
+            unified inbox.
+          </p>
+        </div>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {configs.map((cfg) => (
+          <button
+            key={cfg.id}
+            onClick={() => connect(cfg)}
+            disabled={busyId === cfg.id || !cfg.status || cfg.status !== "ENABLED"}
+            className="border border-border p-4 text-left hover:border-foreground transition-colors disabled:opacity-50 flex items-start gap-3"
+          >
+            {cfg.logo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={cfg.logo} alt={cfg.toolkitSlug} className="size-8 rounded" />
+            ) : (
+              <div className="size-8 rounded bg-muted grid place-items-center">
+                <ExternalLink className="size-4 text-muted-foreground" />
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="font-medium capitalize">{cfg.toolkitSlug}</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {cfg.name}
+              </p>
+              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-primary mt-2 inline-flex items-center gap-1">
+                {busyId === cfg.id ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : null}
+                {busyId === cfg.id ? "Opening…" : "Connect"}
+              </p>
+            </div>
+          </button>
+        ))}
+      </div>
+      {pending && (
+        <p className="text-xs text-muted-foreground italic mt-3">
+          Waiting for you to authorize {pending.toolkitSlug} in the new
+          tab. Once you finish, this page will update automatically.
+        </p>
+      )}
     </div>
   );
 }
