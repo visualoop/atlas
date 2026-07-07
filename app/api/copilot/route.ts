@@ -114,7 +114,7 @@ function buildTools(token: string) {
 
     search_contacts: tool({
       description:
-        "Search contacts by name or email substring. Case-insensitive.",
+        "Search contacts by name/email/phone substring. Case-insensitive. Pass empty string to return the most recent contacts (use this when the user asks 'who's in my contacts', 'show me contacts', 'anyone to reach out to').",
       inputSchema: z.object({
         query: z.string(),
         limit: z.number().optional(),
@@ -124,7 +124,8 @@ function buildTools(token: string) {
     }),
 
     search_companies: tool({
-      description: "Search companies by name or domain substring.",
+      description:
+        "Search companies by name/domain/industry/city substring. Case-insensitive. Pass empty string to return the most recent companies (use this when the user asks 'show me companies', 'which prospects', 'anyone to reach out to').",
       inputSchema: z.object({
         query: z.string(),
         limit: z.number().optional(),
@@ -385,9 +386,9 @@ export async function POST(req: NextRequest) {
       temperature: 0.4,
       // Cap output tokens so free-tier OpenRouter accounts don't hit
       // 'requires more credits' errors and so we never burn a budget
-      // on a runaway reply. 2000 is enough for any conversational
-      // response + several tool call turns.
-      maxOutputTokens: 2000,
+      // on a runaway reply. 3000 fits several tool-call turns plus a
+      // full paragraph response on every provider tier we route to.
+      maxOutputTokens: 3000,
       onError({ error }) {
         console.error("[copilot] stream error", {
           message: error instanceof Error ? error.message : String(error),

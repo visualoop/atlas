@@ -21,6 +21,17 @@ import {
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { marked } from "marked";
+
+/**
+ * Render markdown from the Copilot's streamed text as inline HTML.
+ * The model prompt bans raw HTML so this is safe. Adds GFM tables +
+ * line breaks so numbered lists render properly.
+ */
+marked.setOptions({ breaks: true, gfm: true });
+function renderCopilotMarkdown(text: string): string {
+  return marked.parse(text ?? "", { async: false }) as string;
+}
 
 interface Props {
   open: boolean;
@@ -401,12 +412,11 @@ function MessageBubble({ message }: { message: UIMessage }) {
         {message.parts.map((part, i) => {
           if (part.type === "text") {
             return (
-              <p
+              <div
                 key={i}
-                className="text-sm whitespace-pre-wrap break-words leading-relaxed"
-              >
-                {part.text}
-              </p>
+                className="text-sm break-words leading-relaxed prose-copilot"
+                dangerouslySetInnerHTML={{ __html: renderCopilotMarkdown(part.text) }}
+              />
             );
           }
           if (part.type.startsWith("tool-")) {

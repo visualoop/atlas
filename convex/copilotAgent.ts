@@ -189,20 +189,25 @@ export const searchContactsForAgent = query({
   handler: async (ctx, args) => {
     const { workspaceId } = await requireWs(ctx);
     const q = args.query.trim().toLowerCase();
-    if (q.length < 2) return [];
     const contacts = await ctx.db
       .query("contacts")
       .withIndex("by_workspace", (query) =>
         query.eq("workspaceId", workspaceId as never),
       )
       .filter((query) => query.eq(query.field("archivedAt"), undefined))
+      .order("desc")
       .take(200);
-    const filtered = contacts
-      .filter((c) => {
-        const full = `${c.firstName} ${c.lastName ?? ""}`.toLowerCase();
-        return full.includes(q) || (c.email?.toLowerCase().includes(q) ?? false);
-      })
-      .slice(0, args.limit ?? 10);
+    const source = q.length < 2
+      ? contacts
+      : contacts.filter((c) => {
+          const full = `${c.firstName} ${c.lastName ?? ""}`.toLowerCase();
+          return (
+            full.includes(q) ||
+            (c.email?.toLowerCase().includes(q) ?? false) ||
+            (c.phone?.toLowerCase().includes(q) ?? false)
+          );
+        });
+    const filtered = source.slice(0, args.limit ?? 10);
     return filtered.map((c) => ({
       id: c._id,
       firstName: c.firstName,
@@ -222,19 +227,24 @@ export const searchCompaniesForAgent = query({
   handler: async (ctx, args) => {
     const { workspaceId } = await requireWs(ctx);
     const q = args.query.trim().toLowerCase();
-    if (q.length < 2) return [];
     const rows = await ctx.db
       .query("companies")
       .withIndex("by_workspace", (query) =>
         query.eq("workspaceId", workspaceId as never),
       )
       .filter((query) => query.eq(query.field("archivedAt"), undefined))
+      .order("desc")
       .take(200);
-    return rows
-      .filter((c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.domain?.toLowerCase().includes(q) ?? false),
-      )
+    const source = q.length < 2
+      ? rows
+      : rows.filter(
+          (c) =>
+            c.name.toLowerCase().includes(q) ||
+            (c.domain?.toLowerCase().includes(q) ?? false) ||
+            (c.industry?.toLowerCase().includes(q) ?? false) ||
+            (c.city?.toLowerCase().includes(q) ?? false),
+        );
+    return source
       .slice(0, args.limit ?? 10)
       .map((c) => ({
         id: c._id,

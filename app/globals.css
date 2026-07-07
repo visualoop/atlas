@@ -283,3 +283,104 @@
     display: none;
   }
 }
+
+
+/* ============================================================ */
+/* Copilot markdown output — tight, dense, opinionated typography */
+/* ============================================================ */
+
+.prose-copilot p {
+  margin: 0 0 0.5em 0;
+  line-height: 1.55;
+}
+.prose-copilot p:last-child {
+  margin-bottom: 0;
+}
+.prose-copilot strong {
+  font-weight: 600;
+  color: var(--foreground);
+}
+.prose-copilot em {
+  font-style: italic;
+}
+.prose-copilot code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85em;
+  padding: 0.1em 0.35em;
+  background: var(--muted);
+  border-radius: 3px;
+}
+.prose-copilot pre {
+  margin: 0.5em 0;
+  padding: 0.75em;
+  background: var(--muted);
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.85em;
+}
+.prose-copilot pre code {
+  padding: 0;
+  background: transparent;
+}
+.prose-copilot ul,
+.prose-copilot ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+.prose-copilot ul {
+  list-style: disc;
+}
+.prose-copilot ol {
+  list-style: decimal;
+}
+.prose-copilot li {
+  margin: 0.25em 0;
+  line-height: 1.5;
+}
+.prose-copilot a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose-copilot a:hover {
+  color: var(--foreground);
+}
+.prose-copilot h1,
+.prose-copilot h2,
+.prose-copilot h3,
+.prose-copilot h4 {
+  font-weight: 600;
+  margin: 0.75em 0 0.35em;
+  line-height: 1.3;
+}
+.prose-copilot h1 {
+  font-size: 1.05em;
+}
+.prose-copilot h2 {
+  font-size: 1em;
+}
+.prose-copilot h3,
+.prose-copilot h4 {
+  font-size: 0.95em;
+}
+.prose-copilot blockquote {
+  border-left: 2px solid var(--border);
+  padding-left: 0.75em;
+  margin: 0.5em 0;
+  color: var(--muted-foreground);
+}
+.prose-copilot table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 0.9em;
+}
+.prose-copilot th,
+.prose-copilot td {
+  border: 1px solid var(--border);
+  padding: 0.3em 0.5em;
+  text-align: left;
+}
+.prose-copilot th {
+  background: var(--muted);
+  font-weight: 600;
+}
