@@ -102,3 +102,49 @@ export const activateAndLink = internalMutation({
     });
   },
 });
+
+
+export const getSocialConnection = internalQuery({
+  args: { id: v.id("socialConnections") },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<Doc<"socialConnections"> | null> => {
+    return await ctx.db.get(args.id);
+  },
+});
+
+export const disconnectLocal = internalMutation({
+  args: { composioAccountId: v.string() },
+  handler: async (ctx, args) => {
+    const wsCtx = await requireWorkspaceContext(ctx, { minimumRole: "member" });
+
+    // socialConnections — mark revoked + archive
+    const sc = await ctx.db
+      .query("socialConnections")
+      .withIndex("by_external_id", (q) =>
+        q.eq("externalId", args.composioAccountId),
+      )
+      .first();
+    if (sc && sc.workspaceId === wsCtx.workspace._id) {
+      await ctx.db.patch(sc._id, {
+        status: "revoked",
+        archivedAt: Date.now(),
+      });
+    }
+
+    // composioConnections — mark disconnected
+    const rows = await ctx.db
+      .query("composioConnections")
+      .withIndex("by_workspace_user", (q) =>
+        q.eq("workspaceId", wsCtx.workspace._id).eq("userId", wsCtx.user._id),
+      )
+      .collect();
+    const match = rows.find(
+      (r) => r.composioConnectionId === args.composioAccountId,
+    );
+    if (match) {
+      await ctx.db.patch(match._id, { status: "disconnected" });
+    }
+  },
+});

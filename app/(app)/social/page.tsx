@@ -104,7 +104,7 @@ function ConnectionsBar({
           <div
             key={c._id}
             className={cn(
-              "flex items-center gap-2 px-3 h-9 border border-border",
+              "flex items-center gap-2 px-3 h-9 border border-border group",
               c.status !== "connected" && "opacity-60",
             )}
           >
@@ -115,12 +115,57 @@ function ConnectionsBar({
                 {c.status.replace("_", " ")}
               </span>
             )}
+            <ConnectionRemoveButton connectionId={c._id} name={c.displayName} />
           </div>
         );
       })}
     </div>
       <ComposioConnectGrid compact />
     </div>
+  );
+}
+
+function ConnectionRemoveButton({
+  connectionId,
+  name,
+}: {
+  connectionId: Id<"socialConnections">;
+  name: string;
+}) {
+  const disconnect = useAction(api.socialComposio.disconnectSocialAccount);
+  const [busy, setBusy] = useState(false);
+
+  async function handleRemove() {
+    if (
+      !confirm(
+        `Disconnect ${name}? Atlas will stop posting from this account and revoke the OAuth token.`,
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      const r = await disconnect({ socialConnectionId: connectionId });
+      if (r.ok) {
+        toast.success(`Disconnected ${name}`);
+      } else {
+        toast.error(r.error ?? "Disconnect failed");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Disconnect failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={handleRemove}
+      disabled={busy}
+      title="Disconnect"
+      className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all p-0.5 disabled:opacity-40"
+    >
+      {busy ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
+    </button>
   );
 }
 

@@ -309,3 +309,61 @@ export const finalizeSocialConnect = action({
     };
   },
 });
+
+
+/**
+ * Disconnect a social account. Revokes the Composio connected
+ * account, marks the local socialConnection as revoked, marks
+ * the composioConnection as disconnected. Idempotent.
+ */
+export const disconnectSocialAccount = action({
+  args: {
+    /** Either identifier will work — whichever the UI has. */
+    socialConnectionId: v.optional(v.id("socialConnections")),
+    composioAccountId: v.optional(v.string()),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ok: boolean; error?: string }> => {
+    const setup = await ctx.runQuery(internal.composioHelpers.prepare, {});
+    if (!setup.apiKey) return { ok: false, error: "no_composio_key" };
+
+    // Resolve the Composio account id from either input path
+    let composioAccountId = args.composioAccountId;
+    if (!composioAccountId && args.socialConnectionId) {
+      const sc = await ctx.runQuery(
+        internal.socialComposioHelpers.getSocialConnection,
+        { id: args.socialConnectionId },
+      );
+      composioAccountId = sc?.externalId;
+    }
+    if (!composioAccountId) return { ok: false, error: "no_target" };
+
+    // Delete on Composio side — DELETE fully removes the account.
+    // If that fails, we still mark our local rows so the user isn't
+    // stuck with a stale row.
+    let composioOk = true;
+    try {
+      const res = await fetch(
+        `${CONNECTED_ACCOUNT_ENDPOINT(composioAccountId)}`,
+        {
+          method: "DELETE",
+          headers: { "x-api-key": setup.apiKey },
+        },
+      );
+      if (!res.ok && res.status !== 404) {
+        composioOk = false;
+      }
+    } catch {
+      composioOk = false;
+    }
+
+    await ctx.runMutation(
+      internal.socialComposioHelpers.disconnectLocal,
+      { composioAccountId },
+    );
+
+    return { ok: true, ...(composioOk ? {} : { error: "composio_delete_failed_but_local_cleared" }) };
+  },
+});
