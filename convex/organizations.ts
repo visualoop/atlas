@@ -274,6 +274,16 @@ export const updateWorkspace = mutation({
       emailHeaderHtml: v.optional(v.string()),
       emailFooterHtml: v.optional(v.string()),
       emailAccentColor: v.optional(v.string()),
+      emailLogoUrl: v.optional(v.string()),
+      emailPhysicalAddress: v.optional(v.string()),
+      emailSocialLinks: v.optional(
+        v.object({
+          twitter: v.optional(v.string()),
+          linkedin: v.optional(v.string()),
+          instagram: v.optional(v.string()),
+          facebook: v.optional(v.string()),
+        }),
+      ),
       prospectorDailyCap: v.optional(v.number()),
       googleMapsDailySearchCap: v.optional(v.number()),
       timezone: v.optional(v.string()),

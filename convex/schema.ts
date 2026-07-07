@@ -231,6 +231,22 @@ export default defineSchema({
     emailFooterHtml: v.optional(v.string()),
     // Brand primary color for email header accent (hex, e.g. "#111827")
     emailAccentColor: v.optional(v.string()),
+    // Logo image URL (must be publicly reachable). Rendered at the top
+    // of every outbound email in the default chrome. 40-60px tall works
+    // best across mail clients.
+    emailLogoUrl: v.optional(v.string()),
+    // Physical mailing address for CAN-SPAM compliance ("Blyss Studio,
+    // Karen, Nairobi, Kenya"). Renders in the footer.
+    emailPhysicalAddress: v.optional(v.string()),
+    // Social links rendered as small icons in the default footer.
+    emailSocialLinks: v.optional(
+      v.object({
+        twitter: v.optional(v.string()),
+        linkedin: v.optional(v.string()),
+        instagram: v.optional(v.string()),
+        facebook: v.optional(v.string()),
+      }),
+    ),
     // Per-workspace signing secret for the inbound Resend webhook.
     // Set from Settings → Integrations. Falls back to the deployment
     // env var RESEND_INBOUND_SECRET if unset.

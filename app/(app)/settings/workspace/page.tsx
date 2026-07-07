@@ -35,6 +35,12 @@ export default function WorkspacePage() {
     emailHeaderHtml: "",
     emailFooterHtml: "",
     emailAccentColor: "",
+    emailLogoUrl: "",
+    emailPhysicalAddress: "",
+    emailSocialTwitter: "",
+    emailSocialLinkedin: "",
+    emailSocialInstagram: "",
+    emailSocialFacebook: "",
     prospectorDailyCap: 100,
     googleMapsDailySearchCap: 150,
   });
@@ -58,6 +64,12 @@ export default function WorkspacePage() {
       emailHeaderHtml: ws.emailHeaderHtml ?? "",
       emailFooterHtml: ws.emailFooterHtml ?? "",
       emailAccentColor: ws.emailAccentColor ?? "",
+      emailLogoUrl: ws.emailLogoUrl ?? "",
+      emailPhysicalAddress: ws.emailPhysicalAddress ?? "",
+      emailSocialTwitter: ws.emailSocialLinks?.twitter ?? "",
+      emailSocialLinkedin: ws.emailSocialLinks?.linkedin ?? "",
+      emailSocialInstagram: ws.emailSocialLinks?.instagram ?? "",
+      emailSocialFacebook: ws.emailSocialLinks?.facebook ?? "",
       prospectorDailyCap: ws.prospectorDailyCap ?? 100,
       googleMapsDailySearchCap: ws.googleMapsDailySearchCap ?? 150,
     });
@@ -85,6 +97,20 @@ export default function WorkspacePage() {
           emailHeaderHtml: values.emailHeaderHtml.trim() || undefined,
           emailFooterHtml: values.emailFooterHtml.trim() || undefined,
           emailAccentColor: values.emailAccentColor.trim() || undefined,
+          emailLogoUrl: values.emailLogoUrl.trim() || undefined,
+          emailPhysicalAddress: values.emailPhysicalAddress.trim() || undefined,
+          emailSocialLinks:
+            values.emailSocialTwitter.trim() ||
+            values.emailSocialLinkedin.trim() ||
+            values.emailSocialInstagram.trim() ||
+            values.emailSocialFacebook.trim()
+              ? {
+                  twitter: values.emailSocialTwitter.trim() || undefined,
+                  linkedin: values.emailSocialLinkedin.trim() || undefined,
+                  instagram: values.emailSocialInstagram.trim() || undefined,
+                  facebook: values.emailSocialFacebook.trim() || undefined,
+                }
+              : undefined,
           prospectorDailyCap: values.prospectorDailyCap,
           googleMapsDailySearchCap: values.googleMapsDailySearchCap,
         },
@@ -362,6 +388,77 @@ export default function WorkspacePage() {
             className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none font-mono"
           />
         </Field>
+      </section>
+
+      <section className="space-y-5 border border-border p-6">
+        <div>
+          <p className="eyebrow">
+            <Sparkles className="size-3 inline mr-1 text-primary" />
+            Branded email defaults
+          </p>
+          <p className="text-xs text-muted-foreground mt-1 max-w-prose">
+            The fields below feed the auto-generated header + footer (only
+            when you haven't set custom HTML above). Use these for the
+            standard Silicon-Valley SaaS look: logo at top, signature +
+            address + socials + unsubscribe at bottom.
+          </p>
+        </div>
+        <Field
+          label="Logo URL"
+          hint="Public URL of your logo image. 40-60px tall works best. Leave blank for a text wordmark."
+        >
+          <input
+            value={values.emailLogoUrl}
+            onChange={(e) => setValues({ ...values, emailLogoUrl: e.target.value })}
+            placeholder="https://omnix.co.ke/logo.png"
+            className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+          />
+        </Field>
+        <Field
+          label="Physical address"
+          hint="For CAN-SPAM / GDPR compliance. Shown in the footer."
+        >
+          <input
+            value={values.emailPhysicalAddress}
+            onChange={(e) => setValues({ ...values, emailPhysicalAddress: e.target.value })}
+            placeholder="Omnix Ltd, Karen, Nairobi, Kenya"
+            className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
+          />
+        </Field>
+        <div className="space-y-2">
+          <label className="block text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
+            Social links
+          </label>
+          <p className="text-xs text-muted-foreground">
+            URLs rendered as text links in the footer. Leave any blank to skip.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input
+              value={values.emailSocialTwitter}
+              onChange={(e) => setValues({ ...values, emailSocialTwitter: e.target.value })}
+              placeholder="Twitter / X URL"
+              className="h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+            />
+            <input
+              value={values.emailSocialLinkedin}
+              onChange={(e) => setValues({ ...values, emailSocialLinkedin: e.target.value })}
+              placeholder="LinkedIn URL"
+              className="h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+            />
+            <input
+              value={values.emailSocialInstagram}
+              onChange={(e) => setValues({ ...values, emailSocialInstagram: e.target.value })}
+              placeholder="Instagram URL"
+              className="h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+            />
+            <input
+              value={values.emailSocialFacebook}
+              onChange={(e) => setValues({ ...values, emailSocialFacebook: e.target.value })}
+              placeholder="Facebook URL"
+              className="h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+            />
+          </div>
+        </div>
       </section>
 
       <div className="flex items-center gap-2 pt-2">

@@ -44,6 +44,15 @@ function wrapInChrome(
     accent?: string;
     headerHtml?: string;
     footerHtml?: string;
+    logoUrl?: string;
+    physicalAddress?: string;
+    socialLinks?: {
+      twitter?: string;
+      linkedin?: string;
+      instagram?: string;
+      facebook?: string;
+    };
+    ownerName?: string;
   },
 ): string {
   const accent = opts.accent && /^#?[0-9a-fA-F]{3,8}$/.test(opts.accent)
@@ -53,13 +62,48 @@ function wrapInChrome(
     : "#111827";
   const wsName = opts.workspaceName ?? "";
   const wsWebsite = opts.workspaceWebsite ?? "";
+  const logoUrl = opts.logoUrl;
+  const address = opts.physicalAddress;
+  const socials = opts.socialLinks ?? {};
 
+  // Header — logo image if configured, otherwise the workspace wordmark
+  // with an accent-colored underline. Silicon-Valley-style clean.
   const defaultHeader = wsName
-    ? `<div style="border-bottom: 2px solid ${accent}; padding: 12px 0 16px; margin-bottom: 24px;"><div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: ${accent}; font-weight: 600;">${wsName}</div></div>`
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: 100%; margin-bottom: 32px;">
+         <tr>
+           <td style="padding-bottom: 24px; border-bottom: 1px solid #e5e7eb;">
+             ${
+               logoUrl
+                 ? `<img src="${logoUrl}" alt="${wsName}" style="height: 36px; display: block; border: 0;" />`
+                 : `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; color: ${accent};">${wsName}</div>`
+             }
+           </td>
+         </tr>
+       </table>`
+    : "";
+
+  // Footer — signature + workspace metadata + unsubscribe + social row
+  const socialLinksList: string[] = [];
+  if (socials.twitter) socialLinksList.push(`<a href="${socials.twitter}" style="color:${accent};text-decoration:none;margin-right:12px;">Twitter</a>`);
+  if (socials.linkedin) socialLinksList.push(`<a href="${socials.linkedin}" style="color:${accent};text-decoration:none;margin-right:12px;">LinkedIn</a>`);
+  if (socials.instagram) socialLinksList.push(`<a href="${socials.instagram}" style="color:${accent};text-decoration:none;margin-right:12px;">Instagram</a>`);
+  if (socials.facebook) socialLinksList.push(`<a href="${socials.facebook}" style="color:${accent};text-decoration:none;margin-right:12px;">Facebook</a>`);
+  const socialsHtml = socialLinksList.length > 0
+    ? `<div style="margin-top: 12px; font-size: 12px;">${socialLinksList.join("")}</div>`
     : "";
 
   const defaultFooter = wsName
-    ? `<div style="border-top: 1px solid #e5e7eb; margin-top: 32px; padding-top: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; color: #6b7280; line-height: 1.5;"><p style="margin: 0 0 4px;">${wsName}${wsWebsite ? ` · <a href="${wsWebsite}" style="color: ${accent}; text-decoration: none;">${wsWebsite.replace(/^https?:\/\//, "")}</a>` : ""}</p><p style="margin: 0; color: #9ca3af;">Sent from Atlas · reply to unsubscribe.</p></div>`
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: 100%; margin-top: 40px; border-top: 1px solid #e5e7eb;">
+         <tr>
+           <td style="padding-top: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; line-height: 1.6; color: #6b7280;">
+             ${opts.ownerName ? `<div style="font-weight: 600; color: #374151; margin-bottom: 2px;">${opts.ownerName}</div>` : ""}
+             <div style="margin-bottom: 8px;">${wsName}${wsWebsite ? ` · <a href="${wsWebsite}" style="color: ${accent}; text-decoration: none;">${wsWebsite.replace(/^https?:\/\//, "")}</a>` : ""}</div>
+             ${address ? `<div style="color: #9ca3af; margin-bottom: 8px;">${address}</div>` : ""}
+             ${socialsHtml}
+             <div style="color: #9ca3af; margin-top: 12px; font-size: 11px;">Reply to this email to unsubscribe · Sent via Atlas</div>
+           </td>
+         </tr>
+       </table>`
     : "";
 
   const header =
@@ -73,7 +117,7 @@ function wrapInChrome(
 
   if (/^\s*<!DOCTYPE|^\s*<html/i.test(bodyHtml)) return bodyHtml;
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin: 0; padding: 24px; background: #ffffff;"><div style="max-width: 640px; margin: 0 auto;">${header}${bodyHtml}${footer}</div></body></html>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin: 0; padding: 32px 16px; background: #f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;"><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 8px; overflow: hidden;"><tr><td style="padding: 40px 40px 32px 40px;">${header}${bodyHtml}${footer}</td></tr></table></body></html>`;
 }
 
 interface SendResult {
@@ -197,6 +241,10 @@ export const sendNew = action({
       accent: setup.workspace?.emailAccentColor,
       headerHtml: setup.workspace?.emailHeaderHtml,
       footerHtml: setup.workspace?.emailFooterHtml,
+      logoUrl: setup.workspace?.emailLogoUrl,
+      physicalAddress: setup.workspace?.emailPhysicalAddress,
+      socialLinks: setup.workspace?.emailSocialLinks,
+      ownerName: setup.owner?.name,
     });
 
     let result: SendResult = { status: "queued" };
@@ -292,6 +340,10 @@ export const sendReply = action({
       accent: setup.workspace?.emailAccentColor,
       headerHtml: setup.workspace?.emailHeaderHtml,
       footerHtml: setup.workspace?.emailFooterHtml,
+      logoUrl: setup.workspace?.emailLogoUrl,
+      physicalAddress: setup.workspace?.emailPhysicalAddress,
+      socialLinks: setup.workspace?.emailSocialLinks,
+      ownerName: setup.owner?.name,
     });
 
     let result: SendResult = { status: "queued" };
