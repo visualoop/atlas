@@ -58,7 +58,7 @@ export interface ModelMeta {
   goodFor: TaskCategory[];
   /** True if the workspace needs to have set up a key for this provider. */
   requiresProviderId: ProviderId;
-  /** Optional: openrouter model routing prefix (e.g. "anthropic/claude-3.5-sonnet"). */
+  /** Optional: openrouter model routing prefix (e.g. "anthropic/claude-sonnet-4.5"). */
   openrouterModel?: string;
 }
 
@@ -311,7 +311,7 @@ export const MODEL_CATALOG: ModelMeta[] = [
   {
     provider: "openrouter",
     requiresProviderId: "openrouter",
-    model: "anthropic/claude-3.5-sonnet",
+    model: "anthropic/claude-sonnet-4.5",
     family: "claude-sonnet",
     contextWindow: 200_000,
     supportsTools: true,
@@ -326,7 +326,7 @@ export const MODEL_CATALOG: ModelMeta[] = [
   {
     provider: "openrouter",
     requiresProviderId: "openrouter",
-    model: "anthropic/claude-3.5-haiku",
+    model: "anthropic/claude-haiku-4.5",
     family: "claude-haiku",
     contextWindow: 200_000,
     supportsTools: true,
@@ -341,7 +341,7 @@ export const MODEL_CATALOG: ModelMeta[] = [
   {
     provider: "openrouter",
     requiresProviderId: "openrouter",
-    model: "google/gemini-2.0-flash-exp:free",
+    model: "google/gemini-2.5-flash-lite",
     family: "gemini-flash",
     contextWindow: 1_048_576,
     supportsTools: true,
