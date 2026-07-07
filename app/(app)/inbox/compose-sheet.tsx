@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useQuery, useAction } from "convex/react";
+import { useState, useMemo, useEffect } from "react";
+import { useQuery, useAction, useMutation } from "convex/react";
 import { X, Send, Loader2, Sparkles, RefreshCw, Scissors, Plus, Shuffle } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Id, Doc } from "@/convex/_generated/dataModel";
@@ -254,10 +254,29 @@ function RecipientField({
   onInputChange: (v: string) => void;
 }) {
   const search = inputValue.trim();
-  const suggestions = useQuery(
-    api.contacts.list,
-    search.length >= 2 ? { search, limit: 6 } : "skip",
-  );
+  const [focused, setFocused] = useState(false);
+  // Always fetch the workspace's contacts so we can show recent
+  // suggestions on focus + filter client-side by any substring
+  // (name, email, phone, company). The server search index only
+  // covers firstName which is too narrow for a compose field.
+  const allContacts = useQuery(api.contacts.list, { limit: 100 });
+  const suggestions = useMemo(() => {
+    if (!allContacts) return [];
+    const q = search.toLowerCase();
+    const withEmail = allContacts.filter((c) => c.email);
+    if (q.length === 0) return withEmail.slice(0, 6);
+    return withEmail
+      .filter((c) => {
+        const full = `${c.firstName} ${c.lastName ?? ""}`.toLowerCase();
+        return (
+          full.includes(q) ||
+          (c.email?.toLowerCase().includes(q) ?? false) ||
+          (c.phone?.toLowerCase().includes(q) ?? false)
+        );
+      })
+      .slice(0, 6);
+  }, [allContacts, search]);
+  const showSuggestions = (focused || search.length > 0) && suggestions.length > 0;
 
   function commit(email: string) {
     const clean = email.trim().toLowerCase();
@@ -289,6 +308,7 @@ function RecipientField({
         <input
           value={inputValue}
           onChange={(e) => onInputChange(e.target.value)}
+          onFocus={() => setFocused(true)}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === "," || e.key === " ") {
               e.preventDefault();
@@ -298,13 +318,15 @@ function RecipientField({
             }
           }}
           onBlur={() => {
+            // Delay so clicks on suggestion buttons register first
+            setTimeout(() => setFocused(false), 150);
             if (isValidEmail(inputValue.trim())) commit(inputValue);
           }}
           className="flex-1 min-w-[120px] h-7 text-sm bg-transparent focus:outline-none"
           placeholder={value.length === 0 ? "Add recipient email…" : ""}
         />
       </div>
-      {suggestions && suggestions.length > 0 && (
+      {showSuggestions && (
         <ul className="mt-1 border border-border bg-background max-h-40 overflow-y-auto text-sm">
           {suggestions
             .filter((c) => c.email && !value.includes(c.email.toLowerCase()))
@@ -312,6 +334,7 @@ function RecipientField({
               <li key={c._id}>
                 <button
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => c.email && commit(c.email)}
                   className="w-full text-left px-3 py-2 hover:bg-muted flex items-baseline justify-between gap-3"
                 >
@@ -552,8 +575,22 @@ function TemplatePickerSidebar({
   onPick: (t: PickedTemplate) => void;
 }) {
   const templates = useQuery(api.emailTemplates.list, {});
+  const seedDefaults = useMutation(api.emailTemplates.seedDefaults);
   const [q, setQ] = useState("");
   const [category, setCategory] = useState<string | "all">("all");
+  const [seeding, setSeeding] = useState(false);
+
+  // Auto-seed defaults the first time a workspace lands on this
+  // sheet. list() runs from a query context which can't write, so we
+  // fire the mutation from the client once.
+  useEffect(() => {
+    if (templates && templates.length === 0 && !seeding) {
+      setSeeding(true);
+      void seedDefaults({}).catch(() => {
+        // ignore — user might have permission issues; silent
+      });
+    }
+  }, [templates, seeding, seedDefaults]);
 
   const categories = useMemo(() => {
     if (!templates) return [];
