@@ -447,49 +447,50 @@ function ComposeSheet({
 
 
 /* ============================================================ */
-/* ComposioConnectGrid — Connect LinkedIn/Facebook/Instagram    */
+/* ComposioConnectGrid — one card per supported social toolkit  */
 /* ============================================================ */
 
+interface SocialToolkitCard {
+  toolkitSlug: string;
+  toolkitLabel: string;
+  logo?: string;
+  authConfigId: string | null;
+  authConfigStatus: "ENABLED" | "DISABLED" | "MISSING";
+  connectedAccounts: Array<{ id: string; displayName: string; status: string }>;
+}
+
 function ComposioConnectGrid({ compact = false }: { compact?: boolean }) {
-  const authConfigs = useAction(api.socialComposio.listSocialAuthConfigs);
+  const listToolkits = useAction(api.socialComposio.listSocialAuthConfigs);
   const startConnect = useAction(api.socialComposio.startSocialConnect);
   const finalize = useAction(api.socialComposio.finalizeSocialConnect);
-  const [configs, setConfigs] = useState<
-    Array<{
-      id: string;
-      name: string;
-      toolkitSlug: string;
-      status: string;
-      logo?: string;
-    }> | null
-  >(null);
+  const [toolkits, setToolkits] = useState<SocialToolkitCard[] | null>(null);
   const [loading, setLoading] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busySlug, setBusySlug] = useState<string | null>(null);
   const [pending, setPending] = useState<{
     composioConnectionId: Id<"composioConnections">;
     toolkitSlug: string;
   } | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      try {
-        const r = await authConfigs({});
-        setConfigs(r);
-      } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : "Failed to load Composio auth configs",
-        );
-        setConfigs([]);
-      } finally {
-        setLoading(false);
-      }
+  async function reload() {
+    setLoading(true);
+    try {
+      const r = (await listToolkits({})) as SocialToolkitCard[];
+      setToolkits(r);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to load Composio toolkits",
+      );
+      setToolkits([]);
+    } finally {
+      setLoading(false);
     }
-    void load();
+  }
+
+  useEffect(() => {
+    void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Poll finalize while waiting for the user to complete auth in the new tab
   useEffect(() => {
     if (!pending) return;
     let cancelled = false;
@@ -502,6 +503,7 @@ function ComposioConnectGrid({ compact = false }: { compact?: boolean }) {
         if (r.status === "active") {
           toast.success(`${r.displayName ?? pending.toolkitSlug} connected.`);
           setPending(null);
+          void reload();
         } else if (r.status === "error") {
           toast.error(r.error ?? "Composio connection failed");
           setPending(null);
@@ -514,57 +516,32 @@ function ComposioConnectGrid({ compact = false }: { compact?: boolean }) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [pending, finalize]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending]);
 
-  async function connect(cfg: {
-    id: string;
-    toolkitSlug: string;
-    name: string;
-  }) {
-    setBusyId(cfg.id);
+  async function connect(t: SocialToolkitCard) {
+    if (!t.authConfigId) return;
+    setBusySlug(t.toolkitSlug);
     try {
       const r = await startConnect({
-        authConfigId: cfg.id,
-        toolkitSlug: cfg.toolkitSlug,
+        authConfigId: t.authConfigId,
+        toolkitSlug: t.toolkitSlug,
       });
       window.open(r.redirectUrl, "_blank", "noopener,noreferrer");
       setPending({
         composioConnectionId: r.composioConnectionId,
-        toolkitSlug: cfg.toolkitSlug,
+        toolkitSlug: t.toolkitSlug,
       });
-      toast.info("Authorize in the new tab. This page will refresh when done.");
+      toast.info("Authorize in the new tab. This page updates on completion.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Connect failed");
     } finally {
-      setBusyId(null);
+      setBusySlug(null);
     }
   }
 
-  if (loading || configs === null) {
+  if (loading || toolkits === null) {
     return <Skeleton className="h-24 w-full" />;
-  }
-
-  if (configs.length === 0) {
-    return (
-      <div className="border border-dashed border-border p-6 text-center space-y-3">
-        <p className="font-display italic text-xl text-muted-foreground">
-          No social auth configs on your Composio account.
-        </p>
-        <p className="text-sm text-muted-foreground max-w-prose mx-auto">
-          Go to{" "}
-          <a
-            href="https://dashboard.composio.dev/~/auth-configs"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary underline"
-          >
-            Composio → Auth Configs
-          </a>{" "}
-          and enable at least one of LinkedIn, Facebook, Instagram, or
-          Twitter. Then reload this page.
-        </p>
-      </div>
-    );
   }
 
   return (
@@ -583,41 +560,83 @@ function ComposioConnectGrid({ compact = false }: { compact?: boolean }) {
           </p>
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {configs.map((cfg) => (
-          <button
-            key={cfg.id}
-            onClick={() => connect(cfg)}
-            disabled={busyId === cfg.id || !cfg.status || cfg.status !== "ENABLED"}
-            className="border border-border p-4 text-left hover:border-foreground transition-colors disabled:opacity-50 flex items-start gap-3"
-          >
-            {cfg.logo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={cfg.logo} alt={cfg.toolkitSlug} className="size-8 rounded" />
-            ) : (
-              <div className="size-8 rounded bg-muted grid place-items-center">
-                <ExternalLink className="size-4 text-muted-foreground" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {toolkits.map((t) => {
+          const isMissing = t.authConfigStatus === "MISSING";
+          const isDisabled = t.authConfigStatus === "DISABLED";
+          const hasConnected = t.connectedAccounts.length > 0;
+          return (
+            <div
+              key={t.toolkitSlug}
+              className="border border-border p-4 flex flex-col gap-3"
+            >
+              <div className="flex items-start gap-3">
+                {t.logo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={t.logo} alt={t.toolkitSlug} className="size-8 rounded" />
+                ) : (
+                  <div className="size-8 rounded bg-muted grid place-items-center">
+                    <ExternalLink className="size-4 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium">{t.toolkitLabel}</p>
+                  {hasConnected ? (
+                    <p className="text-xs text-muted-foreground truncate">
+                      {t.connectedAccounts
+                        .map((a) => a.displayName)
+                        .join(" · ")}
+                    </p>
+                  ) : isMissing ? (
+                    <p className="text-xs text-muted-foreground">
+                      Not configured on Composio
+                    </p>
+                  ) : isDisabled ? (
+                    <p className="text-xs text-[var(--warning)]">
+                      Auth config disabled
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Ready to connect
+                    </p>
+                  )}
+                </div>
               </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="font-medium capitalize">{cfg.toolkitSlug}</p>
-              <p className="text-xs text-muted-foreground truncate">
-                {cfg.name}
-              </p>
-              <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-primary mt-2 inline-flex items-center gap-1">
-                {busyId === cfg.id ? (
-                  <Loader2 className="size-3 animate-spin" />
-                ) : null}
-                {busyId === cfg.id ? "Opening…" : "Connect"}
-              </p>
+
+              {isMissing ? (
+                <a
+                  href="https://dashboard.composio.dev/~/auth-configs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] font-mono uppercase tracking-[0.12em] text-primary hover:underline inline-flex items-center gap-1"
+                >
+                  Set up on Composio →
+                </a>
+              ) : (
+                <button
+                  onClick={() => connect(t)}
+                  disabled={busySlug === t.toolkitSlug || isDisabled}
+                  className={cn(
+                    "text-[10px] font-mono uppercase tracking-[0.12em] h-8 px-3 border transition-colors",
+                    hasConnected
+                      ? "border-border hover:border-foreground"
+                      : "border-primary/40 bg-primary/5 text-primary hover:bg-primary/10",
+                    "disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5",
+                  )}
+                >
+                  {busySlug === t.toolkitSlug ? (
+                    <Loader2 className="size-3 animate-spin" />
+                  ) : null}
+                  {hasConnected ? "Add another" : "Connect"}
+                </button>
+              )}
             </div>
-          </button>
-        ))}
+          );
+        })}
       </div>
       {pending && (
         <p className="text-xs text-muted-foreground italic mt-3">
-          Waiting for you to authorize {pending.toolkitSlug} in the new
-          tab. Once you finish, this page will update automatically.
+          Waiting for {pending.toolkitSlug} authorization in the new tab…
         </p>
       )}
     </div>

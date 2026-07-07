@@ -24,11 +24,25 @@ import type { Id } from "./_generated/dataModel";
 const COMPOSIO_BASE = "https://backend.composio.dev";
 const AUTH_CONFIGS_ENDPOINT = `${COMPOSIO_BASE}/api/v3.1/auth_configs`;
 const LINK_ENDPOINT = `${COMPOSIO_BASE}/api/v3.1/connected_accounts/link`;
+const CONNECTED_ACCOUNTS_ENDPOINT = `${COMPOSIO_BASE}/api/v3.1/connected_accounts`;
 const CONNECTED_ACCOUNT_ENDPOINT = (id: string) =>
   `${COMPOSIO_BASE}/api/v3.1/connected_accounts/${id}`;
+const TOOLKIT_ENDPOINT = (slug: string) =>
+  `${COMPOSIO_BASE}/api/v3.1/toolkits/${slug}`;
 
-// Social toolkits we expose in the Social page's Connect UI.
-const SOCIAL_TOOLKITS = ["linkedin", "facebook", "instagram", "twitter"] as const;
+// Social toolkits we expose in the Social page's Connect UI, in
+// display order. Even if the user hasn't set up an auth_config for
+// one, we still render a card so they know it's available.
+const SOCIAL_TOOLKITS_META: Array<{
+  slug: string;
+  label: string;
+  platform: "facebook_page" | "instagram_business" | "linkedin_personal";
+}> = [
+  { slug: "linkedin", label: "LinkedIn", platform: "linkedin_personal" },
+  { slug: "instagram", label: "Instagram", platform: "instagram_business" },
+  { slug: "facebook", label: "Facebook", platform: "facebook_page" },
+  { slug: "twitter", label: "Twitter", platform: "linkedin_personal" }, // unused but shown
+];
 
 // Map from Composio toolkit slug → Atlas socialConnections.platform enum.
 function mapToolkitToPlatform(
@@ -46,55 +60,114 @@ function mapToolkitToPlatform(
   }
 }
 
-interface SocialAuthConfig {
-  id: string;
-  name: string;
+interface SocialToolkit {
   toolkitSlug: string;
-  status: string;
+  toolkitLabel: string;
   logo?: string;
-  isEnabled: boolean;
+  authConfigId: string | null;
+  authConfigStatus: "ENABLED" | "DISABLED" | "MISSING";
+  connectedAccounts: Array<{
+    id: string;
+    displayName: string;
+    status: string;
+  }>;
 }
 
 /**
- * List the social-relevant auth configs from Composio for the current
- * workspace's API key. Powers the Social page's "Connect a platform"
- * chooser.
+ * List every social toolkit we support. Cards for platforms without
+ * an auth_config still render so the user knows they can set one up.
  */
 export const listSocialAuthConfigs = action({
   args: {},
-  handler: async (ctx): Promise<SocialAuthConfig[]> => {
+  handler: async (ctx): Promise<SocialToolkit[]> => {
     const setup = await ctx.runQuery(internal.composioHelpers.prepare, {});
-    if (!setup.apiKey) return [];
-
-    const res = await fetch(`${AUTH_CONFIGS_ENDPOINT}?limit=100`, {
-      headers: { "x-api-key": setup.apiKey },
-    });
-    if (!res.ok) return [];
-    const json = (await res.json()) as {
-      items?: Array<{
-        id: string;
-        name: string;
-        status: string;
-        toolkit?: { slug?: string; logo?: string };
-      }>;
-    };
-
-    return (json.items ?? [])
-      .filter((a) =>
-        SOCIAL_TOOLKITS.includes(
-          (a.toolkit?.slug ?? "") as (typeof SOCIAL_TOOLKITS)[number],
-        ),
-      )
-      .map((a) => ({
-        id: a.id,
-        name: a.name,
-        toolkitSlug: a.toolkit?.slug ?? "",
-        status: a.status,
-        logo: a.toolkit?.logo,
-        isEnabled: a.status === "ENABLED",
+    if (!setup.apiKey) {
+      return SOCIAL_TOOLKITS_META.map((t) => ({
+        toolkitSlug: t.slug,
+        toolkitLabel: t.label,
+        authConfigId: null,
+        authConfigStatus: "MISSING" as const,
+        connectedAccounts: [],
       }));
+    }
+
+    // Fetch auth configs + connected accounts in parallel
+    const [configsRes, accountsRes] = await Promise.all([
+      fetch(`${AUTH_CONFIGS_ENDPOINT}?limit=100`, {
+        headers: { "x-api-key": setup.apiKey },
+      }),
+      fetch(`${CONNECTED_ACCOUNTS_ENDPOINT}?limit=100`, {
+        headers: { "x-api-key": setup.apiKey },
+      }),
+    ]);
+
+    const configs = configsRes.ok
+      ? (
+          (await configsRes.json()) as {
+            items?: Array<{
+              id: string;
+              name: string;
+              status: string;
+              toolkit?: { slug?: string; logo?: string };
+            }>;
+          }
+        ).items ?? []
+      : [];
+    const accounts = accountsRes.ok
+      ? (
+          (await accountsRes.json()) as {
+            items?: Array<{
+              id: string;
+              word_id?: string;
+              alias?: string | null;
+              status: string;
+              toolkit?: { slug?: string };
+            }>;
+          }
+        ).items ?? []
+      : [];
+
+    return SOCIAL_TOOLKITS_META.map((t) => {
+      const cfg = configs.find((c) => c.toolkit?.slug === t.slug);
+      const accs = accounts.filter((a) => a.toolkit?.slug === t.slug);
+      return {
+        toolkitSlug: t.slug,
+        toolkitLabel: t.label,
+        logo: cfg?.toolkit?.logo,
+        authConfigId: cfg?.id ?? null,
+        authConfigStatus: !cfg
+          ? ("MISSING" as const)
+          : cfg.status === "ENABLED"
+            ? ("ENABLED" as const)
+            : ("DISABLED" as const),
+        connectedAccounts: accs.map((a) => ({
+          id: a.id,
+          displayName: prettifyAccountName(a.word_id, a.alias, t.slug),
+          status: a.status,
+        })),
+      };
+    });
   },
 });
+
+/**
+ * Turn Composio's raw `word_id` (like "instagram_jackal-pants") into
+ * something more human — "Jackal Pants (instagram)" — falling back
+ * to alias or toolkit slug when word_id isn't present.
+ */
+function prettifyAccountName(
+  wordId: string | undefined,
+  alias: string | null | undefined,
+  toolkitSlug: string,
+): string {
+  if (wordId && wordId.includes("_")) {
+    const parts = wordId.split("_");
+    const rest = parts.slice(1).join(" ").replace(/-/g, " ");
+    return rest.replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+  if (alias && !alias.match(/^\w+-\d+$/)) return alias;
+  return toolkitSlug.charAt(0).toUpperCase() + toolkitSlug.slice(1);
+}
 
 /**
  * Start the Composio Connect Link flow for one auth config. Returns
@@ -126,7 +199,6 @@ export const startSocialConnect = action({
       body: JSON.stringify({
         auth_config_id: args.authConfigId,
         user_id: setup.userId,
-        alias: `${args.toolkitSlug}-${Date.now()}`,
       }),
     });
     if (!res.ok) {
@@ -194,17 +266,10 @@ export const finalizeSocialConnect = action({
     }
     const account = (await res.json()) as {
       id?: string;
+      word_id?: string;
+      alias?: string | null;
       status?: string;
       toolkit?: { slug?: string };
-      user_id?: string;
-      alias?: string;
-      account?: {
-        id?: string;
-        display_name?: string;
-        name?: string;
-        email?: string;
-        picture?: string;
-      };
     };
 
     if (account.status !== "ACTIVE") {
@@ -217,14 +282,13 @@ export const finalizeSocialConnect = action({
       return { status: "error", error: `unsupported_toolkit_${toolkitSlug}` };
     }
 
-    const displayName =
-      account.account?.display_name ??
-      account.account?.name ??
-      account.account?.email ??
-      account.alias ??
-      toolkitSlug;
-    const externalId = account.account?.id ?? account.id ?? conn.composioConnectionId;
-    const avatarUrl = account.account?.picture;
+    const displayName = prettifyAccountName(
+      account.word_id,
+      account.alias,
+      toolkitSlug,
+    );
+    const externalId = account.id ?? conn.composioConnectionId;
+    const avatarUrl: string | undefined = undefined;
 
     const socialConnectionId = await ctx.runMutation(
       internal.socialComposioHelpers.activateAndLink,
