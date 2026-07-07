@@ -383,6 +383,11 @@ export async function POST(req: NextRequest) {
       tools,
       stopWhen: stepCountIs(10),
       temperature: 0.4,
+      // Cap output tokens so free-tier OpenRouter accounts don't hit
+      // 'requires more credits' errors and so we never burn a budget
+      // on a runaway reply. 2000 is enough for any conversational
+      // response + several tool call turns.
+      maxOutputTokens: 2000,
       onError({ error }) {
         console.error("[copilot] stream error", {
           message: error instanceof Error ? error.message : String(error),
