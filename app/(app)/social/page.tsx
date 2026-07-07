@@ -274,9 +274,68 @@ function ComposeSheet({
   const [scheduleTime, setScheduleTime] = useState("");
   const [saving, setSaving] = useState(false);
   const [aiDrafting, setAiDrafting] = useState(false);
+  const [mediaFiles, setMediaFiles] = useState<
+    Array<{ fileId: Id<"files">; url: string; filename: string }>
+  >([]);
+  const [uploading, setUploading] = useState(false);
   const createPost = useMutation(api.social.createPost);
   const publishNow = useMutation(api.social.publishPostNow);
   const draftSocial = useAction(api.publisherAI.draftSocialPost);
+  const generateUploadUrl = useMutation(api.files.generateUploadUrl);
+  const registerFile = useMutation(api.files.register);
+
+  async function handleUpload(list: FileList | null) {
+    if (!list || list.length === 0) return;
+    setUploading(true);
+    try {
+      const newFiles: Array<{ fileId: Id<"files">; url: string; filename: string }> = [];
+      for (const file of Array.from(list)) {
+        if (file.size > 50 * 1024 * 1024) {
+          toast.error(`${file.name} is over 50MB.`);
+          continue;
+        }
+        const uploadUrl = await generateUploadUrl({});
+        const res = await fetch(uploadUrl, {
+          method: "POST",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+        if (!res.ok) {
+          toast.error(`Upload failed for ${file.name}`);
+          continue;
+        }
+        const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+        const fileId = await registerFile({
+          storageId,
+          filename: file.name,
+          contentType: file.type,
+          sizeBytes: file.size,
+          relatedToType: "social_post",
+        });
+        newFiles.push({
+          fileId,
+          url: URL.createObjectURL(file),
+          filename: file.name,
+        });
+      }
+      setMediaFiles((prev) => [...prev, ...newFiles]);
+      if (newFiles.length > 0) {
+        toast.success(
+          newFiles.length === 1
+            ? "Image attached."
+            : `${newFiles.length} images attached.`,
+        );
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function removeMedia(fileId: Id<"files">) {
+    setMediaFiles((prev) => prev.filter((m) => m.fileId !== fileId));
+  }
 
   async function handleAIDraft() {
     if (selected.size === 0) {
@@ -328,6 +387,7 @@ function ComposeSheet({
         connectionIds: Array.from(selected),
         caption,
         scheduledFor,
+        mediaFileIds: mediaFiles.map((m) => m.fileId),
       });
       if (action === "publish") {
         await publishNow({ id });
@@ -435,6 +495,55 @@ function ComposeSheet({
               </span>
             </div>
           </label>
+
+          {/* Media */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
+                Media <span className="normal-case tracking-normal text-muted-foreground/60">— optional</span>
+              </span>
+              <label className="inline-flex items-center gap-1.5 h-8 px-3 border border-border hover:border-foreground text-[11px] font-mono uppercase tracking-[0.12em] cursor-pointer">
+                {uploading ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <ImageIcon className="size-3" />
+                )}
+                {uploading ? "Uploading…" : "Add image"}
+                <input
+                  type="file"
+                  accept="image/*,video/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => handleUpload(e.target.files)}
+                  disabled={uploading}
+                />
+              </label>
+            </div>
+            {mediaFiles.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {mediaFiles.map((m) => (
+                  <div
+                    key={m.fileId}
+                    className="relative aspect-square border border-border bg-muted overflow-hidden group"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={m.url}
+                      alt={m.filename}
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      onClick={() => removeMedia(m.fileId)}
+                      className="absolute top-1 right-1 size-6 grid place-items-center bg-background/80 hover:bg-destructive hover:text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition"
+                      title="Remove"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Schedule */}
           <label className="block space-y-1.5">
