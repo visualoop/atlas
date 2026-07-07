@@ -105,7 +105,7 @@ export function ComposeSheet({ open, onOpenChange, prefill }: ComposeSheetProps)
     <Sheet open={open} onOpenChange={(o) => !sending && onOpenChange(o)}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-none sm:w-[95vw] lg:w-[92vw] xl:w-[88vw] p-0 gap-0 flex flex-col"
+        className="p-0 gap-0 flex flex-col data-[side=right]:w-full data-[side=right]:sm:max-w-none data-[side=right]:sm:w-[95vw] data-[side=right]:lg:w-[92vw] data-[side=right]:xl:w-[88vw]"
       >
         <SheetHeader className="px-6 py-4 border-b space-y-1 shrink-0">
           <p className="text-[11px] font-mono uppercase tracking-[0.14em] text-muted-foreground">
