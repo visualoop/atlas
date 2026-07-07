@@ -95,6 +95,15 @@ export function pickModelChain(
     const q = QUALITY_RANK[b.qualityClass] - QUALITY_RANK[a.qualityClass];
     if (q !== 0) return q;
 
+    // OpenRouter routes through a paid gateway with per-request token
+    // caps that surprise users on free tiers. Prefer direct providers
+    // (Groq / Gemini / Cerebras / OpenAI / Anthropic) at the same
+    // quality tier so we don't hit "requires more credits" errors
+    // when a direct alternative exists.
+    const aOR = a.requiresProviderId === "openrouter" ? 1 : 0;
+    const bOR = b.requiresProviderId === "openrouter" ? 1 : 0;
+    if (aOR !== bOR) return aOR - bOR;
+
     // For speed-sensitive tasks, latency dominates cost
     if (speedMatters) {
       const l = LATENCY_RANK[b.latencyClass] - LATENCY_RANK[a.latencyClass];

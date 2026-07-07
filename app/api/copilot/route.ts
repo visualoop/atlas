@@ -385,10 +385,11 @@ export async function POST(req: NextRequest) {
       stopWhen: stepCountIs(10),
       temperature: 0.4,
       // Cap output tokens so free-tier OpenRouter accounts don't hit
-      // 'requires more credits' errors and so we never burn a budget
-      // on a runaway reply. 3000 fits several tool-call turns plus a
-      // full paragraph response on every provider tier we route to.
-      maxOutputTokens: 3000,
+      // 'requires more credits' errors. 1200 fits within the lowest
+      // free tier limits we've seen (1353 tokens on brand-new
+      // OpenRouter accounts) and is more than enough for a
+      // conversational reply plus a few tool-call turns.
+      maxOutputTokens: 1200,
       onError({ error }) {
         console.error("[copilot] stream error", {
           message: error instanceof Error ? error.message : String(error),

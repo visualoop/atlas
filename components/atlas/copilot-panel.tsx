@@ -227,6 +227,7 @@ export function CopilotPanel({ open, onOpenChange }: Props) {
 
   function newChat() {
     setMessages([]);
+    setInitialMessages([]);
     setInput("");
     setThreadId(crypto.randomUUID());
     if (typeof window !== "undefined") {
