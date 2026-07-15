@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import {
   Search, MapPin, Star, ExternalLink, Loader2, Phone, Globe,
-  Check, X, Trash2, ChevronRight, RefreshCw, Sparkles, Zap, Map as MapIcon,
+  Check, X, Trash2, ChevronRight, RefreshCw, Sparkles, Zap,
 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
@@ -13,9 +13,6 @@ import { formatDistanceToNowStrict } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import { MapBrowse } from "./map-browse";
-import { MapBrowseOsm } from "./map-browse-osm";
-import { MapBrowseHybrid } from "./map-browse-hybrid";
 import { OutreachDrafter } from "@/components/atlas/outreach-drafter";
 import { AgentPicksBar } from "@/components/atlas/agent-picks-bar";
 
@@ -60,108 +57,13 @@ const LOCATION_PRESETS = [
 export default function ProspectorPage() {
   const searches = useQuery(api.prospector.listSearches, {});
   const [activeSearchId, setActiveSearchId] = useState<Id<"prospectorSearches"> | null>(null);
-  const [mode, setMode] = useState<"search" | "map">("search");
-  const [mapProvider, setMapProvider] = useState<"google" | "osm" | "hybrid">("osm");
-  const mapsKey = useQuery(api.prospector.getMapsClientKey, {});
-  // Default to hybrid (Google Places data + OSM tiles) when a Places key is
-  // configured — best of both worlds without paying for Maps JS. Fall back
-  // to OSM-only when no key.
-  useEffect(() => {
-    if (mapsKey?.key) setMapProvider("hybrid");
-    else if (mapsKey && !mapsKey.key) setMapProvider("osm");
-  }, [mapsKey?.key]);
 
   // Auto-select the newest search
   const derivedActive = activeSearchId ?? searches?.[0]?._id ?? null;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 md:px-8 py-12">
-      <header className="space-y-2 mb-10">
-        <p className="eyebrow">Prospector</p>
-        <h1 className="text-4xl md:text-5xl tracking-tight">
-          Turn any query <em className="italic font-display">into leads</em>.
-        </h1>
-        <p className="text-sm text-muted-foreground max-w-prose">
-          Powered by Google Places. Search for businesses, then import the
-          ones you want into your CRM as companies. Rejected leads are
-          suppressed on future runs so you never see them twice.
-        </p>
-      </header>
-
-      {/* Mode tabs */}
-      <div className="flex items-center gap-1 mb-6 border-b border-border flex-wrap">
-        <TabButton active={mode === "search"} onClick={() => setMode("search")} icon={Search} label="Text search" />
-        <TabButton active={mode === "map"} onClick={() => setMode("map")} icon={MapIcon} label="Map browse" />
-        <span className="hidden sm:inline-block ml-auto text-[11px] text-muted-foreground italic self-center pb-2">
-          {mode === "search" ? "AI-driven query" : "Pan + pick yourself"}
-        </span>
-      </div>
-
-      {mode === "map" ? (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.12em] flex-wrap">
-            <span className="text-muted-foreground w-full sm:w-auto mb-1 sm:mb-0">Data source:</span>
-            <button
-              onClick={() => setMapProvider("hybrid")}
-              disabled={!mapsKey?.key}
-              className={cn(
-                "px-3 h-7 border transition-colors whitespace-nowrap",
-                mapProvider === "hybrid"
-                  ? "border-primary text-primary bg-primary/10"
-                  : "border-border text-muted-foreground hover:border-foreground",
-                !mapsKey?.key && "opacity-40 cursor-not-allowed",
-              )}
-            >
-              Places + OSM
-              {!mapsKey?.key && <span className="ml-1 text-[10px]">(add key)</span>}
-            </button>
-            <button
-              onClick={() => setMapProvider("google")}
-              disabled={!mapsKey?.key}
-              className={cn(
-                "px-3 h-7 border transition-colors whitespace-nowrap",
-                mapProvider === "google"
-                  ? "border-primary text-primary bg-primary/10"
-                  : "border-border text-muted-foreground hover:border-foreground",
-                !mapsKey?.key && "opacity-40 cursor-not-allowed",
-              )}
-              title="Requires Maps JavaScript API billing enabled"
-            >
-              Google Maps JS
-              {!mapsKey?.key && <span className="ml-1 text-[10px]">(add key)</span>}
-            </button>
-            <button
-              onClick={() => setMapProvider("osm")}
-              className={cn(
-                "px-3 h-7 border transition-colors whitespace-nowrap",
-                mapProvider === "osm"
-                  ? "border-primary text-primary bg-primary/10"
-                  : "border-border text-muted-foreground hover:border-foreground",
-              )}
-            >
-              OSM only (free)
-            </button>
-            <span className="hidden md:inline-block ml-auto text-muted-foreground italic normal-case tracking-normal">
-              {mapProvider === "hybrid"
-                ? "Google business data, OSM tiles — cheapest path"
-                : mapProvider === "google"
-                ? "Full Google Maps rendering, needs billing"
-                : "Free, community-mapped businesses"}
-            </span>
-          </div>
-          {mapProvider === "google" ? (
-            <MapBrowse />
-          ) : mapProvider === "hybrid" ? (
-            <MapBrowseHybrid />
-          ) : (
-            <MapBrowseOsm />
-          )}
-        </div>
-      ) : (
-        <>
-      <NewSearchForm
-        onCreated={(id) => setActiveSearchId(id)}
-      />
+    <>
+      <NewSearchForm onCreated={(id) => setActiveSearchId(id)} />
 
       <div className="mt-10 grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6 md:gap-8">
         {/* Left rail — search list */}
@@ -221,33 +123,7 @@ export default function ProspectorPage() {
           )}
         </div>
       </div>
-      </>
-      )}
-    </div>
-  );
-}
-
-function TabButton({
-  active, onClick, icon: Icon, label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "px-4 py-2 text-sm border-b-2 -mb-px transition-colors inline-flex items-center gap-1.5",
-        active
-          ? "text-foreground border-primary"
-          : "text-muted-foreground border-transparent hover:text-foreground hover:border-primary/40",
-      )}
-    >
-      <Icon className="size-3.5" />
-      {label}
-    </button>
+    </>
   );
 }
 
