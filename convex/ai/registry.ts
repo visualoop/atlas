@@ -180,6 +180,22 @@ export const AI_FEATURES: Record<string, AIFeature> = {
       FREE_ROUTER_SAFETY,
     ],
   },
+
+  /* Trend scan — needs internet lookup + JSON output */
+  trend_scan: {
+    id: "trend_scan",
+    label: "Scan the web for brand/topic mentions",
+    description:
+      "Uses a web-search-capable model (Groq compound-beta or Perplexity Sonar via OpenRouter). Returns JSON array of mentions.",
+    defaultChain: [
+      // Groq compound-beta has built-in web_search + code_interpreter
+      { provider: "groq", model: "compound-beta", temperature: 0.2, maxTokens: 3000 },
+      // Perplexity Sonar via OpenRouter for fallback
+      { provider: "openrouter", model: "perplexity/sonar", temperature: 0.2, maxTokens: 3000 },
+      { provider: "openrouter", model: "perplexity/sonar-pro", temperature: 0.2, maxTokens: 3000 },
+      FREE_ROUTER_SAFETY,
+    ],
+  },
 };
 
 export function getDefaultChain(featureId: string): ChainStep[] {

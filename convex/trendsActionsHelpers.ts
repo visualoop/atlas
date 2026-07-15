@@ -33,3 +33,27 @@ export const getGroqKey = internalQuery({
     }
   },
 });
+
+
+/**
+ * Resolve the org owner for a workspace so cron-driven actions can
+ * call runFeature with a valid actorId (needed for audit + org-key
+ * decryption).
+ */
+export const getOwnerActor = internalQuery({
+  args: { workspaceId: v.id("workspaces") },
+  handler: async (ctx, args) => {
+    const ws = await ctx.db.get(args.workspaceId);
+    if (!ws) return null;
+    const members = await ctx.db
+      .query("members")
+      .withIndex("by_org", (q) => q.eq("organizationId", ws.organizationId))
+      .collect();
+    const owner = members.find((m) => m.role === "owner") ?? members[0];
+    if (!owner) return null;
+    return {
+      organizationId: ws.organizationId,
+      userId: owner.userId,
+    };
+  },
+});

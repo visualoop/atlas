@@ -1,11 +1,13 @@
 "use node";
 
 /**
- * Trend intelligence — daily scan via Groq Compound.
+ * Trend intelligence — daily scan via the AI feature registry.
  *
- * Groq Compound (`compound-beta`) has web_search + code_interpreter
- * built into the model. We give it a prompt asking for recent mentions
- * of a brand/topic and it produces JSON with URLs + titles + excerpts.
+ * Uses the `trend_scan` feature which routes through:
+ *   1. Groq compound-beta (built-in web_search + code_interpreter)
+ *   2. Perplexity Sonar via OpenRouter (web-search-native)
+ *   3. Perplexity Sonar Pro via OpenRouter
+ *   4. OpenRouter/auto safety net
  *
  * Cron entry: crons.ts schedules `scanDueBrandWatches` every 6h.
  * Each call scans up to 10 watches; parses model output into
@@ -13,6 +15,7 @@
  */
 
 import { internalAction } from "./_generated/server";
+import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 
@@ -40,23 +43,25 @@ export const scanDueBrandWatches = internalAction({
 
     let totalFound = 0;
     for (const w of capped) {
-      // Resolve org-level Groq key using workspace's org owner
-      const key: string | null = await ctx.runQuery(
-        internal.trendsActionsHelpers.getGroqKey,
+      const actor = await ctx.runQuery(
+        internal.trendsActionsHelpers.getOwnerActor,
         { workspaceId: w.workspaceId },
       );
-      if (!key) {
-        // Mark scanned anyway so we don't spin the loop
+      if (!actor) {
+        // No owner resolved — mark scanned so we don't loop
         await ctx.runMutation(internal.trends.markWatchScanned, { id: w._id });
         continue;
       }
 
-      const mentions = await scanOneWatch({
-        apiKey: key,
+      const mentions = await scanOneWatch(ctx, {
+        workspaceId: w.workspaceId,
+        organizationId: actor.organizationId as Id<"organizations">,
+        actorId: actor.userId as Id<"users">,
         label: w.label,
         queries: w.queries,
         kind: w.kind,
         regionHint: w.regionHint,
+        watchId: w._id,
       });
 
       for (const m of mentions.slice(0, 25)) {
@@ -86,17 +91,23 @@ export const scanDueBrandWatches = internalAction({
 
 /* ------------------------------------------------------------------ */
 
-async function scanOneWatch(args: {
-  apiKey: string;
-  label: string;
-  queries: string[];
-  kind: string;
-  regionHint?: string;
-}): Promise<CompoundMention[]> {
+async function scanOneWatch(
+  ctx: ActionCtx,
+  args: {
+    workspaceId: Id<"workspaces">;
+    organizationId: Id<"organizations">;
+    actorId: Id<"users">;
+    label: string;
+    queries: string[];
+    kind: string;
+    regionHint?: string;
+    watchId: Id<"brandWatches">;
+  },
+): Promise<CompoundMention[]> {
   const region = args.regionHint ?? "global";
   const queryStr = args.queries.map((q) => `"${q}"`).join(" OR ");
 
-  const systemPrompt = `You are a brand intelligence agent. Use web_search to find recent public mentions of the target brand/topic.
+  const systemPrompt = `You are a brand intelligence agent. Use web_search (or your equivalent) to find recent public mentions of the target brand/topic.
 
 Return ONLY a valid JSON array (no prose, no code fence, no commentary) with objects of shape:
 {
@@ -116,26 +127,19 @@ If nothing new is found, return [].`;
   const userPrompt = `Search for recent (last 7 days) mentions of ${args.kind} "${args.label}" using these queries: ${queryStr}. Region hint: ${region}. Skip anything published by ${args.label}'s own site. Return up to 15 highest-relevance items.`;
 
   try {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${args.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "compound-beta",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.2,
-        max_tokens: 3000,
-      }),
+    const result = await ctx.runAction(internal.ai.runFeature, {
+      workspaceId: args.workspaceId,
+      organizationId: args.organizationId,
+      actorId: args.actorId,
+      featureId: "trend_scan",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      resourceType: "brand_watch",
+      resourceId: args.watchId,
     });
-    if (!res.ok) return [];
-    const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    const text = json.choices?.[0]?.message?.content ?? "";
-    return parseJsonArray(text);
+    return parseJsonArray(result.text);
   } catch {
     return [];
   }

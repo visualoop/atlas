@@ -25,7 +25,8 @@ export type TaskCategory =
   | "summarize" // Thread summary, doc critique, briefing
   | "long_context" // Analyze whole thread/doc, >32k input tokens
   | "extract_json" // Ranker, website enrich, structured output
-  | "reason_hard"; // Deal health, strategy, next-action recommendation
+  | "reason_hard" // Deal health, strategy, next-action recommendation
+  | "web_research"; // Trend scanning, brand watch — needs internet lookup
 
 /**
  * Latency + quality tiers — hand-classified per model, updated when
@@ -122,7 +123,7 @@ export const MODEL_CATALOG: ModelMeta[] = [
     qualityClass: "great",
     costPer1kIn: 0.00059,
     costPer1kOut: 0.00079,
-    goodFor: ["chat_agentic", "reason_hard"], // has built-in web search + code exec
+    goodFor: ["chat_agentic", "reason_hard", "web_research"], // has built-in web search + code exec
   },
 
   /* ============================================================ */
@@ -377,5 +378,41 @@ export const MODEL_CATALOG: ModelMeta[] = [
     costPer1kIn: 0.002,
     costPer1kOut: 0.006,
     goodFor: ["draft_long", "reason_hard", "chat_agentic"],
+  },
+
+  /* ============================================================ */
+  /* OpenRouter — Perplexity Sonar for web research fallback     */
+  /* When Groq's compound-beta is down or the key is missing,    */
+  /* Sonar keeps trends scanning alive via the OpenRouter key.   */
+  /* ============================================================ */
+  {
+    provider: "openrouter",
+    requiresProviderId: "openrouter",
+    model: "perplexity/sonar",
+    family: "perplexity-sonar",
+    contextWindow: 127_000,
+    supportsTools: false,
+    supportsJsonMode: false,
+    supportsSystemPrompt: true,
+    latencyClass: "medium",
+    qualityClass: "great",
+    costPer1kIn: 0.001,
+    costPer1kOut: 0.001,
+    goodFor: ["web_research"],
+  },
+  {
+    provider: "openrouter",
+    requiresProviderId: "openrouter",
+    model: "perplexity/sonar-pro",
+    family: "perplexity-sonar-pro",
+    contextWindow: 127_000,
+    supportsTools: false,
+    supportsJsonMode: false,
+    supportsSystemPrompt: true,
+    latencyClass: "medium",
+    qualityClass: "best",
+    costPer1kIn: 0.003,
+    costPer1kOut: 0.015,
+    goodFor: ["web_research"],
   },
 ];
