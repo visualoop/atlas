@@ -12,6 +12,9 @@ import { toast } from "sonner";
 import { formatDistanceToNowStrict } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import { OutreachDrafter } from "@/components/atlas/outreach-drafter";
 import { AgentPicksBar } from "@/components/atlas/agent-picks-bar";
@@ -192,17 +195,14 @@ function NewSearchForm({ onCreated }: { onCreated: (id: Id<"prospectorSearches">
             ))}
           </datalist>
         </div>
-        <button
+        <Button
           onClick={submit}
           disabled={busy || query.trim().length < 3}
-          className={cn(
-            "inline-flex items-center gap-2 h-10 px-6 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-            "disabled:opacity-50 disabled:cursor-not-allowed",
-          )}
+          className="h-10 px-6"
         >
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Search className="size-3.5" />}
           Search
-        </button>
+        </Button>
       </div>
       <div className="flex items-center justify-between gap-4">
         <p className="text-xs text-muted-foreground">
@@ -230,18 +230,16 @@ function NewSearchForm({ onCreated }: { onCreated: (id: Id<"prospectorSearches">
           Quick:
         </span>
         {QUICK_LOCATIONS.map((loc) => (
-          <button
+          <Button
             key={loc}
+            type="button"
+            variant={location === loc ? "default" : "outline"}
+            size="sm"
             onClick={() => setLocation(loc)}
-            className={cn(
-              "text-[10px] font-mono h-6 px-2 border transition-colors",
-              location === loc
-                ? "border-primary text-primary bg-primary/10"
-                : "border-border text-muted-foreground hover:border-foreground hover:text-foreground",
-            )}
+            className="h-6 px-2 text-[10px] font-mono"
           >
             {loc.replace(", Kenya", "").replace(", Nairobi", "")}
-          </button>
+          </Button>
         ))}
       </div>
     </div>
@@ -376,31 +374,42 @@ function ResultsPane({ searchId }: { searchId: Id<"prospectorSearches"> }) {
         </div>
         <div className="flex items-center gap-2">
           {search.nextPageToken && (
-            <button
+            <Button
               onClick={loadMore}
               disabled={runningMore}
-              className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors disabled:opacity-50"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs font-mono uppercase tracking-[0.12em]"
             >
               {runningMore ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
               More
-            </button>
+            </Button>
           )}
         </div>
       </header>
 
       <div className="flex items-center gap-1 text-xs flex-wrap">
-        {(["unimported", "imported", "all"] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={cn(
-              "px-3 h-7 uppercase tracking-[0.12em] font-mono transition-colors",
-              filter === f ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {f}
-          </button>
-        ))}
+        <ToggleGroup
+          value={[filter]}
+          onValueChange={(v) => {
+            const next = Array.isArray(v) ? v[v.length - 1] : v;
+            if (next) setFilter(next as typeof filter);
+          }}
+          variant="default"
+          size="sm"
+          className="gap-0"
+        >
+          {(["unimported", "imported", "all"] as const).map((f) => (
+            <ToggleGroupItem
+              key={f}
+              value={f}
+              aria-label={`Filter ${f}`}
+              className="px-3 h-7 uppercase tracking-[0.12em] font-mono text-xs"
+            >
+              {f}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
         {results && results.length > 0 && (
           <div className="ml-2 flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono">
             {unscoredCount > 0 && !rescoring ? (
@@ -416,11 +425,13 @@ function ResultsPane({ searchId }: { searchId: Id<"prospectorSearches"> }) {
                 <span>All {scoredCount} ranked · highest-fit first</span>
               </>
             ) : null}
-            <button
+            <Button
               onClick={handleRescore}
               disabled={rescoring}
               title="Re-score every result with AI"
-              className="ml-1 inline-flex items-center gap-1 h-6 px-1.5 border border-border hover:border-foreground text-[10px] uppercase tracking-[0.12em] disabled:opacity-50"
+              variant="outline"
+              size="sm"
+              className="ml-1 h-6 px-1.5 text-[10px] uppercase tracking-[0.12em]"
             >
               {rescoring ? (
                 <Loader2 className="size-2.5 animate-spin" />
@@ -428,17 +439,18 @@ function ResultsPane({ searchId }: { searchId: Id<"prospectorSearches"> }) {
                 <RefreshCw className="size-2.5" />
               )}
               Rescore
-            </button>
+            </Button>
           </div>
         )}
         {selected.size > 0 && (
-          <button
+          <Button
             onClick={importAll}
-            className="ml-auto inline-flex items-center gap-1.5 h-7 px-3 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+            size="sm"
+            className="ml-auto h-7 text-xs font-mono uppercase tracking-[0.12em]"
           >
             <Check className="size-3" />
             Import {selected.size}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -689,45 +701,51 @@ function ResultRow({
       </div>
       {!imported && (
         <div className="flex items-center gap-1 shrink-0">
-          <button
+          <Button
             onClick={handleScore}
             disabled={aiBusy !== null}
             title="AI fit score"
-            className="size-8 grid place-items-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors disabled:opacity-50"
+            variant="ghost"
+            size="icon-sm"
           >
             {aiBusy === "score" ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleEnrich}
             disabled={aiBusy !== null || !r.website}
             title="AI enrich from website"
-            className="size-8 grid place-items-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors disabled:opacity-30"
+            variant="ghost"
+            size="icon-sm"
           >
             {aiBusy === "enrich" ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onReject}
             title="Reject — suppress from future searches"
-            className="size-8 grid place-items-center text-muted-foreground hover:text-[var(--danger)] hover:bg-muted transition-colors"
+            variant="ghost"
+            size="icon-sm"
+            className="hover:text-[var(--danger)]"
           >
             <X className="size-3.5" />
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onImport}
             disabled={!reachable}
             title={reachable ? "Import as company" : "No contact info — cannot import"}
-            className="size-8 grid place-items-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors disabled:opacity-30 disabled:hover:text-muted-foreground disabled:hover:bg-transparent disabled:cursor-not-allowed"
+            variant="ghost"
+            size="icon-sm"
           >
             <Check className="size-3.5" />
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onDraft}
             disabled={!reachable}
             title={reachable ? "Draft outreach with AI" : "No contact info — cannot draft"}
-            className="size-8 grid place-items-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors disabled:opacity-30 disabled:hover:text-muted-foreground disabled:hover:bg-transparent disabled:cursor-not-allowed"
+            variant="ghost"
+            size="icon-sm"
           >
             <Sparkles className="size-3.5" />
-          </button>
+          </Button>
         </div>
       )}
     </div>
