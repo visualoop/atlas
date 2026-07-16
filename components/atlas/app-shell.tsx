@@ -66,6 +66,7 @@ import { CommandPalette } from "@/components/atlas/command-palette";
 import { CopilotPanel } from "@/components/atlas/copilot-panel";
 import { AppShellSkeleton } from "@/components/atlas/app-shell-skeleton";
 import { NotificationSubscriber } from "@/components/atlas/notification-subscriber";
+import { AtlasMark } from "@/components/atlas/atlas-mark";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
@@ -365,10 +366,8 @@ function AtlasSidebar({
           <DropdownMenuTrigger
             className="w-full flex items-center gap-2 p-2 hover:bg-sidebar-accent transition-colors text-left group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-1.5"
           >
-            <div className="flex aspect-square size-8 items-center justify-center bg-primary text-primary-foreground shrink-0">
-              <span className="font-display italic text-lg leading-none">
-                {activeOrg.name[0].toUpperCase()}
-              </span>
+            <div className="grid aspect-square size-8 place-items-center rounded-lg bg-primary/12 text-primary shrink-0 ring-1 ring-primary/20">
+              <AtlasMark className="size-5" />
             </div>
             <div className="grid flex-1 text-left leading-tight min-w-0 group-data-[collapsible=icon]:hidden">
               <span className="truncate text-sm font-medium">{activeOrg.name}</span>

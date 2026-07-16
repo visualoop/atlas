@@ -14,7 +14,7 @@ export default function LoginPage() {
           className="absolute inset-0"
           style={{
             background:
-              "radial-gradient(120% 90% at 78% 8%, oklch(0.22 0.03 275) 0%, oklch(0.15 0.015 275) 42%, oklch(0.11 0.008 60) 100%)",
+              "radial-gradient(120% 90% at 78% 8%, oklch(0.21 0.035 45) 0%, oklch(0.15 0.02 42) 42%, oklch(0.11 0.006 60) 100%)",
           }}
         />
         {/* Topographic contour rings — cartographic texture, not a blur blob */}

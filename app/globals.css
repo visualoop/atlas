@@ -6,10 +6,10 @@
  * Defined per plan/04-ui-direction.md and plan/17-theme-and-shadcn.md.
  *
  * Dark is the default surface. Light is reserved for documents (PDF preview,
- * print). Primary accent is deep emerald #059669 — growth, prosperity —
- * paired with gold #D4A017 for milestones and wins. Used ≤ 4× per viewport.
- * Emerald signals forward motion; gold signals achievement. This mapping
- * intentionally leaves red for danger, amber for warning, sky for info.
+ * print). Primary accent is burnt sienna / terracotta — a warm reddish-orange
+ * on deep ink — paired with gold for milestones and wins. Used ≤ 4× per
+ * viewport. Terracotta signals forward motion; gold signals achievement. This
+ * mapping intentionally leaves red for danger, amber for warning, sky for info.
  */
 
 @custom-variant dark (&:is(.dark *));
@@ -97,11 +97,11 @@
   --dur-drawer: 300ms;
 
   /* Radii — soft, modern. */
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
-  --radius: 8px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius: 10px;
 }
 
 /* === Dark mode (DEFAULT for Atlas) === */
@@ -114,9 +114,9 @@
   --popover: oklch(0.22 0.005 60);
   --popover-foreground: oklch(0.94 0.005 80);
 
-  /* Atlas accent — indigo/violet, modern SaaS. Used ≤ 4× per viewport */
-  --primary: oklch(0.58 0.19 280);
-  --primary-foreground: oklch(0.98 0.005 280);
+  /* Atlas accent — burnt sienna / terracotta, warm reddish-orange. ≤ 4× per viewport */
+  --primary: oklch(0.64 0.185 42);
+  --primary-foreground: oklch(0.99 0.01 60);
 
   --secondary: oklch(0.22 0.005 60);
   --secondary-foreground: oklch(0.94 0.005 80);
@@ -125,8 +125,8 @@
   --muted-foreground: oklch(0.74 0.01 80);
   --text-muted: oklch(0.50 0.01 80);
 
-  --accent: oklch(0.58 0.19 280);
-  --accent-foreground: oklch(0.98 0.005 280);
+  --accent: oklch(0.64 0.185 42);
+  --accent-foreground: oklch(0.99 0.01 60);
 
   --destructive: oklch(0.60 0.18 25);
   --destructive-foreground: oklch(0.94 0.005 80);
@@ -140,17 +140,17 @@
   --border: oklch(0.28 0.005 60);
   --border-strong: oklch(0.36 0.005 60);
   --input: oklch(0.28 0.005 60);
-  --ring: oklch(0.58 0.19 280);
+  --ring: oklch(0.64 0.185 42);
 
   /* Sidebar */
   --sidebar: oklch(0.13 0.005 60);
   --sidebar-foreground: oklch(0.94 0.005 80);
-  --sidebar-primary: oklch(0.58 0.19 280);
-  --sidebar-primary-foreground: oklch(0.98 0.005 280);
+  --sidebar-primary: oklch(0.64 0.185 42);
+  --sidebar-primary-foreground: oklch(0.99 0.01 60);
   --sidebar-accent: oklch(0.22 0.005 60);
   --sidebar-accent-foreground: oklch(0.94 0.005 80);
   --sidebar-border: oklch(0.28 0.005 60);
-  --sidebar-ring: oklch(0.58 0.19 280);
+  --sidebar-ring: oklch(0.64 0.185 42);
 }
 
 /* === Light mode (for documents only) === */
@@ -162,8 +162,8 @@
   --popover: oklch(0.97 0.005 80);
   --popover-foreground: oklch(0.13 0.005 60);
 
-  --primary: oklch(0.52 0.19 280);
-  --primary-foreground: oklch(0.98 0.005 280);
+  --primary: oklch(0.55 0.19 42);
+  --primary-foreground: oklch(0.99 0.01 60);
 
   --secondary: oklch(0.91 0.01 80);
   --secondary-foreground: oklch(0.13 0.005 60);
@@ -172,8 +172,8 @@
   --muted-foreground: oklch(0.22 0.005 60);
   --text-muted: oklch(0.50 0.01 80);
 
-  --accent: oklch(0.52 0.19 280);
-  --accent-foreground: oklch(0.98 0.005 280);
+  --accent: oklch(0.55 0.19 42);
+  --accent-foreground: oklch(0.99 0.01 60);
 
   --destructive: oklch(0.60 0.18 25);
   --destructive-foreground: oklch(0.95 0.01 80);
@@ -186,16 +186,16 @@
   --border: oklch(0.79 0.01 80);
   --border-strong: oklch(0.66 0.01 80);
   --input: oklch(0.79 0.01 80);
-  --ring: oklch(0.52 0.19 280);
+  --ring: oklch(0.55 0.19 42);
 
   --sidebar: oklch(0.95 0.01 80);
   --sidebar-foreground: oklch(0.13 0.005 60);
-  --sidebar-primary: oklch(0.52 0.19 280);
+  --sidebar-primary: oklch(0.55 0.19 42);
   --sidebar-primary-foreground: oklch(0.97 0.005 80);
   --sidebar-accent: oklch(0.91 0.01 80);
   --sidebar-accent-foreground: oklch(0.13 0.005 60);
   --sidebar-border: oklch(0.79 0.01 80);
-  --sidebar-ring: oklch(0.52 0.19 280);
+  --sidebar-ring: oklch(0.55 0.19 42);
 }
 
 @layer base {
