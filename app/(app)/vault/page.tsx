@@ -10,6 +10,12 @@ import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { NoteEditor } from "@/components/atlas/note-editor";
 import { formatDistanceToNowStrict } from "date-fns";
@@ -56,33 +62,35 @@ export default function VaultPage() {
         <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-6 md:gap-8">
           {/* Left rail — kind filter */}
           <aside className="space-y-1">
-            <button
+            <Button
+              variant="ghost"
               onClick={() => setKind(null)}
               className={cn(
-                "w-full text-left px-3 h-8 text-sm transition-colors",
+                "w-full justify-start h-8 text-sm font-normal",
                 kind === null
                   ? "bg-muted/60 text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
+                  : "text-muted-foreground",
               )}
             >
               All
-            </button>
+            </Button>
             {KINDS.map((k) => {
               const Icon = k.icon;
               return (
-                <button
+                <Button
                   key={k.value}
+                  variant="ghost"
                   onClick={() => setKind(k.value)}
                   className={cn(
-                    "w-full text-left px-3 h-8 text-sm flex items-center gap-2 transition-colors",
+                    "w-full justify-start h-8 text-sm font-normal",
                     kind === k.value
                       ? "bg-muted/60 text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
+                      : "text-muted-foreground",
                   )}
                 >
                   <Icon className="size-3.5" />
                   {k.label}
-                </button>
+                </Button>
               );
             })}
           </aside>
@@ -91,20 +99,21 @@ export default function VaultPage() {
           <main className="space-y-4 min-w-0">
             <div className="flex items-center gap-3">
               <div className="relative flex-1">
-                <Search className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
+                <Search className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 z-10" />
+                <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search content…"
-                  className="w-full h-10 pl-10 pr-3 bg-transparent border border-border focus:border-foreground focus:outline-none text-sm"
+                  className="pl-10"
                 />
               </div>
-              <button
+              <Button
                 onClick={() => setNewOpen(true)}
-                className="inline-flex items-center gap-1.5 h-10 px-4 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+                size="lg"
+                className="text-xs font-mono uppercase tracking-[0.12em]"
               >
                 <Plus className="size-3.5" /> New
-              </button>
+              </Button>
             </div>
 
             {assets === undefined ? (
@@ -213,12 +222,13 @@ function EmptyVault({ kind, onCreate }: { kind: Kind | null; onCreate: () => voi
         Add your first {label} — a piece of reference material that helps you
         close faster next time.
       </p>
-      <button
+      <Button
         onClick={onCreate}
-        className="font-mono uppercase tracking-[0.12em] text-xs px-6 py-3 bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+        size="lg"
+        className="font-mono uppercase tracking-[0.12em] text-xs"
       >
-        + New {label}
-      </button>
+        <Plus className="size-3.5" /> New {label}
+      </Button>
     </div>
   );
 }
@@ -273,29 +283,29 @@ function NewAssetDialog({ onClose }: { onClose: () => void }) {
         <div className="px-6 py-4 space-y-3">
           <div className="flex flex-wrap gap-1">
             {KINDS.map((k) => (
-              <button
+              <Button
                 key={k.value}
+                type="button"
+                variant={kind === k.value ? "default" : "outline"}
+                size="sm"
                 onClick={() => setKind(k.value)}
                 className={cn(
-                  "h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] transition-colors flex items-center gap-1.5",
-                  kind === k.value
-                    ? "bg-foreground text-background"
-                    : "border border-border text-muted-foreground hover:text-foreground",
+                  "h-8 text-xs font-mono uppercase tracking-[0.12em]",
+                  kind === k.value && "bg-foreground text-background hover:bg-foreground/90",
                 )}
               >
                 <k.icon className="size-3" />
                 {k.label}
-              </button>
+              </Button>
             ))}
           </div>
 
           <label className="block space-y-1.5">
             <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Title</span>
-            <input
+            <Input
               autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
               placeholder="e.g. Java House objection: 'Too expensive'"
             />
           </label>
@@ -313,47 +323,48 @@ function NewAssetDialog({ onClose }: { onClose: () => void }) {
           <div className="grid grid-cols-2 gap-3">
             <label className="block space-y-1.5">
               <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Product</span>
-              <select
-                value={productId}
-                onChange={(e) => setProductId(e.target.value)}
-                className="w-full h-9 px-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
+              <Select
+                value={productId || "__any__"}
+                onValueChange={(v) => setProductId(v && v !== "__any__" ? v : "")}
               >
-                <option value="">— Any —</option>
-                <option value="omnix">Omnix</option>
-                <option value="blyss_studio">Blyss Studio</option>
-                <option value="marketplace">Marketplace</option>
-              </select>
+                <SelectTrigger size="sm" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__any__">— Any —</SelectItem>
+                  <SelectItem value="omnix">Omnix</SelectItem>
+                  <SelectItem value="blyss_studio">Blyss Studio</SelectItem>
+                  <SelectItem value="marketplace">Marketplace</SelectItem>
+                </SelectContent>
+              </Select>
             </label>
             <label className="block space-y-1.5">
               <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Tags</span>
-              <input
+              <Input
                 value={tagsRaw}
                 onChange={(e) => setTagsRaw(e.target.value)}
                 placeholder="pricing, discovery"
-                className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
               />
             </label>
           </div>
         </div>
         <footer className="border-t border-border px-6 py-3 flex items-center gap-2 justify-end sticky bottom-0 bg-background">
-          <button
+          <Button
+            variant="ghost"
             onClick={() => !saving && onClose()}
             disabled={saving}
-            className="inline-flex items-center h-8 px-4 text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground transition-colors"
+            className="h-8 text-xs font-mono uppercase tracking-[0.12em]"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={submit}
             disabled={saving}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-8 px-5 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
-            )}
+            className="h-8 px-5 text-xs font-mono uppercase tracking-[0.12em]"
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
             Save
-          </button>
+          </Button>
         </footer>
       </div>
     </div>
@@ -402,17 +413,18 @@ function AssetSheet({
             </header>
 
             <div className="flex items-center gap-2 flex-wrap">
-              <button
+              <Button
                 onClick={async () => {
                   await trackUse({ id: assetId });
                   navigator.clipboard.writeText(asset.bodyText);
                   toast.success("Copied to clipboard.");
                 }}
-                className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+                size="sm"
+                className="h-8 text-xs font-mono uppercase tracking-[0.12em]"
               >
                 <Sparkles className="size-3.5" />
                 Use + copy
-              </button>
+              </Button>
               <span className="text-[10px] font-mono text-muted-foreground">
                 Used {asset.usageCount}× · Created {formatDistanceToNowStrict(new Date(asset._creationTime), { addSuffix: true })}
               </span>
@@ -440,17 +452,18 @@ function AssetSheet({
             )}
 
             <div className="pt-4 border-t border-border">
-              <button
+              <Button
+                variant="link"
                 onClick={async () => {
                   if (!confirm("Archive this asset?")) return;
                   await archive({ id: assetId });
                   toast.success("Archived.");
                   onClose();
                 }}
-                className="text-xs font-mono uppercase tracking-[0.12em] text-[var(--danger)] hover:underline"
+                className="h-auto px-0 text-xs font-mono uppercase tracking-[0.12em] text-[var(--danger)]"
               >
                 Archive
-              </button>
+              </Button>
             </div>
           </div>
         )}
