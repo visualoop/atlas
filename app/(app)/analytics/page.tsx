@@ -10,6 +10,11 @@ import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 export default function AnalyticsPage() {
@@ -197,12 +202,13 @@ export default function AnalyticsPage() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <p className="eyebrow">UTM links</p>
-              <button
+              <Button
+                variant="link"
                 onClick={() => setNewUtmOpen(true)}
-                className="text-xs font-mono uppercase tracking-[0.12em] text-primary hover:underline inline-flex items-center gap-1"
+                className="h-auto px-0 text-xs font-mono uppercase tracking-[0.12em]"
               >
                 <Plus className="size-3.5" /> New
-              </button>
+              </Button>
             </div>
             {utmLinks === undefined ? (
               <Skeleton className="h-40 w-full" />
@@ -219,12 +225,13 @@ export default function AnalyticsPage() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <p className="eyebrow">Fixed expenses</p>
-              <button
+              <Button
+                variant="link"
                 onClick={() => setNewExpenseOpen(true)}
-                className="text-xs font-mono uppercase tracking-[0.12em] text-primary hover:underline inline-flex items-center gap-1"
+                className="h-auto px-0 text-xs font-mono uppercase tracking-[0.12em]"
               >
                 <Plus className="size-3.5" /> New
-              </button>
+              </Button>
             </div>
             {expenses === undefined ? (
               <Skeleton className="h-40 w-full" />
@@ -381,17 +388,19 @@ function UtmRow({ link: u }: { link: Doc<"utmLinks"> }) {
         <code className="font-mono text-[11px] bg-muted px-2 py-0.5 flex-1 truncate">
           /go/{u.shortCode}
         </code>
-        <button
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="size-6"
           onClick={() => {
             navigator.clipboard.writeText(publicUrl);
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
             toast.success("Copied.");
           }}
-          className="size-6 grid place-items-center text-muted-foreground hover:text-foreground"
         >
           {copied ? <Check className="size-3 text-[var(--success)]" /> : <Copy className="size-3" />}
-        </button>
+        </Button>
       </div>
     </li>
   );
@@ -445,31 +454,31 @@ function NewUtmDialog({ onClose }: { onClose: () => void }) {
     <ModalShell title="New UTM link" onClose={onClose} saving={saving} onSubmit={submit} submitLabel="Create">
       <label className="block space-y-1.5">
         <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Label</span>
-        <input autoFocus value={label} onChange={(e) => setLabel(e.target.value)}
+        <Input autoFocus value={label} onChange={(e) => setLabel(e.target.value)}
           placeholder="Newsletter — Jan 30 broadcast"
-          className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none" />
+          />
       </label>
       <label className="block space-y-1.5">
         <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Destination URL</span>
-        <input value={destination} onChange={(e) => setDestination(e.target.value)}
+        <Input value={destination} onChange={(e) => setDestination(e.target.value)}
           placeholder="https://blyss.co.ke/omnix"
-          className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono" />
+          className="font-mono" />
       </label>
       <div className="grid grid-cols-3 gap-2">
         <label className="block space-y-1.5">
           <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Source</span>
-          <input value={utmSource} onChange={(e) => setUtmSource(e.target.value)} placeholder="newsletter"
-            className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono" />
+          <Input value={utmSource} onChange={(e) => setUtmSource(e.target.value)} placeholder="newsletter"
+            className="font-mono" />
         </label>
         <label className="block space-y-1.5">
           <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Medium</span>
-          <input value={utmMedium} onChange={(e) => setUtmMedium(e.target.value)} placeholder="email"
-            className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono" />
+          <Input value={utmMedium} onChange={(e) => setUtmMedium(e.target.value)} placeholder="email"
+            className="font-mono" />
         </label>
         <label className="block space-y-1.5">
           <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Campaign</span>
-          <input value={utmCampaign} onChange={(e) => setUtmCampaign(e.target.value)} placeholder="jan-launch"
-            className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono" />
+          <Input value={utmCampaign} onChange={(e) => setUtmCampaign(e.target.value)} placeholder="jan-launch"
+            className="font-mono" />
         </label>
       </div>
     </ModalShell>
@@ -513,50 +522,55 @@ function NewExpenseDialog({ onClose }: { onClose: () => void }) {
     <ModalShell title="New fixed expense" onClose={onClose} saving={saving} onSubmit={submit} submitLabel="Save">
       <label className="block space-y-1.5">
         <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Label</span>
-        <input autoFocus value={label} onChange={(e) => setLabel(e.target.value)}
+        <Input autoFocus value={label} onChange={(e) => setLabel(e.target.value)}
           placeholder="Office rent"
-          className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none" />
+          />
       </label>
       <div className="grid grid-cols-[1fr_100px] gap-2">
         <label className="block space-y-1.5">
           <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Amount</span>
-          <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0"
-            className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono num" />
+          <Input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0"
+            className="font-mono num" />
         </label>
         <label className="block space-y-1.5">
           <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Currency</span>
-          <select value={currency} onChange={(e) => setCurrency(e.target.value)}
-            className="w-full h-9 px-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none">
-            <option value="KES">KES</option>
-            <option value="USD">USD</option>
-            <option value="EUR">EUR</option>
-          </select>
+          <Select value={currency} onValueChange={(v) => v && setCurrency(v)}>
+            <SelectTrigger size="sm" className="h-9 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="KES">KES</SelectItem>
+              <SelectItem value="USD">USD</SelectItem>
+              <SelectItem value="EUR">EUR</SelectItem>
+            </SelectContent>
+          </Select>
         </label>
       </div>
       <label className="block space-y-1.5">
         <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Cadence</span>
         <div className="flex flex-wrap gap-1">
           {(["weekly", "monthly", "quarterly", "yearly", "one_time"] as const).map((c) => (
-            <button
+            <Button
               key={c}
+              type="button"
+              variant={cadence === c ? "default" : "outline"}
+              size="sm"
               onClick={() => setCadence(c)}
               className={cn(
-                "h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] transition-colors",
-                cadence === c
-                  ? "bg-foreground text-background"
-                  : "border border-border text-muted-foreground hover:text-foreground",
+                "h-8 text-xs font-mono uppercase tracking-[0.12em]",
+                cadence === c && "bg-foreground text-background hover:bg-foreground/90",
               )}
             >
               {c.replace("_", " ")}
-            </button>
+            </Button>
           ))}
         </div>
       </label>
       <label className="block space-y-1.5">
         <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Category</span>
-        <input value={category} onChange={(e) => setCategory(e.target.value)}
+        <Input value={category} onChange={(e) => setCategory(e.target.value)}
           placeholder="ops / infra / people"
-          className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none" />
+          />
       </label>
     </ModalShell>
   );
@@ -584,24 +598,22 @@ function ModalShell({
         </header>
         <div className="px-6 py-4 space-y-3">{children}</div>
         <footer className="border-t border-border px-6 py-3 flex items-center gap-2 justify-end">
-          <button
+          <Button
+            variant="ghost"
             onClick={onClose}
             disabled={saving}
-            className="inline-flex items-center h-8 px-4 text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground transition-colors"
+            className="h-8 text-xs font-mono uppercase tracking-[0.12em]"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onSubmit}
             disabled={saving}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-8 px-5 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
-            )}
+            className="h-8 px-5 text-xs font-mono uppercase tracking-[0.12em]"
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
             {submitLabel}
-          </button>
+          </Button>
         </footer>
       </div>
     </div>
@@ -706,14 +718,16 @@ function AnalyticsAISummary({
           <Sparkles className="size-3 text-primary" />
           AI · How the month is going
         </p>
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={refresh}
           disabled={loading || !kpis}
-          className="text-[11px] font-mono uppercase tracking-[0.14em] text-muted-foreground hover:text-foreground disabled:opacity-50 inline-flex items-center gap-1"
+          className="h-auto px-1.5 text-[11px] font-mono uppercase tracking-[0.14em] text-muted-foreground"
         >
           {loading ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
           {summary ? "Refresh" : "Summarise"}
-        </button>
+        </Button>
       </div>
       {summary === null ? (
         <p className="text-sm text-muted-foreground italic">
