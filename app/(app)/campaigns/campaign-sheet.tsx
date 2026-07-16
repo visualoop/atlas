@@ -11,6 +11,7 @@ import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 interface Props {
@@ -149,7 +150,7 @@ export function CampaignSheet({ campaignId, onClose }: Props) {
         {/* Actions */}
         <div className="flex items-center gap-2 flex-wrap">
           {campaign.status === "draft" && (
-            <button
+            <Button
               onClick={handleLaunch}
               disabled={busy || steps.length === 0 || campaign.recipientCount === 0}
               title={
@@ -157,32 +158,30 @@ export function CampaignSheet({ campaignId, onClose }: Props) {
                   : campaign.recipientCount === 0 ? "Enroll audience first"
                     : "Launch"
               }
-              className={cn(
-                "inline-flex items-center gap-1.5 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-                "disabled:opacity-50 disabled:cursor-not-allowed",
-              )}
+              className="h-9 text-xs font-mono uppercase tracking-[0.12em]"
             >
               {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
               Launch
-            </button>
+            </Button>
           )}
           {isRunning && (
-            <button
+            <Button
+              variant="outline"
               onClick={handlePauseResume}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-[var(--warning)] hover:text-[var(--warning)] transition-colors"
+              className="h-9 text-xs font-mono uppercase tracking-[0.12em] hover:border-[var(--warning)] hover:text-[var(--warning)]"
             >
               <Pause className="size-3.5" /> Pause
-            </button>
+            </Button>
           )}
           {isPaused && (
-            <button
+            <Button
               onClick={handlePauseResume}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+              className="h-9 text-xs font-mono uppercase tracking-[0.12em]"
             >
               <Play className="size-3.5" /> Resume
-            </button>
+            </Button>
           )}
           <span className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
@@ -202,12 +201,13 @@ export function CampaignSheet({ campaignId, onClose }: Props) {
               <StepTemplatePicker onPick={handleAddStep} />
             )}
             {canEdit && campaign.channel === "whatsapp" && (
-              <button
+              <Button
+                variant="link"
                 onClick={() => handleAddStep()}
-                className="text-xs font-mono uppercase tracking-[0.12em] text-primary hover:underline inline-flex items-center gap-1"
+                className="h-auto px-0 text-xs font-mono uppercase tracking-[0.12em]"
               >
                 <Plus className="size-3.5" /> Add step
-              </button>
+              </Button>
             )}
           </div>
           {steps.length === 0 ? (
@@ -234,12 +234,13 @@ export function CampaignSheet({ campaignId, onClose }: Props) {
           <div className="flex items-center justify-between mb-2">
             <p className="eyebrow">Audience</p>
             {canEdit && (
-              <button
+              <Button
+                variant="link"
                 onClick={() => setAudienceOpen(!audienceOpen)}
-                className="text-xs font-mono uppercase tracking-[0.12em] text-primary hover:underline"
+                className="h-auto px-0 text-xs font-mono uppercase tracking-[0.12em]"
               >
                 {audienceOpen ? "Close" : "Enroll contacts"}
-              </button>
+              </Button>
             )}
           </div>
 
@@ -252,41 +253,40 @@ export function CampaignSheet({ campaignId, onClose }: Props) {
                 {LIFECYCLE_OPTIONS.map((stage) => {
                   const active = selectedStages.includes(stage);
                   return (
-                    <button
+                    <Button
                       key={stage}
+                      type="button"
+                      variant={active ? "default" : "outline"}
+                      size="sm"
                       onClick={() =>
                         setSelectedStages((prev) =>
                           prev.includes(stage) ? prev.filter((s) => s !== stage) : [...prev, stage],
                         )
                       }
-                      className={cn(
-                        "h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] transition-colors",
-                        active
-                          ? "bg-foreground text-background"
-                          : "border border-border text-muted-foreground hover:text-foreground",
-                      )}
+                      className="h-8 text-xs font-mono uppercase tracking-[0.12em]"
                     >
                       {stage}
-                    </button>
+                    </Button>
                   );
                 })}
               </div>
               <div className="flex items-center gap-2 pt-2">
-                <button
+                <Button
+                  variant="outline"
                   onClick={() => handleEnroll(true)}
                   disabled={busy}
-                  className="inline-flex items-center h-8 px-4 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors"
+                  className="h-8 text-xs font-mono uppercase tracking-[0.12em]"
                 >
                   Preview
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={() => handleEnroll(false)}
                   disabled={busy}
-                  className="inline-flex items-center gap-1.5 h-8 px-4 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+                  className="h-8 text-xs font-mono uppercase tracking-[0.12em]"
                 >
                   {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Users className="size-3.5" />}
                   Enroll
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -348,20 +348,24 @@ function StepRow({
         <span className="text-xs text-muted-foreground">
           {step.delayHours === 0 ? "Immediately" : `+${step.delayHours}h`}
         </span>
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => setExpanded((v) => !v)}
-          className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+          className="ml-auto h-auto px-1.5 text-xs text-muted-foreground"
         >
           {expanded ? "Collapse" : "Expand"}
-        </button>
+        </Button>
         {canEdit && (
-          <button
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="size-6 hover:text-[var(--danger)]"
             onClick={onRemove}
-            className="size-6 grid place-items-center text-muted-foreground hover:text-[var(--danger)]"
             title="Remove"
           >
             <Trash2 className="size-3" />
-          </button>
+          </Button>
         )}
       </div>
       {expanded && (
@@ -430,12 +434,13 @@ function StepTemplatePicker({
 
   return (
     <div className="relative">
-      <button
+      <Button
+        variant="link"
         onClick={() => setOpen((v) => !v)}
-        className="text-xs font-mono uppercase tracking-[0.12em] text-primary hover:underline inline-flex items-center gap-1"
+        className="h-auto px-0 text-xs font-mono uppercase tracking-[0.12em]"
       >
         <Plus className="size-3.5" /> Add step
-      </button>
+      </Button>
       {open && (
         <>
           <div
