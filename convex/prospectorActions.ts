@@ -367,15 +367,19 @@ export const searchNearby = action({
       workspaceId: setup.workspaceId,
     });
 
-    // Default to Legacy API (free-tier-friendly)
-    const useLegacy = args.useLegacy !== false;
+    // Prefer Places API (New) — it returns phone + website in ONE call
+    // via the field mask, exactly like Text search. We only stay on Legacy
+    // when explicitly forced, and fall back to it if the New API isn't
+    // enabled on this key (so results still render, just without contacts).
+    const forceLegacy = args.useLegacy === true;
 
-    if (useLegacy) {
+    // --- Legacy Nearby Search (no contact fields — phone/website absent) ---
+    const legacyNearby = async (): Promise<{ places: PlaceLike[]; error?: string }> => {
       const type = args.includedType ?? (args.category ? LEGACY_TYPE_MAP[args.category] : undefined);
       const params = new URLSearchParams({
         location: `${args.latitude},${args.longitude}`,
         radius: String(Math.min(Math.max(args.radiusMeters, 1), 50_000)),
-        key: setup.apiKey,
+        key: setup.apiKey!,
       });
       if (type) params.set("type", type);
       // Google Legacy Nearby Search's `keyword` matches business
@@ -404,89 +408,105 @@ export const searchNearby = action({
           ratingCount: p.user_ratings_total,
           businessStatus: p.business_status,
         }));
-        return { places };
+        return { places: filterAndDedupe(places) };
       } catch (err) {
         return { places: [], error: err instanceof Error ? err.message : "Network error" };
       }
-    }
+    };
 
-    // Fallback: Places API (New)
-    //   - If a keyword is provided, use `places:searchText` — the New
-    //     API's text search that combines free-text with location bias.
-    //   - Otherwise, use `places:searchNearby` — pure nearby by radius.
-    const kwNew = args.nameKeyword?.trim();
-    const includedTypes = args.includedType
-      ? [args.includedType]
-      : args.category
-      ? INCLUDED_TYPE_MAP[args.category]
-      : undefined;
+    // --- Places API (New): searchText when a keyword is present (returns
+    // full contact data), else searchNearby by radius. Same field mask +
+    // contact fields as Text search. ---
+    const newNearby = async (): Promise<{ places: PlaceLike[]; error?: string }> => {
+      const kwNew = args.nameKeyword?.trim();
+      const includedTypes = args.includedType
+        ? [args.includedType]
+        : args.category
+        ? INCLUDED_TYPE_MAP[args.category]
+        : undefined;
 
-    const endpointNew = kwNew
-      ? "https://places.googleapis.com/v1/places:searchText"
-      : NEARBY_ENDPOINT_NEW;
+      const endpointNew = kwNew
+        ? "https://places.googleapis.com/v1/places:searchText"
+        : NEARBY_ENDPOINT_NEW;
 
-    const body: Record<string, unknown> = kwNew
-      ? {
-          textQuery: kwNew,
-          maxResultCount: 20,
-          locationBias: {
-            circle: {
-              center: { latitude: args.latitude, longitude: args.longitude },
-              radius: Math.min(Math.max(args.radiusMeters, 1), 50_000),
+      const body: Record<string, unknown> = kwNew
+        ? {
+            textQuery: kwNew,
+            maxResultCount: 20,
+            locationBias: {
+              circle: {
+                center: { latitude: args.latitude, longitude: args.longitude },
+                radius: Math.min(Math.max(args.radiusMeters, 1), 50_000),
+              },
             },
+          }
+        : {
+            maxResultCount: 20,
+            locationRestriction: {
+              circle: {
+                center: { latitude: args.latitude, longitude: args.longitude },
+                radius: Math.min(Math.max(args.radiusMeters, 1), 50_000),
+              },
+            },
+          };
+      if (!kwNew && includedTypes) body.includedTypes = includedTypes;
+      if (kwNew && includedTypes) body.includedType = includedTypes[0];
+
+      try {
+        const res = await fetch(endpointNew, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": setup.apiKey!,
+            "X-Goog-FieldMask": NEARBY_FIELD_MASK,
           },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          return { places: [], error: `Places API ${res.status}: ${(await res.text()).slice(0, 200)}` };
         }
-      : {
-          maxResultCount: 20,
-          locationRestriction: {
-            circle: {
-              center: { latitude: args.latitude, longitude: args.longitude },
-              radius: Math.min(Math.max(args.radiusMeters, 1), 50_000),
-            },
-          },
-        };
-    if (!kwNew && includedTypes) body.includedTypes = includedTypes;
-    if (kwNew && includedTypes) body.includedType = includedTypes[0];
-
-    try {
-      const res = await fetch(endpointNew, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Goog-Api-Key": setup.apiKey,
-          "X-Goog-FieldMask": NEARBY_FIELD_MASK,
-        },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        return { places: [], error: `Places API ${res.status}: ${(await res.text()).slice(0, 200)}` };
+        const json = (await res.json()) as PlacesResponse;
+        if (json.error) {
+          return { places: [], error: json.error.message ?? json.error.status ?? "unknown" };
+        }
+        const places = (json.places ?? []).map((p) => ({
+          googlePlaceId: p.id,
+          name: p.displayName?.text ?? "(unnamed)",
+          address: p.formattedAddress,
+          latitude: p.location?.latitude,
+          longitude: p.location?.longitude,
+          phoneRaw: p.internationalPhoneNumber ?? p.nationalPhoneNumber,
+          website: p.websiteUri,
+          googleMapsUri: p.googleMapsUri,
+          types: p.types,
+          rating: p.rating,
+          ratingCount: p.userRatingCount,
+          businessStatus: p.businessStatus,
+        }));
+        return { places: filterAndDedupe(places) };
+      } catch (err) {
+        return { places: [], error: err instanceof Error ? err.message : "Network error" };
       }
-      const json = (await res.json()) as PlacesResponse;
-      if (json.error) {
-        return { places: [], error: json.error.message ?? json.error.status ?? "unknown" };
-      }
-      const places = (json.places ?? []).map((p) => ({
-        googlePlaceId: p.id,
-        name: p.displayName?.text ?? "(unnamed)",
-        address: p.formattedAddress,
-        latitude: p.location?.latitude,
-        longitude: p.location?.longitude,
-        phoneRaw: p.internationalPhoneNumber ?? p.nationalPhoneNumber,
-        website: p.websiteUri,
-        googleMapsUri: p.googleMapsUri,
-        types: p.types,
-        rating: p.rating,
-        ratingCount: p.userRatingCount,
-        businessStatus: p.businessStatus,
-      }));
+    };
 
-      // Filter Kenyan mega-brands + collapse duplicates
-      const filtered = filterAndDedupe(places);
-
-      return { places: filtered };
-    } catch (err) {
-      return { places: [], error: err instanceof Error ? err.message : "Network error" };
+    if (forceLegacy) {
+      return await legacyNearby();
     }
+
+    // New API preferred. If it isn't enabled on this key (403/404/
+    // SERVICE_DISABLED/PERMISSION_DENIED), degrade to Legacy so results
+    // still render — the user just won't get phone/website until they
+    // enable Places API (New).
+    const newRes = await newNearby();
+    if (
+      newRes.error &&
+      /\b40[34]\b|SERVICE_DISABLED|not been used|is disabled|PERMISSION_DENIED/i.test(newRes.error)
+    ) {
+      const legacyRes = await legacyNearby();
+      if (legacyRes.places.length > 0) return legacyRes;
+      return newRes; // surface the New-API error so they know to enable it
+    }
+    return newRes;
   },
 });
 

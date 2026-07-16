@@ -184,7 +184,7 @@ export function MapBrowseHybrid() {
         longitude: center.lng,
         radiusMeters: Math.round(radius),
         category: category || undefined,
-        useLegacy: true,
+        useLegacy: false,
         nameKeyword: keyword.trim() || undefined,
       });
       if (res.error) {
