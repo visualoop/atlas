@@ -64,6 +64,7 @@ export function MapBrowseHybrid() {
   const searchNearbyGoogle = useAction(api.prospectorActions.searchNearby);
   const importOne = useAction(api.prospectorActions.importOneFromMap);
   const bulkImport = useMutation(api.prospector.bulkImportMapPlaces);
+  const rankProspects = useAction(api.prospectorRanking.rankProspects);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
@@ -77,6 +78,9 @@ export function MapBrowseHybrid() {
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set());
   const [suppressedIds, setSuppressedIds] = useState<Set<string>>(new Set());
   const [importN, setImportN] = useState(10);
+  const [ranking, setRanking] = useState(false);
+  const [scoresById, setScoresById] = useState<Record<string, { fitScore: number; fitReason: string }>>({});
+  const [hideBadFit, setHideBadFit] = useState(false);
 
   const budget = useQuery(api.prospector.getImportBudget, {});
   const mapsUsage = useQuery(api.apiUsage.getMapsUsageToday, {});
@@ -187,9 +191,12 @@ export function MapBrowseHybrid() {
         toast.error(res.error);
         setPlaces([]);
       } else {
+        setScoresById({});
         setPlaces(res.places);
         if (res.places.length === 0) {
           toast.info("No businesses found in this area — pan and try again.");
+        } else {
+          void rankNow(res.places);
         }
       }
     } catch (e) {
@@ -221,12 +228,74 @@ export function MapBrowseHybrid() {
     }
   }
 
+  async function rankNow(list: Place[]) {
+    setRanking(true);
+    try {
+      const res = await rankProspects({
+        places: list.map((p) => ({
+          googlePlaceId: p.googlePlaceId,
+          name: p.name,
+          address: p.address,
+          types: p.types,
+          rating: p.rating,
+          ratingCount: p.ratingCount,
+          hasPhone: Boolean(p.phoneRaw?.trim()),
+          hasWebsite: Boolean(p.website?.trim()),
+        })),
+      });
+      const map: Record<string, { fitScore: number; fitReason: string }> = {};
+      for (const s of res.scores) {
+        map[s.googlePlaceId] = { fitScore: s.fitScore, fitReason: s.fitReason };
+      }
+      setScoresById(map);
+      if (res.error === "no_workspace_context") {
+        toast.info("Fill in Settings → Workspace so the AI can score fit properly.");
+      }
+    } catch {
+      // silent — leave results unranked
+    } finally {
+      setRanking(false);
+    }
+  }
+
   const candidates = useMemo(
     () =>
       places
         .filter((p) => !importedIds.has(p.googlePlaceId) && !suppressedIds.has(p.googlePlaceId))
-        .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)),
-    [places, importedIds, suppressedIds],
+        .sort((a, b) => {
+          const sa = scoresById[a.googlePlaceId]?.fitScore ?? 50;
+          const sb = scoresById[b.googlePlaceId]?.fitScore ?? 50;
+          if (sa !== sb) return sb - sa;
+          return (b.rating ?? 0) - (a.rating ?? 0);
+        }),
+    [places, importedIds, suppressedIds, scoresById],
+  );
+
+  const sortedPlaces = useMemo(
+    () =>
+      [...places]
+        .filter((p) => {
+          if (!hideBadFit) return true;
+          const s = scoresById[p.googlePlaceId]?.fitScore;
+          if (typeof s !== "number") return true;
+          return s >= 25;
+        })
+        .sort((a, b) => {
+          const sa = scoresById[a.googlePlaceId]?.fitScore ?? 50;
+          const sb = scoresById[b.googlePlaceId]?.fitScore ?? 50;
+          if (sa !== sb) return sb - sa;
+          return (b.rating ?? 0) - (a.rating ?? 0);
+        }),
+    [places, scoresById, hideBadFit],
+  );
+
+  const hiddenCount = useMemo(
+    () =>
+      places.filter((p) => {
+        const s = scoresById[p.googlePlaceId]?.fitScore;
+        return typeof s === "number" && s < 25;
+      }).length,
+    [places, scoresById],
   );
 
   async function bulkImportTopN() {
@@ -347,7 +416,13 @@ export function MapBrowseHybrid() {
             <div className="px-4 py-3 border-b border-border space-y-2 sticky top-0 bg-background z-10">
               <div className="flex items-baseline justify-between gap-2 flex-wrap">
                 <p className="eyebrow">
-                  {places.length} result{places.length === 1 ? "" : "s"}
+                  {sortedPlaces.length} result{sortedPlaces.length === 1 ? "" : "s"}
+                  {ranking && <span className="text-primary"> · AI ranking…</span>}
+                  {hiddenCount > 0 && (
+                    <span className="text-muted-foreground">
+                      {" "}· {hiddenCount} low-fit hidden
+                    </span>
+                  )}
                   {importedIds.size > 0 && (
                     <span className="text-muted-foreground">
                       {" "}· {places.filter((p) => importedIds.has(p.googlePlaceId)).length} already
@@ -361,6 +436,16 @@ export function MapBrowseHybrid() {
                   </p>
                 )}
               </div>
+              {hiddenCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setHideBadFit((v) => !v)}
+                  className="h-auto px-1 text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground self-start"
+                >
+                  {hideBadFit ? "Show" : "Hide"} low-fit ({hiddenCount})
+                </Button>
+              )}
               {candidates.length > 0 && (
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] text-muted-foreground">Top</span>
@@ -374,6 +459,7 @@ export function MapBrowseHybrid() {
                     }
                     className="w-14 h-7 px-2 text-xs font-mono num"
                   />
+                  <span className="text-[11px] text-muted-foreground">by fit</span>
                   <Button
                     onClick={bulkImportTopN}
                     disabled={busy}
@@ -387,7 +473,9 @@ export function MapBrowseHybrid() {
               )}
             </div>
             <div className="divide-y divide-border">
-              {places.map((p) => (
+              {sortedPlaces.map((p) => {
+                const score = scoresById[p.googlePlaceId];
+                return (
                 <button
                   key={p.googlePlaceId}
                   onClick={() => setSelected(p)}
@@ -399,6 +487,7 @@ export function MapBrowseHybrid() {
                 >
                   <div className="flex items-baseline justify-between gap-2">
                     <p className="text-sm font-medium truncate">{p.name}</p>
+                    {score && <FitScorePill score={score.fitScore} />}
                     {importedIds.has(p.googlePlaceId) && (
                       <Check className="size-3.5 text-[var(--success)] shrink-0" />
                     )}
@@ -414,13 +503,36 @@ export function MapBrowseHybrid() {
                     )}
                     {typeof p.ratingCount === "number" && <span>({p.ratingCount})</span>}
                   </div>
+                  {score && score.fitReason && (
+                    <p className="text-[11px] italic text-muted-foreground mt-0.5 line-clamp-2">
+                      {score.fitReason}
+                    </p>
+                  )}
                 </button>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
       </aside>
     </div>
+  );
+}
+
+function FitScorePill({ score }: { score: number }) {
+  const styles =
+    score >= 80
+      ? "text-[var(--success)] border-[var(--success)]"
+      : score >= 55
+      ? "text-[var(--warning)] border-[var(--warning)]"
+      : "text-muted-foreground border-border";
+  return (
+    <span
+      className={cn("text-[10px] font-mono border px-1 py-[1px] shrink-0", styles)}
+      title="AI fit score against your workspace's ideal customer"
+    >
+      {score}
+    </span>
   );
 }
 
