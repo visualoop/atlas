@@ -9,6 +9,13 @@ import { RichComposer } from "@/components/atlas/rich-composer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Sheet,
   SheetContent,
   SheetHeader,
@@ -144,28 +151,34 @@ export function ComposeSheet({ open, onOpenChange, prefill }: ComposeSheetProps)
                 No identity available.
               </div>
             ) : (
-              <select
+              <Select
                 value={senderIdentityId ?? defaultSender?._id}
-                onChange={(e) => setSenderIdentityId(e.target.value as Id<"senderIdentities">)}
-                className="w-full h-8 text-sm bg-transparent focus:outline-none border-none"
+                onValueChange={(v) => v && setSenderIdentityId(v as Id<"senderIdentities">)}
               >
-                {senderIdentities.map((s) => (
-                  <option key={s._id} value={s._id}>
-                    {s.displayName ? `${s.displayName} <${s.address}>` : s.address}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-full border-none shadow-none h-8 px-0 focus-visible:ring-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {senderIdentities.map((s) => (
+                    <SelectItem key={s._id} value={s._id}>
+                      {s.displayName ? `${s.displayName} <${s.address}>` : s.address}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           </FieldRow>
 
           <FieldRow label="To" action={
             !showCc && (
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setShowCc(true)}
-                className="text-[11px] font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground"
+                className="h-auto px-1.5 text-[11px] font-mono uppercase tracking-[0.12em] text-muted-foreground"
               >
                 Cc
-              </button>
+              </Button>
             )
           }>
             <RecipientField
@@ -297,8 +310,9 @@ function RecipientField({
           >
             {email}
             <button
+              type="button"
               onClick={() => onChange(value.filter((v) => v !== email))}
-              className="size-5 grid place-items-center text-muted-foreground hover:text-foreground"
+              className="size-5 grid place-items-center text-muted-foreground hover:text-foreground rounded"
               aria-label={`Remove ${email}`}
             >
               <X className="size-3" />
