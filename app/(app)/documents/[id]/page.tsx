@@ -12,6 +12,7 @@ import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { RichComposer } from "@/components/atlas/rich-composer";
 
@@ -176,32 +177,34 @@ export default function DocumentEditorPage({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <StatusPill status={doc.status} />
-          <button
+          <Button
+            variant="outline"
             onClick={() => setBriefOpen(true)}
             disabled={aiBusy !== null}
             title="Generate body with AI"
-            className="inline-flex items-center gap-1.5 h-9 px-3 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+            className="h-9 text-xs font-mono uppercase tracking-[0.12em] hover:border-primary hover:text-primary"
           >
             {aiBusy === "draft" ? <Loader2 className="size-3.5 animate-spin" /> : <Wand2 className="size-3.5" />}
             AI draft
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="outline"
             onClick={handleCritique}
             disabled={aiBusy !== null}
             title="Critique — check for slop"
-            className="inline-flex items-center gap-1.5 h-9 px-3 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors disabled:opacity-50"
+            className="h-9 text-xs font-mono uppercase tracking-[0.12em]"
           >
             {aiBusy === "critique" ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
             Critique
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={generateShareLink}
             disabled={sharing}
-            className="inline-flex items-center gap-1.5 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform disabled:opacity-50"
+            className="h-9 text-xs font-mono uppercase tracking-[0.12em]"
           >
             {sharing ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
             Share link
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -226,12 +229,14 @@ export default function DocumentEditorPage({
                 <p className="text-sm font-medium">
                   Score: <span className="font-mono num">{critiqueResult.score}/100</span>
                 </p>
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setCritiqueResult(null)}
-                  className="text-xs text-muted-foreground hover:text-foreground"
+                  className="h-auto px-1.5 text-xs text-muted-foreground"
                 >
                   Dismiss
-                </button>
+                </Button>
               </div>
               <p className="text-sm text-muted-foreground italic">{critiqueResult.summary}</p>
               {critiqueResult.issues.length > 0 && (
@@ -276,24 +281,22 @@ export default function DocumentEditorPage({
               </p>
             </div>
             <footer className="border-t border-border px-6 py-3 flex items-center gap-2 justify-end">
-              <button
+              <Button
+                variant="ghost"
                 onClick={() => aiBusy !== "draft" && setBriefOpen(false)}
                 disabled={aiBusy === "draft"}
-                className="inline-flex items-center h-8 px-4 text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground transition-colors"
+                className="h-8 text-xs font-mono uppercase tracking-[0.12em]"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleAiDraft}
                 disabled={aiBusy === "draft" || !aiBrief.trim()}
-                className={cn(
-                  "inline-flex items-center gap-1.5 h-8 px-5 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-                  "disabled:opacity-50 disabled:cursor-not-allowed",
-                )}
+                className="h-8 px-5 text-xs font-mono uppercase tracking-[0.12em]"
               >
                 {aiBusy === "draft" ? <Loader2 className="size-3.5 animate-spin" /> : <Wand2 className="size-3.5" />}
                 Draft
-              </button>
+              </Button>
             </footer>
           </div>
         </div>
@@ -470,17 +473,18 @@ export default function DocumentEditorPage({
           </SidebarSection>
 
           <SidebarSection title="Actions">
-            <button
+            <Button
+              variant="ghost"
               onClick={async () => {
                 if (!confirm("Archive this document?")) return;
                 await archive({ id: documentId });
                 toast.success("Archived.");
                 router.push("/documents");
               }}
-              className="w-full inline-flex items-center justify-center gap-2 h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] text-[var(--danger)] hover:bg-[var(--danger)]/10 transition-colors"
+              className="w-full h-8 text-xs font-mono uppercase tracking-[0.12em] text-[var(--danger)] hover:bg-[var(--danger)]/10 hover:text-[var(--danger)]"
             >
               <Trash2 className="size-3.5" /> Archive
-            </button>
+            </Button>
           </SidebarSection>
         </aside>
       </div>
@@ -592,13 +596,15 @@ function LineItemRow({
         {formatCurrency(Number(item.lineTotalCents), currency)}
       </Td>
       <Td className="w-8">
-        <button
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="size-6 hover:text-[var(--danger)]"
           onClick={() => remove({ id: item._id })}
-          className="size-6 grid place-items-center text-muted-foreground hover:text-[var(--danger)] transition-colors"
           title="Remove"
         >
           <Trash2 className="size-3.5" />
-        </button>
+        </Button>
       </Td>
     </tr>
   );
@@ -607,7 +613,8 @@ function LineItemRow({
 function AddLineItemButton({ documentId }: { documentId: Id<"documents"> }) {
   const add = useMutation(api.documents.addLineItem);
   return (
-    <button
+    <Button
+      variant="link"
       onClick={async () => {
         await add({
           documentId,
@@ -616,10 +623,10 @@ function AddLineItemButton({ documentId }: { documentId: Id<"documents"> }) {
           unitPriceCents: 0n,
         });
       }}
-      className="text-xs font-mono uppercase tracking-[0.12em] text-primary hover:underline inline-flex items-center gap-1"
+      className="h-auto px-0 text-xs font-mono uppercase tracking-[0.12em]"
     >
       <Plus className="size-3.5" /> Add
-    </button>
+    </Button>
   );
 }
 
@@ -724,13 +731,15 @@ function ShareRow({
     <li className="border border-border p-2 space-y-1">
       <div className="flex items-center justify-between gap-2">
         <code className="font-mono text-[11px] truncate flex-1 min-w-0">…{share.token.slice(-8)}</code>
-        <button
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="size-6"
           onClick={onCopy}
-          className="size-6 grid place-items-center hover:bg-muted transition-colors"
           title="Copy link"
         >
           {copied ? <Check className="size-3 text-[var(--success)]" /> : <Copy className="size-3" />}
-        </button>
+        </Button>
       </div>
       <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
         <span>{share.accessCount} views</span>
@@ -768,17 +777,15 @@ function PaystackSection({ documentId }: { documentId: Id<"documents"> }) {
 
   return (
     <SidebarSection title="Paystack">
-      <button
+      <Button
+        variant="outline"
         onClick={generateLink}
         disabled={busy}
-        className={cn(
-          "w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-primary hover:text-primary transition-colors",
-          "disabled:opacity-50 disabled:cursor-not-allowed",
-        )}
+        className="w-full h-8 text-xs font-mono uppercase tracking-[0.12em] hover:border-primary hover:text-primary"
       >
         {busy ? <Loader2 className="size-3.5 animate-spin" /> : <ExternalLink className="size-3.5" />}
         Generate payment link
-      </button>
+      </Button>
 
       {requests && requests.length > 0 && (
         <ul className="space-y-1 mt-2">
