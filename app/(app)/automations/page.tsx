@@ -10,6 +10,12 @@ import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNowStrict } from "date-fns";
 
@@ -46,12 +52,12 @@ export default function AutomationsPage() {
             AI-generated content. All journalled.
           </p>
         </div>
-        <button
+        <Button
           onClick={() => setNewOpen(true)}
-          className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] active:scale-[0.97]"
+          className="h-9 text-xs font-mono uppercase tracking-[0.12em]"
         >
           <Plus className="size-3.5" /> New
-        </button>
+        </Button>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4 md:gap-6">
@@ -175,23 +181,24 @@ function AutomationDetail({ automation: a }: { automation: Doc<"automations"> })
           )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={trigger}
-            className="inline-flex items-center gap-1 h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] border border-border hover:bg-muted"
+            className="h-8 text-xs font-mono uppercase tracking-[0.12em]"
           >
             <Play className="size-3" /> Run now
-          </button>
-          <button
+          </Button>
+          <Button
+            size="sm"
             onClick={toggleActive}
             className={cn(
-              "inline-flex items-center gap-1 h-8 px-3 text-xs font-mono uppercase tracking-[0.12em]",
-              a.active
-                ? "bg-[var(--warning)]/20 text-[var(--warning)]"
-                : "bg-primary text-primary-foreground",
+              "h-8 text-xs font-mono uppercase tracking-[0.12em]",
+              a.active && "bg-[var(--warning)]/20 text-[var(--warning)] hover:bg-[var(--warning)]/30",
             )}
           >
             {a.active ? <><Pause className="size-3" /> Pause</> : <><Zap className="size-3" /> Activate</>}
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -200,18 +207,18 @@ function AutomationDetail({ automation: a }: { automation: Doc<"automations"> })
         <div className="flex items-center justify-between">
           <p className="eyebrow">Flow</p>
           <div className="flex items-center gap-1">
-            <button onClick={() => addNode("native")} title="Add native action"
-              className="text-xs font-mono uppercase tracking-[0.12em] px-2 h-7 border border-border hover:bg-muted inline-flex items-center gap-1">
+            <Button variant="outline" size="sm" onClick={() => addNode("native")} title="Add native action"
+              className="h-7 text-xs font-mono uppercase tracking-[0.12em]">
               <Mail className="size-3" /> Native
-            </button>
-            <button onClick={() => addNode("composio")} title="Add Composio action"
-              className="text-xs font-mono uppercase tracking-[0.12em] px-2 h-7 border border-border hover:bg-muted inline-flex items-center gap-1">
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => addNode("composio")} title="Add Composio action"
+              className="h-7 text-xs font-mono uppercase tracking-[0.12em]">
               <Link2 className="size-3" /> Composio
-            </button>
-            <button onClick={() => addNode("ai")} title="Add AI node"
-              className="text-xs font-mono uppercase tracking-[0.12em] px-2 h-7 border border-border hover:bg-muted inline-flex items-center gap-1">
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => addNode("ai")} title="Add AI node"
+              className="h-7 text-xs font-mono uppercase tracking-[0.12em]">
               <Bot className="size-3" /> AI
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -233,14 +240,14 @@ function AutomationDetail({ automation: a }: { automation: Doc<"automations"> })
           </div>
         )}
         {nodes.length > 0 && (
-          <button
+          <Button
             onClick={saveNodes}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 h-9 px-5 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em]"
+            className="h-9 px-5 text-xs font-mono uppercase tracking-[0.12em]"
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : null}
             Save flow
-          </button>
+          </Button>
         )}
       </section>
 
@@ -272,16 +279,17 @@ function AutomationDetail({ automation: a }: { automation: Doc<"automations"> })
       </section>
 
       <div className="pt-4 border-t border-border">
-        <button
+        <Button
+          variant="link"
           onClick={async () => {
             if (!confirm("Archive automation?")) return;
             await archive({ id: a._id });
             toast.success("Archived.");
           }}
-          className="text-xs font-mono uppercase tracking-[0.12em] text-[var(--destructive)] hover:underline inline-flex items-center gap-1"
+          className="h-auto px-0 text-xs font-mono uppercase tracking-[0.12em] text-[var(--destructive)]"
         >
           <Trash2 className="size-3" /> Archive
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -320,41 +328,45 @@ function NodeCard({
           {index + 1}. {node.kind}
         </span>
         <span className="flex-1" />
-        <button
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="size-7 hover:text-[var(--destructive)]"
           onClick={onRemove}
-          className="size-7 grid place-items-center text-muted-foreground hover:text-[var(--destructive)]"
         >
           <X className="size-3.5" />
-        </button>
+        </Button>
       </div>
       {node.kind === "native" && (
         <div className="space-y-2">
-          <select
+          <Select
             value={node.action ?? "send_email"}
-            onChange={(e) => onChange({ action: e.target.value })}
-            className="w-full h-9 px-3 text-sm bg-transparent border border-border"
+            onValueChange={(v) => v && onChange({ action: v })}
           >
-            <option value="send_email">Send email</option>
-            <option value="add_tag">Add tag to contact</option>
-            <option value="wait">Wait</option>
-          </select>
+            <SelectTrigger size="sm" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="send_email">Send email</SelectItem>
+              <SelectItem value="add_tag">Add tag to contact</SelectItem>
+              <SelectItem value="wait">Wait</SelectItem>
+            </SelectContent>
+          </Select>
           {node.action === "send_email" && (
             <>
-              <input
+              <Input
                 placeholder="To (comma-separated emails)"
                 value={((node.args?.to as string[]) ?? []).join(", ")}
                 onChange={(e) => onChange({
                   args: { ...node.args, to: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) },
                 })}
-                className="w-full h-9 px-3 text-sm bg-transparent border border-border"
               />
-              <input
+              <Input
                 placeholder="Subject"
                 value={(node.args?.subject as string) ?? ""}
                 onChange={(e) => onChange({ args: { ...node.args, subject: e.target.value } })}
-                className="w-full h-9 px-3 text-sm bg-transparent border border-border"
               />
-              <textarea
+              <Textarea
                 placeholder="Body (plain text)"
                 rows={3}
                 value={(node.args?.text as string) ?? ""}
@@ -365,7 +377,7 @@ function NodeCard({
                     html: e.target.value.replace(/\n/g, "<br/>"),
                   },
                 })}
-                className="w-full px-3 py-2 text-sm bg-transparent border border-border resize-none"
+                className="resize-none"
               />
             </>
           )}
@@ -373,18 +385,18 @@ function NodeCard({
       )}
       {node.kind === "ai" && (
         <div className="space-y-2">
-          <input
+          <Input
             placeholder="Model (default llama-3.3-70b-versatile)"
             value={node.model ?? ""}
             onChange={(e) => onChange({ model: e.target.value })}
-            className="w-full h-9 px-3 text-sm bg-transparent border border-border font-mono"
+            className="font-mono"
           />
-          <textarea
+          <Textarea
             placeholder="Prompt — output stored on the run"
             rows={3}
             value={node.prompt ?? ""}
             onChange={(e) => onChange({ prompt: e.target.value })}
-            className="w-full px-3 py-2 text-sm bg-transparent border border-border resize-none"
+            className="resize-none"
           />
         </div>
       )}
@@ -397,13 +409,13 @@ function NodeCard({
             </a>{" "}
             first.
           </p>
-          <input
+          <Input
             placeholder="Action (e.g. slack.postMessage)"
             value={node.action ?? ""}
             onChange={(e) => onChange({ action: e.target.value })}
-            className="w-full h-9 px-3 text-sm bg-transparent border border-border font-mono"
+            className="font-mono"
           />
-          <textarea
+          <Textarea
             placeholder='Params JSON: {"channel":"#general","text":"hi"}'
             rows={3}
             value={JSON.stringify(node.args ?? {}, null, 2)}
@@ -412,7 +424,7 @@ function NodeCard({
                 onChange({ args: JSON.parse(e.target.value) });
               } catch {}
             }}
-            className="w-full px-3 py-2 text-xs font-mono bg-transparent border border-border resize-none"
+            className="text-xs font-mono resize-none"
           />
         </div>
       )}
@@ -464,47 +476,51 @@ function NewAutomationDialog({ onClose }: { onClose: () => void }) {
           <h2 className="font-display italic text-2xl mt-1">New flow.</h2>
         </header>
         <div className="px-6 py-4 space-y-3">
-          <input
+          <Input
             autoFocus
             placeholder="Name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
           />
-          <textarea
+          <Textarea
             placeholder="Optional description"
             rows={2}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full px-3 py-2 text-sm bg-transparent border border-border resize-none"
+            className="resize-none"
           />
-          <select
+          <Select
             value={triggerType}
-            onChange={(e) => setTriggerType(e.target.value as TriggerType)}
-            className="w-full h-10 px-3 text-sm bg-transparent border border-border"
+            onValueChange={(v) => v && setTriggerType(v as TriggerType)}
           >
-            <option value="manual">Manual trigger (button)</option>
-            <option value="scheduler">Scheduler (cron)</option>
-            <option value="timeline_event">Timeline event</option>
-            <option value="webhook">Incoming webhook</option>
-          </select>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="manual">Manual trigger (button)</SelectItem>
+              <SelectItem value="scheduler">Scheduler (cron)</SelectItem>
+              <SelectItem value="timeline_event">Timeline event</SelectItem>
+              <SelectItem value="webhook">Incoming webhook</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <footer className="px-6 py-3 border-t border-border flex items-center gap-2">
-          <button
+          <Button
+            variant="ghost"
             onClick={onClose}
             disabled={saving}
-            className="ml-auto text-xs font-mono uppercase tracking-[0.12em] h-8 px-4 text-muted-foreground hover:text-foreground"
+            className="ml-auto h-8 text-xs font-mono uppercase tracking-[0.12em]"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={submit}
             disabled={saving || name.trim().length === 0}
-            className="inline-flex items-center gap-1.5 h-8 px-5 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] disabled:opacity-50"
+            className="h-8 px-5 text-xs font-mono uppercase tracking-[0.12em]"
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
             Create
-          </button>
+          </Button>
         </footer>
       </div>
     </div>
