@@ -8,6 +8,11 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 const CURRENCIES = ["KES", "USD", "EUR", "GBP", "TZS", "UGX", "RWF"];
 const TIMEZONES = [
@@ -139,57 +144,57 @@ export default function NewWorkspacePage() {
 
         <section className="border border-border p-6 space-y-4">
           <Field label="Workspace name" required hint="Change any time.">
-            <input
+            <Input
               value={name}
               onChange={(e) => syncSlug(e.target.value)}
               placeholder="Omnix"
               autoFocus
-              className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
             />
           </Field>
 
           <Field label="Slug" required hint="URL-safe, must be unique in this org.">
-            <input
+            <Input
               value={slug}
               onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
               placeholder="omnix"
-              className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+              className="font-mono"
               maxLength={40}
             />
           </Field>
 
           <Field label="Short description" hint="One-line context for the AI.">
-            <input
+            <Input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="POS + inventory for Kenyan retail"
-              className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
             />
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Currency" required>
-              <select
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
-              >
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+              <Select value={currency} onValueChange={(v) => v && setCurrency(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CURRENCIES.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
 
             <Field label="Timezone" required>
-              <select
-                value={timezone}
-                onChange={(e) => setTimezone(e.target.value)}
-                className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
-              >
-                {TIMEZONES.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
+              <Select value={timezone} onValueChange={(v) => v && setTimezone(v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIMEZONES.map((t) => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
           </div>
         </section>
@@ -201,14 +206,15 @@ export default function NewWorkspacePage() {
           >
             Cancel
           </Link>
-          <button
+          <Button
             onClick={submit}
             disabled={saving || !name.trim() || !slug}
-            className="ml-auto inline-flex items-center gap-1.5 h-10 px-6 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] active:scale-[0.97] disabled:opacity-50"
+            size="lg"
+            className="ml-auto h-10 px-6 text-xs font-mono uppercase tracking-[0.12em]"
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : null}
             Create workspace
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -6,6 +6,9 @@ import { Loader2, Check, Clock, Calendar as CalendarIcon, ArrowRight } from "luc
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function PublicBookingPage({
   params,
@@ -145,14 +148,14 @@ export default function PublicBookingPage({
                 const dObj = new Date(d);
                 const active = d === day;
                 return (
-                  <button
+                  <Button
                     key={d}
+                    type="button"
+                    variant={active ? "default" : "outline"}
                     onClick={() => { setDay(d); setSelectedSlot(null); }}
                     className={cn(
-                      "shrink-0 w-16 py-3 flex flex-col items-center text-xs transition-colors border",
-                      active
-                        ? "bg-foreground text-background border-foreground"
-                        : "border-border hover:border-foreground",
+                      "shrink-0 w-16 h-auto py-3 flex flex-col items-center text-xs",
+                      active && "bg-foreground text-background hover:bg-foreground/90 border-foreground",
                     )}
                   >
                     <span className="font-mono uppercase tracking-[0.12em] text-[10px]">
@@ -164,7 +167,7 @@ export default function PublicBookingPage({
                     <span className="text-[10px] font-mono uppercase tracking-[0.12em]">
                       {dObj.toLocaleDateString("en-KE", { month: "short" })}
                     </span>
-                  </button>
+                  </Button>
                 );
               })}
             </div>
@@ -186,20 +189,20 @@ export default function PublicBookingPage({
               ) : (
                 <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
                   {availability.slots.map((s) => (
-                    <button
+                    <Button
                       key={s}
+                      type="button"
+                      variant={selectedSlot === s ? "default" : "outline"}
                       onClick={() => setSelectedSlot(s)}
                       className={cn(
-                        "h-11 text-sm font-mono num transition-colors border",
-                        selectedSlot === s
-                          ? "bg-foreground text-background border-foreground"
-                          : "border-border hover:border-foreground",
+                        "h-11 text-sm font-mono num",
+                        selectedSlot === s && "bg-foreground text-background hover:bg-foreground/90 border-foreground",
                       )}
                     >
                       {new Date(s).toLocaleTimeString("en-KE", {
                         hour: "2-digit", minute: "2-digit",
                       })}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               )}
@@ -233,57 +236,52 @@ export default function PublicBookingPage({
                   <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
                     Name
                   </span>
-                  <input
+                  <Input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full h-10 px-3 text-base bg-transparent border border-border focus:border-foreground focus:outline-none"
                   />
                 </label>
                 <label className="block space-y-1">
                   <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
                     Email
                   </span>
-                  <input
+                  <Input
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full h-10 px-3 text-base bg-transparent border border-border focus:border-foreground focus:outline-none"
                   />
                 </label>
                 <label className="block space-y-1">
                   <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
                     Company (optional)
                   </span>
-                  <input
+                  <Input
                     value={company}
                     onChange={(e) => setCompany(e.target.value)}
-                    className="w-full h-10 px-3 text-base bg-transparent border border-border focus:border-foreground focus:outline-none"
                   />
                 </label>
                 <label className="block space-y-1">
                   <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
                     Note (optional)
                   </span>
-                  <textarea
+                  <Textarea
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                     rows={3}
                     placeholder="What would you like to discuss?"
-                    className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none"
+                    className="resize-none"
                   />
                 </label>
-                <button
+                <Button
                   type="submit"
                   disabled={submitting}
-                  className={cn(
-                    "w-full inline-flex items-center justify-center gap-2 h-11 px-6 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.98] transition-transform",
-                    "disabled:opacity-50 disabled:cursor-not-allowed",
-                  )}
+                  size="lg"
+                  className="w-full h-11 text-xs font-mono uppercase tracking-[0.12em]"
                 >
                   {submitting ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowRight className="size-3.5" />}
                   Confirm booking
-                </button>
+                </Button>
               </form>
             ) : (
               <div className="border border-dashed border-border p-6 text-center text-sm text-muted-foreground">

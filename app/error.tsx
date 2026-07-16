@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export default function GlobalError({
   error,
@@ -46,12 +47,12 @@ export default function GlobalError({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
+          <Button
             onClick={reset}
-            className="inline-flex items-center h-9 px-6 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+            className="h-9 px-6 text-xs font-mono uppercase tracking-[0.12em]"
           >
             Try again
-          </button>
+          </Button>
           <Link
             href="/today"
             className="inline-flex items-center h-9 px-6 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors"

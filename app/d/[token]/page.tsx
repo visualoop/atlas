@@ -7,6 +7,8 @@ import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export default function PublicDocumentPage({
   params,
@@ -281,12 +283,13 @@ export default function PublicDocumentPage({
                 <p className="text-sm text-muted-foreground">
                   Ready to move forward? Click accept to confirm.
                 </p>
-                <button
+                <Button
                   onClick={() => setAcceptOpen(true)}
-                  className="inline-flex items-center gap-2 h-10 px-6 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+                  size="lg"
+                  className="h-10 px-6 text-xs font-mono uppercase tracking-[0.12em]"
                 >
                   Accept {doc.kind}
-                </button>
+                </Button>
               </>
             )}
           </section>
@@ -310,24 +313,24 @@ export default function PublicDocumentPage({
                 <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
                   Full name
                 </span>
-                <input
+                <Input
                   autoFocus
                   value={acceptName}
                   onChange={(e) => setAcceptName(e.target.value)}
                   placeholder="Your name"
-                  className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
+                  className="h-9"
                 />
               </label>
               <label className="block space-y-1.5">
                 <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
                   Email
                 </span>
-                <input
+                <Input
                   type="email"
                   value={acceptEmail}
                   onChange={(e) => setAcceptEmail(e.target.value)}
                   placeholder="you@example.com"
-                  className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
+                  className="h-9"
                 />
               </label>
               <p className="text-xs text-muted-foreground">
@@ -336,24 +339,22 @@ export default function PublicDocumentPage({
               </p>
             </div>
             <footer className="border-t border-border px-6 py-3 flex items-center gap-2 justify-end">
-              <button
+              <Button
+                variant="ghost"
                 onClick={() => !accepting && setAcceptOpen(false)}
                 disabled={accepting}
-                className="inline-flex items-center h-8 px-4 text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground transition-colors"
+                className="h-8 text-xs font-mono uppercase tracking-[0.12em]"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={submitAccept}
                 disabled={accepting}
-                className={cn(
-                  "inline-flex items-center gap-1.5 h-8 px-5 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-                  "disabled:opacity-50 disabled:cursor-not-allowed",
-                )}
+                className="h-8 px-5 text-xs font-mono uppercase tracking-[0.12em]"
               >
                 {accepting ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
                 Accept
-              </button>
+              </Button>
             </footer>
           </div>
         </div>

@@ -6,6 +6,8 @@ import { Loader2, Check, ArrowRight } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export default function PublicLandingPage({
   params,
@@ -134,10 +136,10 @@ export default function PublicLandingPage({
                   <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
                     First name
                   </span>
-                  <input
+                  <Input
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
-                    className="w-full h-11 px-3 text-base bg-transparent border border-border focus:border-foreground focus:outline-none"
+                    className="h-11"
                   />
                 </label>
               )}
@@ -146,10 +148,10 @@ export default function PublicLandingPage({
                   <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
                     Last name
                   </span>
-                  <input
+                  <Input
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
-                    className="w-full h-11 px-3 text-base bg-transparent border border-border focus:border-foreground focus:outline-none"
+                    className="h-11"
                   />
                 </label>
               )}
@@ -158,10 +160,10 @@ export default function PublicLandingPage({
                   <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
                     Company
                   </span>
-                  <input
+                  <Input
                     value={company}
                     onChange={(e) => setCompany(e.target.value)}
-                    className="w-full h-11 px-3 text-base bg-transparent border border-border focus:border-foreground focus:outline-none"
+                    className="h-11"
                   />
                 </label>
               )}
@@ -169,29 +171,27 @@ export default function PublicLandingPage({
                 <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
                   Email
                 </span>
-                <input
+                <Input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full h-11 px-3 text-base bg-transparent border border-border focus:border-foreground focus:outline-none"
+                  className="h-11"
                 />
               </label>
 
-              <button
+              <Button
                 type="submit"
                 disabled={submitting}
-                className={cn(
-                  "inline-flex items-center gap-2 h-11 px-6 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.98] transition-transform",
-                  "disabled:opacity-50 disabled:cursor-not-allowed",
-                )}
+                size="lg"
+                className="h-11 text-xs font-mono uppercase tracking-[0.12em]"
               >
                 {submitting ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowRight className="size-3.5" />}
                 {page.kind === "waitlist" ? "Join waitlist"
                   : page.kind === "lead_magnet" ? "Get the resource"
                     : page.kind === "event" ? "Reserve my spot"
                       : "Continue"}
-              </button>
+              </Button>
 
               <p className="text-xs text-muted-foreground">
                 By submitting, you consent to be contacted about this and related topics.

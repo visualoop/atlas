@@ -7,6 +7,8 @@ import Link from "next/link";
 import { api } from "@/convex/_generated/api";
 import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export default function NewOrgPage() {
   const router = useRouter();
@@ -80,33 +82,31 @@ export default function NewOrgPage() {
 
         <section className="border border-border p-6 space-y-4">
           <Field label="Organisation name" required hint="What people will call this. Change any time.">
-            <input
+            <Input
               value={name}
               onChange={(e) => syncSlug(e.target.value)}
               placeholder="Blyss"
               autoFocus
-              className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
             />
           </Field>
 
           <Field label="Slug" required hint="URL-safe. Lowercase + dashes only.">
-            <input
+            <Input
               value={slug}
               onChange={(e) =>
                 setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))
               }
               placeholder="blyss"
-              className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+              className="font-mono"
               maxLength={40}
             />
           </Field>
 
           <Field label="First workspace name" required hint="You can add more later. Common patterns: product name, business unit, or client name.">
-            <input
+            <Input
               value={firstWorkspace}
               onChange={(e) => setFirstWorkspace(e.target.value)}
               placeholder="Omnix"
-              className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
             />
           </Field>
         </section>
@@ -118,14 +118,15 @@ export default function NewOrgPage() {
           >
             Cancel
           </Link>
-          <button
+          <Button
             onClick={submit}
             disabled={saving || !name.trim() || !slug || !firstWorkspace.trim()}
-            className="ml-auto inline-flex items-center gap-1.5 h-10 px-6 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] active:scale-[0.97] disabled:opacity-50"
+            size="lg"
+            className="ml-auto h-10 px-6 text-xs font-mono uppercase tracking-[0.12em]"
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : null}
             Create organisation
-          </button>
+          </Button>
         </div>
       </div>
     </div>

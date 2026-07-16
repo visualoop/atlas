@@ -7,6 +7,7 @@ import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import { Loader2, Check, ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export default function InvitePage() {
   const params = useParams<{ token: string }>();
@@ -83,10 +84,11 @@ export default function InvitePage() {
             {error && (
               <p className="text-xs text-[var(--destructive)]">{error}</p>
             )}
-            <button
+            <Button
               onClick={handleAccept}
               disabled={state === "accepting"}
-              className="inline-flex items-center gap-1.5 h-9 px-5 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] disabled:opacity-50"
+              size="sm"
+              className="h-9 px-5 text-xs font-mono uppercase tracking-[0.12em]"
             >
               {state === "accepting" ? (
                 <Loader2 className="size-3.5 animate-spin" />
@@ -94,7 +96,7 @@ export default function InvitePage() {
                 <Check className="size-3.5" />
               )}
               Accept invitation
-            </button>
+            </Button>
           </div>
         )}
       </div>
