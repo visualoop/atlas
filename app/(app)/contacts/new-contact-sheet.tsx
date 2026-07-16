@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const STAGES = ["cold", "warm", "qualified", "customer", "lost"] as const;
 
@@ -107,18 +108,21 @@ export function NewContactSheet({
             <Field label="Stage">
               <div className="flex gap-1 flex-wrap">
                 {STAGES.map((s) => (
-                  <button
+                  <Button
                     key={s}
                     type="button"
+                    variant={stage === s ? "outline" : "outline"}
+                    size="sm"
                     onClick={() => setStage(s)}
-                    className={`font-mono uppercase tracking-[0.12em] text-xs px-3 py-1.5 border transition-colors ${
+                    className={cn(
+                      "font-mono uppercase tracking-[0.12em] text-xs",
                       stage === s
                         ? "border-primary text-primary"
-                        : "border-border text-muted-foreground hover:border-border-strong"
-                    }`}
+                        : "text-muted-foreground",
+                    )}
                   >
                     {s}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </Field>

@@ -13,6 +13,7 @@ import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { NewDealDialog } from "./new-deal-dialog";
 import { AgentPicksBar } from "@/components/atlas/agent-picks-bar";
@@ -56,8 +57,9 @@ export default function PipelinesPage() {
         </header>
         <div className="border border-dashed border-border p-10 text-center space-y-4">
           <p className="font-display italic text-2xl text-muted-foreground">Ready when you are.</p>
-          <button
+          <Button
             disabled={seeding}
+            size="lg"
             onClick={async () => {
               setSeeding(true);
               try {
@@ -69,14 +71,11 @@ export default function PipelinesPage() {
                 setSeeding(false);
               }
             }}
-            className={cn(
-              "inline-flex items-center gap-2 h-10 px-6 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-              seeding && "opacity-70",
-            )}
+            className="h-10 px-6 text-xs font-mono uppercase tracking-[0.12em]"
           >
             {seeding ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
             Seed 3 default pipelines
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -88,26 +87,27 @@ export default function PipelinesPage() {
         <header className="flex items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-1 overflow-x-auto">
             {pipelines.map((p) => (
-              <button
+              <Button
                 key={p._id}
+                variant="ghost"
                 onClick={() => setActivePipelineId(p._id)}
                 className={cn(
-                  "h-9 px-4 text-sm font-mono uppercase tracking-[0.12em] whitespace-nowrap transition-colors",
+                  "h-9 text-sm font-mono uppercase tracking-[0.12em] whitespace-nowrap",
                   activePipelineId === p._id
-                    ? "bg-foreground text-background"
-                    : "text-muted-foreground hover:text-foreground",
+                    ? "bg-foreground text-background hover:bg-foreground/90 hover:text-background"
+                    : "text-muted-foreground",
                 )}
               >
                 {p.name}
-              </button>
+              </Button>
             ))}
           </div>
-          <button
+          <Button
             onClick={() => setNewDealOpen(true)}
-            className="inline-flex items-center gap-2 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+            className="h-9 text-xs font-mono uppercase tracking-[0.12em]"
           >
             <Plus className="size-3.5" /> New deal
-          </button>
+          </Button>
         </header>
 
         {activePipelineId && (

@@ -20,6 +20,7 @@ import { ContactDetailSheet } from "./contact-detail-sheet";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { TableSkeleton as SharedTableSkeleton } from "@/components/atlas/skeletons";
 import { toast } from "sonner";
 
@@ -144,14 +145,15 @@ export default function ContactsPage() {
             />
             {(canLoadMore || isLoadingMore) && (
               <div className="pt-4 flex justify-center">
-                <button
+                <Button
+                  variant="outline"
                   onClick={() => loadMore(50)}
                   disabled={isLoadingMore}
-                  className="inline-flex items-center gap-1.5 h-9 px-6 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                  className="h-9 text-xs font-mono uppercase tracking-[0.12em]"
                 >
                   {isLoadingMore ? <Loader2 className="size-3.5 animate-spin" /> : null}
                   Load more
-                </button>
+                </Button>
               </div>
             )}
           </>
@@ -332,12 +334,13 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       <p className="text-sm text-muted-foreground max-w-prose mx-auto">
         Add your first contact manually, or use <a href="/prospector" className="text-primary underline">Prospector</a> to bulk-import from Google Maps.
       </p>
-      <button
+      <Button
         onClick={onCreate}
-        className="font-mono uppercase tracking-[0.12em] text-xs px-6 py-3 bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+        size="lg"
+        className="font-mono uppercase tracking-[0.12em] text-xs"
       >
         + New contact
-      </button>
+      </Button>
     </div>
   );
 }

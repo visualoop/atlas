@@ -6,7 +6,6 @@ import { Loader2, Plus } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -96,18 +95,15 @@ export function NewCampaignDialog({ onClose, onCreated }: Props) {
             <Label>Channel</Label>
             <div className="flex gap-1.5">
               {(["email", "whatsapp", "multi"] as const).map((ch) => (
-                <button
+                <Button
                   key={ch}
+                  type="button"
+                  variant={channel === ch ? "default" : "outline"}
                   onClick={() => setChannel(ch)}
-                  className={cn(
-                    "h-9 px-4 rounded-md text-sm font-medium transition-colors capitalize",
-                    channel === ch
-                      ? "bg-primary text-primary-foreground"
-                      : "border bg-background text-muted-foreground hover:text-foreground hover:bg-muted",
-                  )}
+                  className="h-9 text-sm capitalize"
                 >
                   {ch}
-                </button>
+                </Button>
               ))}
             </div>
           </div>

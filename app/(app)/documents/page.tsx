@@ -12,6 +12,7 @@ import { ListLayout } from "@/components/atlas/list-layout";
 import { FilterChips } from "@/components/atlas/filter-chips";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { NewDocumentDialog } from "./new-document-dialog";
 
@@ -81,14 +82,15 @@ export default function DocumentsPage() {
             <DocumentsTable documents={documents} />
             {(canLoadMore || isLoadingMore) && (
               <div className="pt-4 flex justify-center">
-                <button
+                <Button
+                  variant="outline"
                   onClick={() => loadMore(30)}
                   disabled={isLoadingMore}
-                  className="inline-flex items-center gap-1.5 h-9 px-6 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                  className="h-9 text-xs font-mono uppercase tracking-[0.12em]"
                 >
                   {isLoadingMore ? <Loader2 className="size-3.5 animate-spin" /> : null}
                   Load more
-                </button>
+                </Button>
               </div>
             )}
           </>
@@ -188,12 +190,13 @@ function EmptyState({ onCreate, kind }: { onCreate: () => void; kind: Kind | nul
         Proposals, quotes, invoices, contracts. Draft them here, share via
         a public link, track when the recipient opens or accepts.
       </p>
-      <button
+      <Button
         onClick={onCreate}
-        className="font-mono uppercase tracking-[0.12em] text-xs px-6 py-3 bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+        size="lg"
+        className="font-mono uppercase tracking-[0.12em] text-xs"
       >
         + New document
-      </button>
+      </Button>
     </div>
   );
 }

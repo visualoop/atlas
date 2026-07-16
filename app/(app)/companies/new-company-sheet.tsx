@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
@@ -123,18 +124,21 @@ export function NewCompanySheet({
             <Field label="Stage">
               <div className="flex gap-1 flex-wrap">
                 {STAGES.map((s) => (
-                  <button
+                  <Button
                     key={s}
                     type="button"
+                    variant="outline"
+                    size="sm"
                     onClick={() => setStage(s)}
-                    className={`font-mono uppercase tracking-[0.12em] text-xs px-3 py-1.5 border transition-colors ${
+                    className={cn(
+                      "font-mono uppercase tracking-[0.12em] text-xs",
                       stage === s
                         ? "border-primary text-primary"
-                        : "border-border text-muted-foreground hover:border-border-strong"
-                    }`}
+                        : "text-muted-foreground",
+                    )}
                   >
                     {s}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </Field>

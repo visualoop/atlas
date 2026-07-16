@@ -133,16 +133,15 @@ export function CompanyDetailSheet({
             </a>
           )}
           {(company.emailPrimary || company.phone) && (
-            <button
+            <Button
+              variant="default"
+              size="sm"
               onClick={() => setOutreachOpen(true)}
-              className={cn(
-                buttonVariants({ variant: "default", size: "sm" }),
-                "gap-1.5",
-              )}
+              className="gap-1.5"
             >
               <Sparkles className="size-3.5" />
               Draft outreach
-            </button>
+            </Button>
           )}
           <DropdownMenu>
             <DropdownMenuTrigger

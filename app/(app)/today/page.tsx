@@ -10,6 +10,7 @@ import {
 import { api } from "@/convex/_generated/api";
 import { formatDistanceToNowStrict } from "date-fns";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
 export default function TodayPage() {
   const bootstrap = useQuery(api.organizations.currentBootstrap);
@@ -60,10 +61,12 @@ export default function TodayPage() {
             <Sparkles className="size-3 text-primary" />
             AI briefing
           </p>
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={handleRefresh}
             disabled={refreshing}
-            className="text-[11px] font-mono uppercase tracking-[0.14em] text-muted-foreground hover:text-foreground disabled:opacity-50 inline-flex items-center gap-1"
+            className="h-auto px-1.5 text-[11px] font-mono uppercase tracking-[0.14em] text-muted-foreground"
           >
             {refreshing ? (
               <Loader2 className="size-3 animate-spin" />
@@ -71,7 +74,7 @@ export default function TodayPage() {
               <RefreshCw className="size-3" />
             )}
             Refresh
-          </button>
+          </Button>
         </div>
         {briefing === undefined ? (
           <p className="text-sm text-muted-foreground italic">Loading…</p>
@@ -364,13 +367,15 @@ function TodayActionBar() {
           <Sparkles className="size-3 text-primary" />
           Do these next
         </p>
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={runOnce}
-          className="text-[11px] font-mono uppercase tracking-[0.14em] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+          className="h-auto px-1.5 text-[11px] font-mono uppercase tracking-[0.14em] text-muted-foreground"
         >
           <RefreshCw className="size-3" />
           Refresh
-        </button>
+        </Button>
       </div>
       <ol className="space-y-1.5">
         {actions.map((a, i) => (
@@ -382,13 +387,14 @@ function TodayActionBar() {
               {i + 1}.
             </span>
             <span className="flex-1 leading-snug">{a.title}</span>
-            <button
+            <Button
+              variant="link"
               onClick={() => router.push(a.actionLink)}
-              className="text-[11px] font-mono uppercase tracking-[0.12em] text-primary hover:underline shrink-0 inline-flex items-center gap-1"
+              className="h-auto px-0 text-[11px] font-mono uppercase tracking-[0.12em] shrink-0"
             >
               Open
               <ArrowRight className="size-3" />
-            </button>
+            </Button>
           </li>
         ))}
       </ol>

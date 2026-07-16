@@ -7,7 +7,6 @@ import { X, Plus, Loader2, User, Building2 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -94,18 +93,16 @@ export function NewDocumentDialog({ onClose }: { onClose: () => void }) {
             <Label>Kind</Label>
             <div className="flex flex-wrap gap-1.5">
               {KINDS.map((k) => (
-                <button
+                <Button
                   key={k.value}
+                  type="button"
+                  variant={kind === k.value ? "default" : "outline"}
+                  size="sm"
                   onClick={() => setKind(k.value)}
-                  className={cn(
-                    "h-8 px-3 rounded-md text-xs font-medium transition-colors",
-                    kind === k.value
-                      ? "bg-primary text-primary-foreground"
-                      : "border bg-background text-muted-foreground hover:text-foreground hover:bg-muted",
-                  )}
+                  className="h-8 text-xs"
                 >
                   {k.label}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -211,14 +208,16 @@ function PickerField({
           className="pl-9 pr-9"
         />
         {selected && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-sm"
             onClick={onClear}
-            className="absolute right-2 top-1/2 -translate-y-1/2 size-6 grid place-items-center text-muted-foreground hover:text-foreground"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 size-6"
             aria-label="Clear selection"
           >
             <X className="size-3.5" />
-          </button>
+          </Button>
         )}
       </div>
       {!selected && query.length >= 2 && options.length > 0 && (

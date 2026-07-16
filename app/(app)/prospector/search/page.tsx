@@ -181,24 +181,24 @@ function NewSearchForm({ onCreated }: { onCreated: (id: Id<"prospectorSearches">
     <div className="border border-border p-4 md:p-6 space-y-3">
       <div className="grid grid-cols-1 md:grid-cols-[1fr_240px_auto] gap-3">
         <div className="relative">
-          <Search className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
+          <Search className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 z-10" />
+          <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
             placeholder="e.g. Coffee shops, dental clinics, digital agencies…"
-            className="w-full h-10 pl-10 pr-3 bg-transparent border border-border focus:border-foreground focus:outline-none text-sm"
+            className="pl-10"
           />
         </div>
         <div className="relative">
-          <MapPin className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
+          <MapPin className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 z-10" />
+          <Input
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
             placeholder="Location…"
             list="prospector-location-presets"
-            className="w-full h-10 pl-10 pr-3 bg-transparent border border-border focus:border-foreground focus:outline-none text-sm"
+            className="pl-10"
           />
           <datalist id="prospector-location-presets">
             {LOCATION_PRESETS.map((loc) => (

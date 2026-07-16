@@ -260,14 +260,16 @@ function PickerField({
         className="pl-9 pr-9"
       />
       {hasSelection && (
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-sm"
           onClick={onClear}
-          className="absolute right-2 top-1/2 -translate-y-1/2 size-6 grid place-items-center text-muted-foreground hover:text-foreground"
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 size-6"
           aria-label="Clear selection"
         >
           <X className="size-3.5" />
-        </button>
+        </Button>
       )}
     </div>
   );

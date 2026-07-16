@@ -8,6 +8,11 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { RichComposer } from "@/components/atlas/rich-composer";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 interface ReplyBarProps {
   conversationId: Id<"conversations">;
@@ -97,26 +102,24 @@ function EmailReplyBar({
         onSubmit={handleSend}
       />
       <div className="flex items-center gap-2">
-        <button
+        <Button
           onClick={handleSend}
           disabled={sending || text.trim().length === 0}
-          className={cn(
-            "inline-flex items-center gap-2 h-9 px-6 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-            "disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100",
-          )}
+          className="h-9 px-6 text-xs font-mono uppercase tracking-[0.12em]"
         >
           {sending ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
           Reply
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="ghost"
           onClick={onCancel}
           disabled={sending}
-          className="inline-flex items-center gap-2 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground transition-colors"
+          className="h-9 text-xs font-mono uppercase tracking-[0.12em]"
         >
           <X className="size-3.5" />
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -229,22 +232,26 @@ function WhatsAppReplyBar({
           <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
             Template
           </span>
-          <select
-            value={templateName}
-            onChange={(e) => setTemplateName(e.target.value)}
-            className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
+          <Select
+            value={templateName || "__none__"}
+            onValueChange={(v) => setTemplateName(v && v !== "__none__" ? v : "")}
           >
-            <option value="">— Pick a template —</option>
-            {templates?.map((t) => (
-              <option key={t._id} value={t.name}>
-                {t.name} ({t.language}) — {t.category}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger size="sm" className="w-full h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">— Pick a template —</SelectItem>
+              {templates?.map((t) => (
+                <SelectItem key={t._id} value={t.name}>
+                  {t.name} ({t.language}) — {t.category}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
 
-      <textarea
+      <Textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
@@ -257,30 +264,28 @@ function WhatsAppReplyBar({
         }
         rows={4}
         autoFocus
-        className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none"
+        className="resize-none"
       />
 
       <div className="flex items-center gap-2">
-        <button
+        <Button
           onClick={handleSend}
           disabled={sending || text.trim().length === 0}
-          className={cn(
-            "inline-flex items-center gap-2 h-9 px-6 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-            "disabled:opacity-50 disabled:cursor-not-allowed",
-          )}
+          className="h-9 px-6 text-xs font-mono uppercase tracking-[0.12em]"
         >
           {sending ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
           Send
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="ghost"
           onClick={onCancel}
           disabled={sending}
-          className="inline-flex items-center gap-2 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground transition-colors"
+          className="h-9 text-xs font-mono uppercase tracking-[0.12em]"
         >
           <X className="size-3.5" />
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );

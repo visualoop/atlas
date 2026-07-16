@@ -13,6 +13,7 @@ import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { RichComposer } from "@/components/atlas/rich-composer";
 
@@ -267,13 +268,13 @@ export default function DocumentEditorPage({
               <h2 className="font-display italic text-2xl mt-1">What should this <em>say</em>?</h2>
             </header>
             <div className="px-6 py-4 space-y-2">
-              <textarea
+              <Textarea
                 autoFocus
                 value={aiBrief}
                 onChange={(e) => setAiBrief(e.target.value)}
                 rows={5}
                 placeholder="e.g. 3-page proposal to Java House for a 12-month Omnix rollout covering 8 branches, KES 4M budget, phased delivery."
-                className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none"
+                className="resize-none"
               />
               <p className="text-xs text-muted-foreground">
                 The AI will use the linked contact + company + deal context automatically.
@@ -341,13 +342,13 @@ export default function DocumentEditorPage({
           {/* Footer note */}
           <section>
             <p className="eyebrow mb-2">Recipient note</p>
-            <textarea
+            <Textarea
               value={footer}
               onChange={(e) => setFooter(e.target.value)}
               onBlur={saveFooter}
               placeholder="Payment terms, thank-you note, anything the recipient should see at the bottom."
               rows={3}
-              className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none"
+              className="resize-none"
             />
           </section>
         </main>

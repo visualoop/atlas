@@ -13,6 +13,7 @@ import { ListLayout } from "@/components/atlas/list-layout";
 import { FilterChips } from "@/components/atlas/filter-chips";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNowStrict } from "date-fns";
 import { NewCampaignDialog } from "./new-campaign-dialog";
@@ -171,12 +172,13 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
         pauses each recipient the moment they reply so nobody gets
         harassed. Deals that close stop the sequence automatically.
       </p>
-      <button
+      <Button
         onClick={onCreate}
-        className="font-mono uppercase tracking-[0.12em] text-xs px-6 py-3 bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+        size="lg"
+        className="font-mono uppercase tracking-[0.12em] text-xs"
       >
-        + New campaign
-      </button>
+        <Plus className="size-3.5" /> New campaign
+      </Button>
     </div>
   );
 }
