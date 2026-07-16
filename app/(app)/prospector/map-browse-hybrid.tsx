@@ -26,6 +26,11 @@ import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { WhatsAppOpenChat } from "@/components/atlas/whatsapp-open-chat";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 interface Place {
   googlePlaceId: string;
@@ -257,18 +262,19 @@ export function MapBrowseHybrid() {
 
         {/* Controls — mobile-first stacked with backdrop */}
         <div className="absolute top-2 left-2 right-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 z-[400]">
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="h-9 px-3 text-sm bg-background border border-border shadow"
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-          <input
+          <Select value={category} onValueChange={(v) => v && setCategory(v)}>
+            <SelectTrigger size="sm" className="h-9 bg-background shadow">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CATEGORIES.map((c) => (
+                <SelectItem key={c.value} value={c.value}>
+                  {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
             type="text"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
@@ -276,16 +282,16 @@ export function MapBrowseHybrid() {
               if (e.key === "Enter" && !busy) searchThisArea();
             }}
             placeholder="Keyword (pharmacy, salon…)"
-            className="h-9 px-3 text-sm bg-background border border-border shadow flex-1 min-w-0"
+            className="h-9 bg-background shadow flex-1 min-w-0"
           />
-          <button
+          <Button
             onClick={searchThisArea}
             disabled={!leafletReady || busy || (mapsUsage && mapsUsage.remaining === 0)}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-4 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] shadow disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            className="h-9 text-xs font-mono uppercase tracking-[0.12em] shadow whitespace-nowrap"
           >
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Search className="size-3.5" />}
             {mapsUsage && mapsUsage.remaining === 0 ? "Cap hit" : "Search this area"}
-          </button>
+          </Button>
           {mapsUsage && (
             <span
               className={cn(
@@ -358,7 +364,7 @@ export function MapBrowseHybrid() {
               {candidates.length > 0 && (
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] text-muted-foreground">Top</span>
-                  <input
+                  <Input
                     type="number"
                     min={1}
                     max={Math.min(candidates.length, budget?.remaining ?? 100)}
@@ -366,16 +372,17 @@ export function MapBrowseHybrid() {
                     onChange={(e) =>
                       setImportN(Math.max(1, Math.min(candidates.length, Number(e.target.value) || 1)))
                     }
-                    className="w-14 h-7 px-2 text-xs bg-transparent border border-border focus:border-foreground focus:outline-none font-mono num"
+                    className="w-14 h-7 px-2 text-xs font-mono num"
                   />
-                  <button
+                  <Button
                     onClick={bulkImportTopN}
                     disabled={busy}
-                    className="ml-auto inline-flex items-center gap-1 h-7 px-2 text-[10px] font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground disabled:opacity-50 active:scale-[0.97]"
+                    size="sm"
+                    className="ml-auto h-7 text-[10px] font-mono uppercase tracking-[0.12em]"
                   >
                     {busy ? <Loader2 className="size-3 animate-spin" /> : <Building2 className="size-3" />}
                     Import
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
@@ -432,13 +439,15 @@ function PlaceDetail({
           <p className="eyebrow">Business · Google Places</p>
           <p className="text-lg font-medium mt-1">{p.name}</p>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8 shrink-0"
           onClick={onClose}
-          className="size-8 grid place-items-center text-muted-foreground hover:text-foreground shrink-0"
           aria-label="Close"
         >
           <X className="size-4" />
-        </button>
+        </Button>
       </header>
 
       <div className="px-4 py-4 space-y-3 text-sm">
@@ -495,19 +504,16 @@ function PlaceDetail({
       </div>
 
       <div className="px-4 py-3 border-t border-border">
-        <button
+        <Button
           onClick={onImport}
           disabled={imported}
-          className={cn(
-            "w-full inline-flex items-center justify-center gap-1.5 h-10 px-4 text-xs font-mono uppercase tracking-[0.12em]",
-            imported
-              ? "bg-muted text-muted-foreground cursor-not-allowed"
-              : "bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-          )}
+          size="lg"
+          variant={imported ? "secondary" : "default"}
+          className="w-full h-10 text-xs font-mono uppercase tracking-[0.12em]"
         >
           {imported ? <Check className="size-3.5" /> : <Building2 className="size-3.5" />}
           {imported ? "Imported to Companies" : "Import to Companies"}
-        </button>
+        </Button>
       </div>
     </div>
   );
