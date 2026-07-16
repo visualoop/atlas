@@ -8,6 +8,12 @@ import type { Doc } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { resolveConvexSiteUrl } from "@/lib/convexSiteUrl";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 export default function WhatsAppSettingsPage() {
   const connections = useQuery(api.whatsapp.listConnections, {});
@@ -33,12 +39,14 @@ export default function WhatsAppSettingsPage() {
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <p className="eyebrow">Connections</p>
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setAddOpen(true)}
-              className="font-mono uppercase tracking-[0.12em] text-xs px-3 py-1.5 border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors inline-flex items-center gap-1.5"
+              className="font-mono uppercase tracking-[0.12em] text-xs"
             >
               <Plus className="size-3.5" /> Add
-            </button>
+            </Button>
           </div>
 
           {connections === undefined ? (
@@ -49,12 +57,13 @@ export default function WhatsAppSettingsPage() {
               <p className="font-display italic text-xl text-muted-foreground">
                 No WhatsApp numbers connected.
               </p>
-              <button
+              <Button
                 onClick={() => setAddOpen(true)}
-                className="font-mono uppercase tracking-[0.12em] text-xs px-6 py-3 bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+                size="lg"
+                className="font-mono uppercase tracking-[0.12em] text-xs"
               >
-                + Connect a number
-              </button>
+                <Plus className="size-3.5" /> Connect a number
+              </Button>
             </div>
           ) : (
             <div className="border border-border divide-y divide-border">
@@ -98,16 +107,18 @@ function ConnectionRow({ connection: c }: { connection: Doc<"whatsappConnections
             {c.messagingLimitTier && <span className="ml-2 text-muted-foreground">{c.messagingLimitTier}</span>}
           </p>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={async () => {
             if (!confirm("Disconnect this WhatsApp number? Meta webhooks will still arrive but will be dropped.")) return;
             await disconnect({ id: c._id });
             toast.success("Disconnected.");
           }}
-          className="text-xs text-muted-foreground hover:text-[var(--danger)] transition-colors"
+          className="h-auto px-1.5 text-xs text-muted-foreground hover:text-[var(--danger)]"
         >
           Disconnect
-        </button>
+        </Button>
       </div>
 
       <div className="pt-3 border-t border-border grid grid-cols-1 gap-2 text-xs">
@@ -118,17 +129,19 @@ function ConnectionRow({ connection: c }: { connection: Doc<"whatsappConnections
           {webhookUrl ? (
             <div className="flex items-center gap-2">
               <code className="font-mono text-xs bg-muted px-2 py-1 flex-1 truncate">{webhookUrl}</code>
-              <button
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="size-7"
                 onClick={() => {
                   navigator.clipboard.writeText(webhookUrl);
                   setCopied("url");
                   setTimeout(() => setCopied(null), 1500);
                 }}
-                className="size-7 grid place-items-center hover:bg-muted transition-colors"
                 title="Copy"
               >
                 {copied === "url" ? <Check className="size-3.5 text-[var(--success)]" /> : <Copy className="size-3.5" />}
-              </button>
+              </Button>
             </div>
           ) : (
             <p className="text-xs text-[var(--warning)]">
@@ -142,17 +155,19 @@ function ConnectionRow({ connection: c }: { connection: Doc<"whatsappConnections
           </div>
           <div className="flex items-center gap-2">
             <code className="font-mono text-xs bg-muted px-2 py-1 flex-1 truncate">{c.webhookVerifyToken}</code>
-            <button
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="size-7"
               onClick={() => {
                 navigator.clipboard.writeText(c.webhookVerifyToken);
                 setCopied("token");
                 setTimeout(() => setCopied(null), 1500);
               }}
-              className="size-7 grid place-items-center hover:bg-muted transition-colors"
               title="Copy"
             >
               {copied === "token" ? <Check className="size-3.5 text-[var(--success)]" /> : <Copy className="size-3.5" />}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -230,24 +245,22 @@ function AddConnectionDialog({ onClose }: { onClose: () => void }) {
           </p>
         </div>
         <footer className="border-t border-border px-6 py-3 flex items-center gap-2 justify-end">
-          <button
+          <Button
+            variant="ghost"
             onClick={onClose}
             disabled={saving}
-            className="inline-flex items-center h-8 px-4 text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground transition-colors"
+            className="h-8 text-xs font-mono uppercase tracking-[0.12em]"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={submit}
             disabled={saving}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-8 px-5 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
-            )}
+            className="h-8 px-5 text-xs font-mono uppercase tracking-[0.12em]"
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
             Save
-          </button>
+          </Button>
         </footer>
       </div>
     </div>
@@ -268,11 +281,11 @@ function Field({
       <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
         {label} {optional && <span className="normal-case tracking-normal text-muted-foreground/60">— optional</span>}
       </span>
-      <input
+      <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+        className="font-mono"
       />
     </label>
   );
@@ -330,20 +343,23 @@ function TemplatesSection() {
         <div className="flex items-center justify-between">
           <p className="eyebrow">Message templates</p>
           <div className="flex items-center gap-1.5">
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={sync}
               disabled={syncing}
-              className="font-mono uppercase tracking-[0.12em] text-xs px-3 py-1.5 border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors inline-flex items-center gap-1.5 disabled:opacity-50"
+              className="font-mono uppercase tracking-[0.12em] text-xs"
             >
               {syncing ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
               Sync from Meta
-            </button>
-            <button
+            </Button>
+            <Button
+              size="sm"
               onClick={() => setCreatOpen(true)}
-              className="font-mono uppercase tracking-[0.12em] text-xs px-3 py-1.5 bg-primary text-primary-foreground active:scale-[0.97] transition-transform inline-flex items-center gap-1.5"
+              className="font-mono uppercase tracking-[0.12em] text-xs"
             >
               <Plus className="size-3" /> Submit
-            </button>
+            </Button>
           </div>
         </div>
         <p className="text-xs text-muted-foreground max-w-prose">
@@ -499,51 +515,54 @@ function SubmitTemplateDialog({
         <div className="px-6 py-4 space-y-4">
           <label className="block space-y-1">
             <span className="eyebrow">Name (lowercase + underscore)</span>
-            <input
+            <Input
               value={name}
               onChange={(e) => setName(e.target.value.toLowerCase())}
               placeholder="e.g. order_shipped"
-              className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+              className="font-mono"
             />
           </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="block space-y-1">
               <span className="eyebrow">Language</span>
-              <select
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="w-full h-9 px-3 text-sm bg-transparent border border-border"
-              >
-                <option value="en">English</option>
-                <option value="en_US">English (US)</option>
-                <option value="sw">Kiswahili</option>
-              </select>
+              <Select value={language} onValueChange={(v) => v && setLanguage(v)}>
+                <SelectTrigger size="sm" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="en">English</SelectItem>
+                  <SelectItem value="en_US">English (US)</SelectItem>
+                  <SelectItem value="sw">Kiswahili</SelectItem>
+                </SelectContent>
+              </Select>
             </label>
             <label className="block space-y-1">
               <span className="eyebrow">Category</span>
-              <select
+              <Select
                 value={category}
-                onChange={(e) =>
-                  setCategory(
-                    e.target.value as "MARKETING" | "UTILITY" | "AUTHENTICATION",
-                  )
+                onValueChange={(v) =>
+                  v && setCategory(v as "MARKETING" | "UTILITY" | "AUTHENTICATION")
                 }
-                className="w-full h-9 px-3 text-sm bg-transparent border border-border"
               >
-                <option value="UTILITY">Utility</option>
-                <option value="MARKETING">Marketing</option>
-                <option value="AUTHENTICATION">Authentication</option>
-              </select>
+                <SelectTrigger size="sm" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="UTILITY">Utility</SelectItem>
+                  <SelectItem value="MARKETING">Marketing</SelectItem>
+                  <SelectItem value="AUTHENTICATION">Authentication</SelectItem>
+                </SelectContent>
+              </Select>
             </label>
           </div>
           <label className="block space-y-1">
             <span className="eyebrow">Body text</span>
-            <textarea
+            <Textarea
               value={bodyText}
               onChange={(e) => setBodyText(e.target.value)}
               placeholder="Hi {{1}}, your order {{2}} has shipped."
               rows={4}
-              className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none"
+              className="resize-none"
             />
             <p className="text-[11px] text-muted-foreground">
               Use <code className="font-mono">{"{{1}}"}</code>,{" "}
@@ -552,21 +571,22 @@ function SubmitTemplateDialog({
           </label>
         </div>
         <footer className="px-6 py-3 border-t border-border flex items-center gap-2">
-          <button
+          <Button
+            variant="ghost"
             onClick={onClose}
             disabled={busy}
-            className="ml-auto text-xs font-mono uppercase tracking-[0.12em] h-8 px-4 text-muted-foreground hover:text-foreground"
+            className="ml-auto h-8 text-xs font-mono uppercase tracking-[0.12em]"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={go}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 h-8 px-5 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] disabled:opacity-50"
+            className="h-8 px-5 text-xs font-mono uppercase tracking-[0.12em]"
           >
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
             Submit
-          </button>
+          </Button>
         </footer>
       </div>
     </div>
