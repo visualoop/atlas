@@ -111,9 +111,9 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={go} className="space-y-6">
+    <form onSubmit={go} className="space-y-5">
       {refCode && (
-        <div className="border border-primary/40 bg-primary/5 p-3 text-xs">
+        <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 text-xs">
           <p className="eyebrow text-primary mb-1">Invited</p>
           <p className="text-foreground">
             You&rsquo;re using invite code{" "}
@@ -133,14 +133,14 @@ export function LoginForm() {
 
       {mode === "signup" && (
         <div className="space-y-2">
-          <Label htmlFor="name" className="eyebrow">Name</Label>
-          <Input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
+          <Label htmlFor="name">Name</Label>
+          <Input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" placeholder="Jane Wanjiku" />
         </div>
       )}
 
       {mode !== "magic-verify" && (
         <div className="space-y-2">
-          <Label htmlFor="email" className="eyebrow">Email</Label>
+          <Label htmlFor="email">Email</Label>
           <Input
             id="email"
             type="email"
@@ -149,13 +149,14 @@ export function LoginForm() {
             required
             autoComplete="email"
             autoFocus
+            placeholder="you@company.co.ke"
           />
         </div>
       )}
 
       {(mode === "password" || mode === "signup") && (
         <div className="space-y-2">
-          <Label htmlFor="password" className="eyebrow">Password</Label>
+          <Label htmlFor="password">Password</Label>
           <Input
             id="password"
             type="password"
@@ -164,6 +165,7 @@ export function LoginForm() {
             required
             minLength={12}
             autoComplete={mode === "signup" ? "new-password" : "current-password"}
+            placeholder="••••••••••••"
           />
           {mode === "signup" && (
             <p className="text-xs text-muted-foreground mt-1">Minimum 12 characters.</p>
@@ -173,7 +175,7 @@ export function LoginForm() {
 
       {mode === "magic-verify" && (
         <div className="space-y-2">
-          <Label htmlFor="otp" className="eyebrow">6-digit code</Label>
+          <Label htmlFor="otp">6-digit code</Label>
           <Input
             id="otp"
             type="text"
@@ -185,7 +187,7 @@ export function LoginForm() {
             required
             autoComplete="one-time-code"
             autoFocus
-            className="font-mono tracking-[0.4em] text-2xl"
+            className="font-mono tracking-[0.4em] text-2xl h-14 text-center"
           />
           <p className="text-xs text-muted-foreground">
             Sent to {email}.
@@ -193,7 +195,7 @@ export function LoginForm() {
         </div>
       )}
 
-      <Button type="submit" disabled={pending} className="w-full">
+      <Button type="submit" disabled={pending} size="lg" className="w-full">
         {pending
           ? "…"
           : mode === "signup"
@@ -205,33 +207,36 @@ export function LoginForm() {
           : "Sign in"}
       </Button>
 
-      <div className="flex flex-col gap-2 pt-4 border-t border-border">
+      <div className="flex flex-col gap-1 pt-4 border-t border-border">
         {mode !== "magic" && mode !== "magic-verify" && (
-          <button
+          <Button
             type="button"
+            variant="link"
             onClick={() => setMode("magic")}
-            className="text-xs eyebrow text-muted-foreground hover:text-foreground transition-colors text-left"
+            className="h-auto justify-start px-0 text-xs text-muted-foreground hover:text-foreground"
           >
             Sign in with a magic link →
-          </button>
+          </Button>
         )}
         {mode !== "password" && (
-          <button
+          <Button
             type="button"
+            variant="link"
             onClick={() => setMode("password")}
-            className="text-xs eyebrow text-muted-foreground hover:text-foreground transition-colors text-left"
+            className="h-auto justify-start px-0 text-xs text-muted-foreground hover:text-foreground"
           >
             Use a password →
-          </button>
+          </Button>
         )}
         {mode !== "signup" && (
-          <button
+          <Button
             type="button"
+            variant="link"
             onClick={() => setMode("signup")}
-            className="text-xs eyebrow text-muted-foreground hover:text-foreground transition-colors text-left"
+            className="h-auto justify-start px-0 text-xs text-muted-foreground hover:text-foreground"
           >
             Create an account →
-          </button>
+          </Button>
         )}
       </div>
     </form>
