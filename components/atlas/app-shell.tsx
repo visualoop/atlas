@@ -23,6 +23,11 @@ import {
   Settings,
   LogOut,
   ChevronDown,
+  ChevronRight,
+  Map as MapIcon,
+  MapPin,
+  Globe,
+  LayoutDashboard,
   User as UserIcon,
 } from "lucide-react";
 import {
@@ -46,6 +51,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarProvider,
   SidebarRail,
   SidebarTrigger,
@@ -67,6 +75,14 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   key: string;
+  /** Optional nested links that expand when the parent route is active. */
+  children?: NavChild[];
+};
+
+type NavChild = {
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
 };
 
 const PRIMARY_NAV: NavItem[] = [
@@ -78,7 +94,19 @@ const CRM_NAV: NavItem[] = [
   { href: "/contacts", icon: Users, label: "Contacts", key: "c" },
   { href: "/companies", icon: Building2, label: "Companies", key: "o" },
   { href: "/pipelines", icon: Workflow, label: "Pipelines", key: "p" },
-  { href: "/prospector", icon: Search, label: "Prospector", key: "g" },
+  {
+    href: "/prospector",
+    icon: Search,
+    label: "Prospector",
+    key: "g",
+    children: [
+      { href: "/prospector", icon: LayoutDashboard, label: "Overview" },
+      { href: "/prospector/search", icon: Search, label: "Text search" },
+      { href: "/prospector/hybrid", icon: MapIcon, label: "Places + OSM" },
+      { href: "/prospector/google-maps", icon: MapPin, label: "Google Maps" },
+      { href: "/prospector/osm", icon: Globe, label: "OSM only" },
+    ],
+  },
   { href: "/outreach/queue", icon: Sparkles, label: "Outreach queue", key: "q" },
 ];
 
@@ -422,7 +450,8 @@ function NavGroup({
         <SidebarMenu>
           {items.map((item) => {
             const Icon = item.icon;
-            const active = pathname.startsWith(item.href);
+            const active = pathname === item.href || pathname.startsWith(item.href + "/");
+            const showChildren = item.children && item.children.length > 0 && active;
             return (
               <SidebarMenuItem key={item.href}>
                 <SidebarMenuButton
@@ -437,6 +466,34 @@ function NavGroup({
                     {item.key}
                   </span>
                 </SidebarMenuButton>
+                {showChildren && (
+                  <SidebarMenuSub>
+                    {item.children!.map((sub) => {
+                      const SubIcon = sub.icon;
+                      // Exact match for the parent index route, prefix
+                      // match for the nested ones — so /prospector
+                      // Overview doesn't stay highlighted when we're
+                      // on /prospector/hybrid.
+                      const isIndex = sub.href === item.href;
+                      const subActive = isIndex
+                        ? pathname === sub.href
+                        : pathname === sub.href ||
+                          pathname.startsWith(sub.href + "/");
+                      return (
+                        <SidebarMenuSubItem key={sub.href}>
+                          <SidebarMenuSubButton
+                            isActive={subActive}
+                            className="rounded-none cursor-pointer"
+                            onClick={() => onNavigate(sub.href)}
+                          >
+                            <SubIcon className="size-3.5" />
+                            <span>{sub.label}</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      );
+                    })}
+                  </SidebarMenuSub>
+                )}
               </SidebarMenuItem>
             );
           })}
