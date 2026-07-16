@@ -60,12 +60,13 @@ export default function TrendsPage() {
           <aside className="space-y-2">
             <div className="flex items-center justify-between">
               <p className="eyebrow">Watches</p>
-              <button
+              <Button
+                variant="link"
                 onClick={() => setNewWatchOpen(true)}
-                className="text-xs font-mono uppercase tracking-[0.12em] text-primary hover:underline inline-flex items-center gap-1"
+                className="h-auto px-0 text-xs font-mono uppercase tracking-[0.12em]"
               >
                 <Plus className="size-3.5" /> Add
-              </button>
+              </Button>
             </div>
             {watches === undefined ? (
               <Skeleton className="h-40 w-full" />
@@ -88,18 +89,19 @@ export default function TrendsPage() {
           <section className="space-y-3 min-w-0">
             <div className="flex items-center gap-1 flex-wrap">
               {STATUSES.map((s) => (
-                <button
+                <Button
                   key={s}
+                  type="button"
+                  variant={status === s ? "default" : "outline"}
+                  size="sm"
                   onClick={() => setStatus(s)}
                   className={cn(
-                    "h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] transition-colors",
-                    status === s
-                      ? "bg-foreground text-background"
-                      : "border border-border text-muted-foreground hover:text-foreground",
+                    "h-8 text-xs font-mono uppercase tracking-[0.12em]",
+                    status === s && "bg-foreground text-background hover:bg-foreground/90",
                   )}
                 >
                   {s}
-                </button>
+                </Button>
               ))}
             </div>
             {mentions === undefined ? (
@@ -165,13 +167,14 @@ function WatchRow({ watch: w }: { watch: Doc<"brandWatches"> }) {
     <>
       <li className="px-3 py-2.5 group hover:bg-muted/30 transition-colors">
         <div className="flex items-baseline justify-between gap-2">
-          <button
+          <Button
+            variant="link"
             type="button"
             onClick={() => setEditing(true)}
-            className="text-sm font-medium truncate text-left hover:underline min-w-0 flex-1"
+            className="h-auto px-0 text-sm font-medium truncate justify-start min-w-0 flex-1 text-foreground"
           >
             {w.label}
-          </button>
+          </Button>
           <span
             className={cn(
               "text-[10px] font-mono uppercase tracking-[0.12em] shrink-0",
@@ -290,12 +293,14 @@ function MentionCard({
       <p className="text-sm text-muted-foreground line-clamp-3">{m.excerpt}</p>
       {m.status === "new" && (
         <div className="flex items-center gap-1 pt-2 border-t border-border">
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => updateStatus({ id: m._id, status: "triaged" })}
-            className="text-xs font-mono uppercase tracking-[0.12em] px-2 h-7 border border-border hover:border-foreground hover:bg-muted transition-colors inline-flex items-center gap-1"
+            className="h-7 text-xs font-mono uppercase tracking-[0.12em]"
           >
             <Eye className="size-3" /> Triage
-          </button>
+          </Button>
           <a
             href={m.url}
             target="_blank"
@@ -305,22 +310,26 @@ function MentionCard({
           >
             <MessageSquare className="size-3" /> Reply on source
           </a>
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => {
               updateStatus({ id: m._id, status: "posted" });
               toast.success("Marked as posted. Draft a social post from /social to reference this mention.");
             }}
-            className="text-xs font-mono uppercase tracking-[0.12em] px-2 h-7 border border-border hover:border-primary hover:text-primary transition-colors inline-flex items-center gap-1"
+            className="h-7 text-xs font-mono uppercase tracking-[0.12em] hover:border-primary hover:text-primary"
           >
             <Sparkles className="size-3" /> Mark posted
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={() => updateStatus({ id: m._id, status: "dismissed" })}
-            className="ml-auto size-7 grid place-items-center text-muted-foreground hover:text-[var(--danger)] transition-colors"
+            className="ml-auto size-7 hover:text-[var(--danger)]"
             title="Dismiss"
           >
             <X className="size-3.5" />
-          </button>
+          </Button>
         </div>
       )}
     </li>
@@ -449,18 +458,15 @@ function WatchDialog({
               <Label>Kind</Label>
               <div className="flex gap-1.5">
                 {KINDS.map((k) => (
-                  <button
+                  <Button
                     key={k.value}
+                    type="button"
+                    variant={kind === k.value ? "default" : "outline"}
                     onClick={() => setKind(k.value)}
-                    className={cn(
-                      "h-9 px-4 rounded-md text-sm font-medium transition-colors",
-                      kind === k.value
-                        ? "bg-primary text-primary-foreground"
-                        : "border bg-background text-muted-foreground hover:text-foreground hover:bg-muted",
-                    )}
+                    className="h-9 text-sm"
                   >
                     {k.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
