@@ -12,6 +12,8 @@ import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { formatDistanceToNowStrict } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { ComposeSheet } from "./compose-sheet";
 import { ReplyBar } from "./reply-bar";
@@ -124,15 +126,15 @@ export default function InboxPage() {
         {/* Left rail — folders / channels — hidden on mobile (use bottom sheet or omit) */}
         <aside className="hidden md:block border-r border-border p-4 space-y-6 overflow-y-auto">
           <div>
-            <button
+            <Button
               onClick={() => setComposeOpen(true)}
-              className="w-full inline-flex items-center justify-center gap-2 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.98] transition-transform"
+              className="w-full h-9 text-xs font-mono uppercase tracking-[0.12em]"
             >
               <Pen className="size-3.5" /> Compose
               <span className="ml-auto text-primary-foreground/70 font-mono normal-case tracking-normal text-[10px]">
                 C
               </span>
-            </button>
+            </Button>
           </div>
 
           <Section title="Folders">
@@ -271,17 +273,19 @@ function RailButton({
   onClick: () => void;
 }) {
   return (
-    <button
+    <Button
+      variant="ghost"
       onClick={onClick}
-      className={`w-full flex items-center gap-2 h-8 px-2 text-sm text-left transition-colors ${
+      className={cn(
+        "w-full justify-start h-8 px-2 text-sm font-normal",
         active
           ? "bg-muted/60 text-foreground"
-          : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
-      }`}
+          : "text-muted-foreground",
+      )}
     >
       {icon}
       {label}
-    </button>
+    </Button>
   );
 }
 
@@ -441,14 +445,16 @@ function ThreadReader({ conversationId, onClose }: {
       <div className="border-b border-border px-4 md:px-6 py-4 space-y-3">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1 flex items-start gap-2">
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={onClose}
-              className="md:hidden size-8 grid place-items-center text-muted-foreground hover:text-foreground shrink-0 -ml-1"
+              className="md:hidden size-8 shrink-0 -ml-1"
               title="Back"
               aria-label="Back to inbox list"
             >
               <ChevronLeft className="size-5" />
-            </button>
+            </Button>
             <div className="min-w-0 flex-1">
             <h1 className="font-display italic text-xl md:text-2xl leading-tight truncate">
               {conversation.subject || "(no subject)"}
@@ -556,37 +562,40 @@ function ThreadReader({ conversationId, onClose }: {
                       {lastInbound.aiDraftReply.slice(0, 80)}
                       {lastInbound.aiDraftReply.length > 80 ? "…" : ""}
                     </span>
-                    <button
+                    <Button
+                      size="xs"
                       onClick={() => {
                         setDraft(lastInbound.aiDraftReply);
                         setReplying(true);
                       }}
-                      className="text-[10px] font-mono uppercase tracking-[0.12em] h-6 px-2 bg-primary text-primary-foreground rounded shrink-0"
+                      className="text-[10px] font-mono uppercase tracking-[0.12em] h-6 shrink-0"
                     >
                       Use it
-                    </button>
+                    </Button>
                   </div>
                 );
               }
               return null;
             })()}
-            <button
+            <Button
+              variant="outline"
               onClick={() => setReplying(true)}
-              className="inline-flex items-center gap-2 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors"
+              className="h-9 text-xs font-mono uppercase tracking-[0.12em]"
             >
               <Reply className="size-3.5" /> Reply
               <span className="text-muted-foreground normal-case tracking-normal text-[10px] ml-1">
                 R
               </span>
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
               onClick={generateDraft}
               disabled={drafting}
-              className="inline-flex items-center gap-2 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+              className="h-9 text-xs font-mono uppercase tracking-[0.12em] hover:border-primary hover:text-primary"
             >
               {drafting ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
               AI draft
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -598,13 +607,15 @@ function ReaderButton({
   children, title, onClick,
 }: { children: React.ReactNode; title: string; onClick: () => void }) {
   return (
-    <button
+    <Button
+      variant="ghost"
+      size="icon"
+      className="size-8"
       onClick={onClick}
       title={title}
-      className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -755,12 +766,13 @@ function EmptyList({
   return (
     <div className="p-8 text-center space-y-3">
       <p className="font-display italic text-xl text-muted-foreground">{message}</p>
-      <button
+      <Button
+        variant="link"
         onClick={onCompose}
-        className="text-xs font-mono uppercase tracking-[0.12em] text-primary hover:underline"
+        className="h-auto px-0 text-xs font-mono uppercase tracking-[0.12em]"
       >
-        + Compose new
-      </button>
+        <Pen className="size-3.5" /> Compose new
+      </Button>
     </div>
   );
 }
