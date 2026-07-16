@@ -12,6 +12,11 @@ import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { WhatsAppOpenChat } from "@/components/atlas/whatsapp-open-chat";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 interface Place {
   googlePlaceId: string;
@@ -353,34 +358,36 @@ export function MapBrowseOsm() {
       <div className="relative bg-muted min-h-[50vh] lg:min-h-0">
         <div ref={mapContainerRef} className="absolute inset-0" />
         <div className="absolute top-2 left-2 right-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 z-[400]">
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="h-9 px-3 text-sm bg-background border border-border shadow"
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-          <input
+          <Select value={category} onValueChange={(v) => v && setCategory(v)}>
+            <SelectTrigger size="sm" className="h-9 bg-background shadow">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CATEGORIES.map((c) => (
+                <SelectItem key={c.value} value={c.value}>
+                  {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
             type="text"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="Keyword (optional) — e.g. pharmacy, salon"
             onKeyDown={(e) => e.key === "Enter" && searchThisArea()}
-            className="h-9 px-3 text-sm bg-background border border-border shadow flex-1 min-w-0"
+            className="h-9 bg-background shadow flex-1 min-w-0"
           />
-          <button
+          <Button
             onClick={() => searchThisArea()}
             disabled={!leafletReady || busy}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-4 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] shadow disabled:opacity-50 whitespace-nowrap"
+            className="h-9 text-xs font-mono uppercase tracking-[0.12em] shadow whitespace-nowrap"
           >
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Search className="size-3.5" />}
             {busy ? `${searchElapsed.toFixed(1)}s` : "Search"}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => {
               if (!mapRef.current) return;
               const c = mapRef.current.getCenter();
@@ -393,12 +400,12 @@ export function MapBrowseOsm() {
                 "noopener,noreferrer",
               );
             }}
-            className="inline-flex items-center justify-center gap-1 h-9 px-3 text-xs font-mono uppercase tracking-[0.12em] bg-background border border-border shadow hover:border-foreground"
+            className="h-9 text-xs font-mono uppercase tracking-[0.12em] bg-background shadow"
             title="Open this area on Google Maps in a new tab — no API needed"
           >
             <ExternalLink className="size-3" />
             <span className="hidden sm:inline">Google Maps</span>
-          </button>
+          </Button>
         </div>
 
         <div className="absolute bottom-2 left-2 z-[400] text-[10px] font-mono text-muted-foreground bg-background/80 backdrop-blur px-2 py-1 flex items-center gap-1.5">
@@ -466,28 +473,32 @@ export function MapBrowseOsm() {
                   <span>
                     via <span className="uppercase tracking-[0.12em]">{dataSource}</span>
                   </span>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => searchThisArea({ refresh: true })}
                     disabled={busy}
-                    className="hover:text-foreground disabled:opacity-40"
+                    className="h-auto px-1 text-[10px] font-mono text-muted-foreground"
                     title="Bypass cache + re-fetch fresh"
                   >
                     ↻ Refresh
-                  </button>
+                  </Button>
                 </div>
               )}
               {hiddenCount > 0 && (
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setHideBadFit((v) => !v)}
-                  className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground"
+                  className="h-auto px-1 text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground self-start"
                 >
                   {hideBadFit ? "Show" : "Hide"} low-fit ({hiddenCount})
-                </button>
+                </Button>
               )}
               {candidates.length > 0 && (
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] text-muted-foreground">Import top</span>
-                  <input
+                  <Input
                     type="number"
                     min={1}
                     max={Math.min(candidates.length, budget?.remaining ?? 100)}
@@ -497,16 +508,17 @@ export function MapBrowseOsm() {
                         Math.max(1, Math.min(candidates.length, Number(e.target.value) || 1)),
                       )
                     }
-                    className="w-14 h-7 px-2 text-xs bg-transparent border border-border focus:border-foreground focus:outline-none font-mono num"
+                    className="w-14 h-7 px-2 text-xs font-mono num"
                   />
-                  <button
+                  <Button
                     onClick={bulkImportTopN}
                     disabled={busy}
-                    className="ml-auto inline-flex items-center gap-1 h-7 px-2 text-[10px] font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground disabled:opacity-50 active:scale-[0.97]"
+                    size="sm"
+                    className="ml-auto h-7 text-[10px] font-mono uppercase tracking-[0.12em]"
                   >
                     {busy ? <Loader2 className="size-3 animate-spin" /> : <Building2 className="size-3" />}
                     Import
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
@@ -574,12 +586,13 @@ export function MapBrowseOsm() {
                 );
               })}
               {visibleCount < sortedPlaces.length && (
-                <button
+                <Button
+                  variant="ghost"
                   onClick={() => setVisibleCount((n) => n + 20)}
-                  className="w-full py-3 text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                  className="w-full py-3 h-auto text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground rounded-none"
                 >
                   Load {Math.min(20, sortedPlaces.length - visibleCount)} more · {sortedPlaces.length - visibleCount} left
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -625,13 +638,15 @@ function PlaceDetail({
           <p className="eyebrow">Business · OSM</p>
           <p className="text-lg font-medium mt-1">{p.name}</p>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8 shrink-0"
           onClick={onClose}
-          className="size-8 grid place-items-center text-muted-foreground hover:text-foreground shrink-0"
           aria-label="Close"
         >
           <X className="size-4" />
-        </button>
+        </Button>
       </header>
 
       <div className="px-4 py-4 space-y-3 text-sm">
@@ -693,19 +708,16 @@ function PlaceDetail({
       </div>
 
       <div className="px-4 py-3 border-t border-border">
-        <button
+        <Button
           onClick={onImport}
           disabled={imported}
-          className={cn(
-            "w-full inline-flex items-center justify-center gap-1.5 h-10 px-4 text-xs font-mono uppercase tracking-[0.12em]",
-            imported
-              ? "bg-muted text-muted-foreground cursor-not-allowed"
-              : "bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-          )}
+          size="lg"
+          variant={imported ? "secondary" : "default"}
+          className="w-full h-10 text-xs font-mono uppercase tracking-[0.12em]"
         >
           {imported ? <Check className="size-3.5" /> : <Building2 className="size-3.5" />}
           {imported ? "Imported to Companies" : "Import to Companies"}
-        </button>
+        </Button>
       </div>
     </div>
   );
