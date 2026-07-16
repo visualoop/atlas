@@ -10,6 +10,9 @@ import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNowStrict } from "date-fns";
 
@@ -39,16 +42,14 @@ export default function SocialPage() {
               Comments flow into the unified inbox.
             </p>
           </div>
-          <button
+          <Button
             onClick={() => setComposeOpen(true)}
             disabled={!connections || connections.length === 0}
-            className={cn(
-              "inline-flex items-center gap-2 h-10 px-6 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
-            )}
+            size="lg"
+            className="text-xs font-mono uppercase tracking-[0.12em]"
           >
             <Plus className="size-3.5" /> New post
-          </button>
+          </Button>
         </header>
 
         <ConnectionsBar connections={connections} />
@@ -158,14 +159,16 @@ function ConnectionRemoveButton({
   }
 
   return (
-    <button
+    <Button
+      variant="ghost"
+      size="icon-xs"
       onClick={handleRemove}
       disabled={busy}
       title="Disconnect"
-      className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all p-0.5 disabled:opacity-40"
+      className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
     >
       {busy ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
-    </button>
+    </Button>
   );
 }
 
@@ -226,12 +229,13 @@ function EmptyPosts({ onCreate, hasConnections }: { onCreate: () => void; hasCon
     <div className="border border-dashed border-border py-16 text-center space-y-3">
       <p className="font-display italic text-2xl text-muted-foreground">Nothing posted yet.</p>
       {hasConnections ? (
-        <button
+        <Button
           onClick={onCreate}
-          className="font-mono uppercase tracking-[0.12em] text-xs px-6 py-3 bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+          size="lg"
+          className="font-mono uppercase tracking-[0.12em] text-xs"
         >
-          + New post
-        </button>
+          <Plus className="size-3.5" /> New post
+        </Button>
       ) : (
         <p className="text-sm text-muted-foreground">Connect an account to get started.</p>
       )}
@@ -417,12 +421,14 @@ function ComposeSheet({
             <p className="eyebrow font-mono text-muted-foreground">Compose post</p>
             <h2 className="font-display italic text-2xl mt-1">Where should it <em>land</em>?</h2>
           </div>
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8"
             onClick={() => !saving && onClose()}
-            className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
             <X className="size-4" />
-          </button>
+          </Button>
         </header>
 
         <div className="px-6 py-4 space-y-4">
@@ -437,8 +443,11 @@ function ComposeSheet({
                 const Icon = meta?.icon ?? ExternalLink;
                 const active = selected.has(c._id);
                 return (
-                  <button
+                  <Button
                     key={c._id}
+                    type="button"
+                    variant={active ? "default" : "outline"}
+                    size="sm"
                     onClick={() => {
                       setSelected((prev) => {
                         const next = new Set(prev);
@@ -448,15 +457,13 @@ function ComposeSheet({
                       });
                     }}
                     className={cn(
-                      "inline-flex items-center gap-2 h-9 px-3 text-xs transition-colors",
-                      active
-                        ? "bg-foreground text-background"
-                        : "border border-border text-muted-foreground hover:text-foreground",
+                      "h-9 text-xs",
+                      active && "bg-foreground text-background hover:bg-foreground/90",
                     )}
                   >
                     <Icon className={cn("size-3.5", !active && meta?.color)} />
                     {c.displayName}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
@@ -468,23 +475,25 @@ function ComposeSheet({
               <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
                 Caption
               </span>
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={handleAIDraft}
                 disabled={aiDrafting || selected.size === 0}
-                className="inline-flex items-center gap-1.5 h-7 px-2.5 text-[11px] font-mono uppercase tracking-[0.12em] border border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 disabled:opacity-50"
+                className="h-7 text-[11px] font-mono uppercase tracking-[0.12em] border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary"
               >
                 {aiDrafting ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3" />}
                 {caption.trim() ? "Redraft with AI" : "Draft with AI"}
-              </button>
+              </Button>
             </div>
-            <textarea
+            <Textarea
               autoFocus
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
               rows={10}
               placeholder="What's on your mind?"
-              className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none"
+              className="resize-none"
             />
             <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
               <span>{caption.length} chars</span>
@@ -532,13 +541,15 @@ function ComposeSheet({
                       alt={m.filename}
                       className="w-full h-full object-cover"
                     />
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
                       onClick={() => removeMedia(m.fileId)}
-                      className="absolute top-1 right-1 size-6 grid place-items-center bg-background/80 hover:bg-destructive hover:text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition"
+                      className="absolute top-1 right-1 size-6 bg-background/80 hover:bg-destructive hover:text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition"
                       title="Remove"
                     >
                       <X className="size-3" />
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -550,11 +561,11 @@ function ComposeSheet({
             <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
               Schedule <span className="normal-case tracking-normal text-muted-foreground/60">— optional</span>
             </span>
-            <input
+            <Input
               type="datetime-local"
               value={scheduleTime}
               onChange={(e) => setScheduleTime(e.target.value)}
-              className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+              className="font-mono"
             />
           </label>
 
@@ -566,33 +577,32 @@ function ComposeSheet({
         </div>
 
         <footer className="border-t border-border px-6 py-3 flex items-center gap-2 justify-end sticky bottom-0 bg-background">
-          <button
+          <Button
+            variant="outline"
             onClick={() => submit("draft")}
             disabled={saving || !canSubmit}
-            className="inline-flex items-center h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors disabled:opacity-50"
+            className="h-9 text-xs font-mono uppercase tracking-[0.12em]"
           >
             Save draft
-          </button>
+          </Button>
           {scheduleTime && (
-            <button
+            <Button
+              variant="outline"
               onClick={() => submit("schedule")}
               disabled={saving || !canSubmit}
-              className="inline-flex items-center gap-1.5 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] border border-[var(--border-strong)] hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+              className="h-9 text-xs font-mono uppercase tracking-[0.12em] hover:border-primary hover:text-primary"
             >
               <CalendarIcon className="size-3.5" /> Schedule
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             onClick={() => submit("publish")}
             disabled={saving || !canSubmit}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-9 px-6 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
-            )}
+            className="h-9 px-6 text-xs font-mono uppercase tracking-[0.12em]"
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
             Publish now
-          </button>
+          </Button>
         </footer>
       </div>
     </div>
@@ -767,22 +777,24 @@ function ComposioConnectGrid({ compact = false }: { compact?: boolean }) {
                   Set up on Composio →
                 </a>
               ) : (
-                <button
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={() => connect(t)}
                   disabled={busySlug === t.toolkitSlug || isDisabled}
                   className={cn(
-                    "text-[10px] font-mono uppercase tracking-[0.12em] h-8 px-3 border transition-colors",
+                    "h-8 text-[10px] font-mono uppercase tracking-[0.12em]",
                     hasConnected
-                      ? "border-border hover:border-foreground"
-                      : "border-primary/40 bg-primary/5 text-primary hover:bg-primary/10",
-                    "disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5",
+                      ? "hover:border-foreground"
+                      : "border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary",
                   )}
                 >
                   {busySlug === t.toolkitSlug ? (
                     <Loader2 className="size-3 animate-spin" />
                   ) : null}
                   {hasConnected ? "Add another" : "Connect"}
-                </button>
+                </Button>
               )}
             </div>
           );
