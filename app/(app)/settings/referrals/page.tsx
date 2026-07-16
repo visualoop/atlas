@@ -7,6 +7,7 @@ import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { formatDistanceToNowStrict } from "date-fns";
 
 export default function ReferralsSettingsPage() {
@@ -55,18 +56,20 @@ export default function ReferralsSettingsPage() {
                   {code || "—"}
                 </code>
                 {code && (
-                  <button
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="size-9"
                     onClick={() => {
                       navigator.clipboard.writeText(code);
                       setCopied("code");
                       setTimeout(() => setCopied(null), 1500);
                       toast.success("Code copied.");
                     }}
-                    className="size-9 grid place-items-center border border-border hover:bg-muted transition-colors"
                     title="Copy code"
                   >
                     {copied === "code" ? <Check className="size-4 text-[var(--success)]" /> : <Copy className="size-4" />}
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -87,19 +90,24 @@ export default function ReferralsSettingsPage() {
               <code className="font-mono text-xs bg-muted px-3 py-2 flex-1 truncate">
                 {shareUrl}
               </code>
-              <button
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-9"
                 onClick={() => {
                   navigator.clipboard.writeText(shareUrl);
                   setCopied("link");
                   setTimeout(() => setCopied(null), 1500);
                   toast.success("Link copied.");
                 }}
-                className="size-9 grid place-items-center border border-border hover:bg-muted transition-colors"
                 title="Copy link"
               >
                 {copied === "link" ? <Check className="size-4 text-[var(--success)]" /> : <Copy className="size-4" />}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-9"
                 onClick={() => {
                   if (navigator.share) {
                     navigator.share({
@@ -112,11 +120,10 @@ export default function ReferralsSettingsPage() {
                     toast.success("Link copied.");
                   }
                 }}
-                className="size-9 grid place-items-center border border-border hover:bg-muted transition-colors"
                 title="Share"
               >
                 <Share2 className="size-4" />
-              </button>
+              </Button>
             </div>
           </div>
         </div>

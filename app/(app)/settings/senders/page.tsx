@@ -7,6 +7,9 @@ import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function SenderIdentitiesPage() {
   const identities = useQuery(api.emails.listSenderIdentities, {});
@@ -29,12 +32,14 @@ export default function SenderIdentitiesPage() {
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <p className="eyebrow">Email</p>
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setAddOpen(true)}
-              className="font-mono uppercase tracking-[0.12em] text-xs px-3 py-1.5 border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors inline-flex items-center gap-1.5"
+              className="font-mono uppercase tracking-[0.12em] text-xs"
             >
               <Plus className="size-3.5" /> Add
-            </button>
+            </Button>
           </div>
 
           {identities === undefined ? (
@@ -47,12 +52,13 @@ export default function SenderIdentitiesPage() {
               <p className="text-sm text-muted-foreground max-w-prose mx-auto">
                 Add one to start sending email from Atlas. Example: <code className="font-mono text-xs">justine@blyss.co.ke</code>
               </p>
-              <button
+              <Button
                 onClick={() => setAddOpen(true)}
-                className="font-mono uppercase tracking-[0.12em] text-xs px-6 py-3 bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+                size="lg"
+                className="font-mono uppercase tracking-[0.12em] text-xs"
               >
-                + Add identity
-              </button>
+                <Plus className="size-3.5" /> Add identity
+              </Button>
             </div>
           ) : (
             <div className="border border-border divide-y divide-border">
@@ -150,12 +156,12 @@ function AddIdentityDialog({ onClose }: { onClose: () => void }) {
             <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
               Email address
             </span>
-            <input
+            <Input
               autoFocus
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               placeholder="justine@blyss.co.ke"
-              className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
+              className="h-9"
               onKeyDown={(e) => e.key === "Enter" && submit()}
             />
           </label>
@@ -163,43 +169,39 @@ function AddIdentityDialog({ onClose }: { onClose: () => void }) {
             <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
               Display name <span className="normal-case tracking-normal text-muted-foreground/60">— optional</span>
             </span>
-            <input
+            <Input
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Justine Gichana"
-              className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
+              className="h-9"
               onKeyDown={(e) => e.key === "Enter" && submit()}
             />
           </label>
           <label className="flex items-center gap-2 text-sm mt-3 cursor-pointer">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={isDefault}
-              onChange={(e) => setIsDefault(e.target.checked)}
-              className="size-3.5"
+              onCheckedChange={(checked) => setIsDefault(checked === true)}
             />
             Set as default for this workspace
           </label>
         </div>
         <footer className="border-t border-border px-6 py-3 flex items-center gap-2 justify-end">
-          <button
+          <Button
+            variant="ghost"
             onClick={onClose}
             disabled={saving}
-            className="inline-flex items-center h-8 px-4 text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground transition-colors"
+            className="h-8 text-xs font-mono uppercase tracking-[0.12em]"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={submit}
             disabled={saving || !address.trim()}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-8 px-5 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
-            )}
+            className="h-8 px-5 text-xs font-mono uppercase tracking-[0.12em]"
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
             Add
-          </button>
+          </Button>
         </footer>
       </div>
     </div>

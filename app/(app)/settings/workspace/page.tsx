@@ -6,6 +6,9 @@ import { api } from "@/convex/_generated/api";
 import { Loader2, Save, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 /**
  * /settings/workspace — brand + product context that every AI feature reads.
@@ -150,39 +153,39 @@ export default function WorkspacePage() {
 
       <section className="space-y-5 border border-border p-6">
         <Field label="Workspace name" required>
-          <input
+          <Input
             value={values.name}
             onChange={(e) => setValues({ ...values, name: e.target.value })}
-            className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
+           
           />
         </Field>
 
         <Field label="Website" hint="Used for AI research + brand context">
-          <input
+          <Input
             value={values.website}
             onChange={(e) => setValues({ ...values, website: e.target.value })}
             placeholder="https://omnix.blyss.co.ke"
-            className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+            className="font-mono"
           />
         </Field>
 
         <Field label="One-liner" hint="How you describe this workspace in one line">
-          <input
+          <Input
             value={values.oneLiner}
             onChange={(e) => setValues({ ...values, oneLiner: e.target.value })}
             placeholder="M-PESA POS for salons + spas in Nairobi"
-            className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
+           
             maxLength={140}
           />
         </Field>
 
         <Field label="Elevator pitch" hint="2-3 sentences the AI can reuse in cold-emails">
-          <textarea
+          <Textarea
             rows={3}
             value={values.elevatorPitch}
             onChange={(e) => setValues({ ...values, elevatorPitch: e.target.value })}
             placeholder="Omnix is an all-in-one POS + inventory system built for Kenyan retail. We handle M-PESA reconciliation automatically and support offline mode for kiosks with unstable internet."
-            className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none"
+            className="resize-none"
           />
         </Field>
       </section>
@@ -191,32 +194,32 @@ export default function WorkspacePage() {
         <p className="eyebrow">Product + market</p>
 
         <Field label="Offerings" hint="Markdown list of what you sell">
-          <textarea
+          <Textarea
             rows={5}
             value={values.offerings}
             onChange={(e) => setValues({ ...values, offerings: e.target.value })}
             placeholder={"- Omnix POS terminal + till software\n- Omnix Inventory (SKU management + reorder alerts)\n- Omnix Loyalty (customer rewards via WhatsApp)"}
-            className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none font-mono"
+            className="resize-none font-mono"
           />
         </Field>
 
         <Field label="Ideal customer" hint="Who this workspace serves">
-          <textarea
+          <Textarea
             rows={3}
             value={values.targetMarket}
             onChange={(e) => setValues({ ...values, targetMarket: e.target.value })}
             placeholder="Independent salon + spa owners in Kenya, 3-15 staff, KES 200k-2m monthly revenue, using paper receipts or WhatsApp bookings today."
-            className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none"
+            className="resize-none"
           />
         </Field>
 
         <Field label="Pricing summary" hint="Short — full pricing lives in Documents">
-          <textarea
+          <Textarea
             rows={3}
             value={values.pricingSummary}
             onChange={(e) => setValues({ ...values, pricingSummary: e.target.value })}
             placeholder="KES 3,500 / terminal / month. Setup + training KES 15k one-off. 14-day free trial. No lock-in."
-            className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none"
+            className="resize-none"
           />
         </Field>
       </section>
@@ -225,22 +228,22 @@ export default function WorkspacePage() {
         <p className="eyebrow">Voice + values</p>
 
         <Field label="Brand voice" hint="How the AI should sound. Keep it specific.">
-          <textarea
+          <Textarea
             rows={3}
             value={values.brandVoice}
             onChange={(e) => setValues({ ...values, brandVoice: e.target.value })}
             placeholder="Confident, direct, Kenyan English. Never marketing fluff. No 'delve', 'hope this finds you', or em-dash filler. Use 'sawa' + 'karibu' naturally when messaging local prospects."
-            className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none"
+            className="resize-none"
           />
         </Field>
 
         <Field label="Core values" hint="Optional. Shapes long-form copy.">
-          <textarea
+          <Textarea
             rows={3}
             value={values.coreValues}
             onChange={(e) => setValues({ ...values, coreValues: e.target.value })}
             placeholder="- Ship weekly. If it's not in prod it doesn't count.\n- Serve founders, not enterprises.\n- Kenya-first, not Kenya-only."
-            className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none font-mono"
+            className="resize-none font-mono"
           />
         </Field>
       </section>
@@ -252,7 +255,7 @@ export default function WorkspacePage() {
           label="Daily import cap"
           hint="Max Places imports per day. Stops the AI (and yourself) from burning through Google credits by accident."
         >
-          <input
+          <Input
             type="number"
             min={1}
             max={5000}
@@ -263,7 +266,7 @@ export default function WorkspacePage() {
                 prospectorDailyCap: Math.max(1, Math.min(5000, Number(e.target.value) || 100)),
               })
             }
-            className="w-32 h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono num"
+            className="w-32 font-mono num"
           />
         </Field>
 
@@ -271,7 +274,7 @@ export default function WorkspacePage() {
           label="Google Maps search cap (per day)"
           hint="Hard ceiling on Places API calls. 150/day = ~4,500/month, ~72% of Google's $200/mo free credit. This cap keeps you safely inside free tier forever. Bump to 200 if you want more headroom, or drop to 50 to stay ultra-safe."
         >
-          <input
+          <Input
             type="number"
             min={1}
             max={11000}
@@ -282,7 +285,7 @@ export default function WorkspacePage() {
                 googleMapsDailySearchCap: Math.max(1, Math.min(11000, Number(e.target.value) || 150)),
               })
             }
-            className="w-32 h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono num"
+            className="w-32 font-mono num"
           />
         </Field>
       </section>
@@ -304,13 +307,13 @@ export default function WorkspacePage() {
           label="Assistant name"
           hint="What should we call your AI assistant?"
         >
-          <input
+          <Input
             value={values.assistantName}
             onChange={(e) =>
               setValues({ ...values, assistantName: e.target.value })
             }
             placeholder="Atlas"
-            className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
+           
             maxLength={40}
           />
         </Field>
@@ -318,7 +321,7 @@ export default function WorkspacePage() {
           label="How should they sound?"
           hint="Freeform character notes the AI weaves into responses"
         >
-          <textarea
+          <Textarea
             rows={3}
             value={values.assistantPersonaTraits}
             onChange={(e) =>
@@ -328,7 +331,7 @@ export default function WorkspacePage() {
               })
             }
             placeholder="Direct, warm, uses Sheng occasionally. Never uses corporate jargon. Confident but never salesy. Always signs off with the founder's first name only."
-            className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none"
+            className="resize-none"
           />
         </Field>
       </section>
@@ -350,13 +353,13 @@ export default function WorkspacePage() {
           label="Accent colour (hex)"
           hint="Used for the header rule + link colour. Blank = #111827."
         >
-          <input
+          <Input
             value={values.emailAccentColor}
             onChange={(e) =>
               setValues({ ...values, emailAccentColor: e.target.value })
             }
             placeholder="#111827"
-            className="w-32 h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+            className="w-32 font-mono"
             maxLength={9}
           />
         </Field>
@@ -364,28 +367,28 @@ export default function WorkspacePage() {
           label="Custom header HTML"
           hint="Optional. Overrides the auto-generated header. Inline styles only — most email clients strip <style>."
         >
-          <textarea
+          <Textarea
             rows={5}
             value={values.emailHeaderHtml}
             onChange={(e) =>
               setValues({ ...values, emailHeaderHtml: e.target.value })
             }
             placeholder={`<div style="border-bottom: 2px solid #111827; padding: 12px 0;">…</div>`}
-            className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none font-mono"
+            className="resize-none font-mono"
           />
         </Field>
         <Field
           label="Custom footer HTML"
           hint="Optional. Overrides the auto-generated footer. Same inline-styles rule."
         >
-          <textarea
+          <Textarea
             rows={5}
             value={values.emailFooterHtml}
             onChange={(e) =>
               setValues({ ...values, emailFooterHtml: e.target.value })
             }
             placeholder={`<div style="border-top: 1px solid #e5e7eb; margin-top: 32px;…">…</div>`}
-            className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none font-mono"
+            className="resize-none font-mono"
           />
         </Field>
       </section>
@@ -407,22 +410,22 @@ export default function WorkspacePage() {
           label="Logo URL"
           hint="Public URL of your logo image. 40-60px tall works best. Leave blank for a text wordmark."
         >
-          <input
+          <Input
             value={values.emailLogoUrl}
             onChange={(e) => setValues({ ...values, emailLogoUrl: e.target.value })}
             placeholder="https://omnix.co.ke/logo.png"
-            className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+            className="font-mono"
           />
         </Field>
         <Field
           label="Physical address"
           hint="For CAN-SPAM / GDPR compliance. Shown in the footer."
         >
-          <input
+          <Input
             value={values.emailPhysicalAddress}
             onChange={(e) => setValues({ ...values, emailPhysicalAddress: e.target.value })}
             placeholder="Omnix Ltd, Karen, Nairobi, Kenya"
-            className="w-full h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
+           
           />
         </Field>
         <div className="space-y-2">
@@ -433,43 +436,44 @@ export default function WorkspacePage() {
             URLs rendered as text links in the footer. Leave any blank to skip.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <input
+            <Input
               value={values.emailSocialTwitter}
               onChange={(e) => setValues({ ...values, emailSocialTwitter: e.target.value })}
               placeholder="Twitter / X URL"
-              className="h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+              className="font-mono"
             />
-            <input
+            <Input
               value={values.emailSocialLinkedin}
               onChange={(e) => setValues({ ...values, emailSocialLinkedin: e.target.value })}
               placeholder="LinkedIn URL"
-              className="h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+              className="font-mono"
             />
-            <input
+            <Input
               value={values.emailSocialInstagram}
               onChange={(e) => setValues({ ...values, emailSocialInstagram: e.target.value })}
               placeholder="Instagram URL"
-              className="h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+              className="font-mono"
             />
-            <input
+            <Input
               value={values.emailSocialFacebook}
               onChange={(e) => setValues({ ...values, emailSocialFacebook: e.target.value })}
               placeholder="Facebook URL"
-              className="h-10 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+              className="font-mono"
             />
           </div>
         </div>
       </section>
 
       <div className="flex items-center gap-2 pt-2">
-        <button
+        <Button
           onClick={save}
           disabled={saving || !values.name.trim()}
-          className="inline-flex items-center gap-1.5 h-10 px-6 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] disabled:opacity-50 active:scale-[0.97] transition-transform"
+          size="lg"
+          className="h-10 px-6 text-xs font-mono uppercase tracking-[0.12em]"
         >
           {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
           Save workspace
-        </button>
+        </Button>
         <p className="text-xs text-muted-foreground">
           Changes are live immediately for every AI feature.
         </p>

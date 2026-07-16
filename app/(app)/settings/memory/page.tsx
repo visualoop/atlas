@@ -218,13 +218,15 @@ export default function MemoryPage() {
             >
               <div className="flex items-start justify-between gap-3">
                 <p className="text-sm leading-relaxed flex-1">{f.fact}</p>
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
                   onClick={() => handleForget(f._id)}
-                  className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all p-1"
+                  className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
                   aria-label="Forget"
                 >
                   <Trash2 className="size-3.5" />
-                </button>
+                </Button>
               </div>
               <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
                 <Badge variant="outline" className="text-[9px] capitalize">

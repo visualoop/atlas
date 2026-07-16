@@ -203,12 +203,14 @@ export default function IntegrationsPage() {
                         {key && (
                           <TestButton provider={p.id} />
                         )}
-                        <button
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => setOpenProvider(p.id)}
-                          className="font-mono uppercase tracking-[0.12em] text-xs px-3 h-8 border border-[var(--border-strong)] hover:border-foreground hover:bg-muted transition-colors"
+                          className="font-mono uppercase tracking-[0.12em] text-xs h-8"
                         >
                           {key ? "Rotate" : "Add key"}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   );
@@ -328,16 +330,17 @@ function InboundWebhookCopy() {
       <code className="flex-1 min-w-0 px-3 py-2 text-xs font-mono bg-muted rounded truncate">
         {url}
       </code>
-      <button
+      <Button
+        variant="outline"
         onClick={() => {
           void navigator.clipboard.writeText(url);
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
         }}
-        className="text-[10px] font-mono uppercase tracking-[0.12em] h-9 px-3 border border-border hover:border-foreground rounded inline-flex items-center gap-1"
+        className="text-[10px] font-mono uppercase tracking-[0.12em] h-9"
       >
         {copied ? "Copied" : "Copy"}
-      </button>
+      </Button>
       <a
         href="https://resend.com/webhooks"
         target="_blank"
@@ -373,31 +376,32 @@ function InboundSecretInput() {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <input
+        <Input
           type="password"
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder={hasSecret ? "•••••••••••• (secret saved)" : "whsec_..."}
-          className="flex-1 h-9 px-3 text-xs font-mono bg-transparent border border-border rounded focus:border-foreground focus:outline-none"
+          className="flex-1 h-9 text-xs font-mono"
         />
-        <button
+        <Button
           onClick={submit}
           disabled={saving || value.trim().length < 6}
-          className="text-[10px] font-mono uppercase tracking-[0.12em] h-9 px-3 bg-primary text-primary-foreground rounded disabled:opacity-50"
+          className="text-[10px] font-mono uppercase tracking-[0.12em] h-9"
         >
           {saving ? "Saving…" : "Save"}
-        </button>
+        </Button>
         {hasSecret && (
-          <button
+          <Button
+            variant="outline"
             onClick={() => {
               if (!confirm("Clear the saved signing secret?")) return;
               setValue("");
               void save({ secret: "" }).then(() => toast.success("Cleared."));
             }}
-            className="text-[10px] font-mono uppercase tracking-[0.12em] h-9 px-3 border border-border hover:border-destructive rounded"
+            className="text-[10px] font-mono uppercase tracking-[0.12em] h-9 hover:border-destructive"
           >
             Clear
-          </button>
+          </Button>
         )}
       </div>
       <p className="text-[10px] text-muted-foreground">
@@ -425,14 +429,16 @@ function TestButton({ provider }: { provider: Provider }) {
     }
   }
   return (
-    <button
+    <Button
+      variant="ghost"
+      size="icon"
+      className="size-8 hover:text-primary"
       onClick={test}
       disabled={busy}
       title="Test connection"
-      className="size-8 grid place-items-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors disabled:opacity-50"
     >
       {busy ? <Loader2 className="size-3.5 animate-spin" /> : <TestTube className="size-3.5" />}
-    </button>
+    </Button>
   );
 }
 

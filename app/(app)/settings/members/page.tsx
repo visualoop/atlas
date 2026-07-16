@@ -6,6 +6,11 @@ import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import { Loader2, X, Mail, Copy, Check } from "lucide-react";
 import type { Id } from "@/convex/_generated/dataModel";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 type OrgRole = "owner" | "admin" | "member";
 
@@ -95,30 +100,31 @@ export default function MembersPage() {
         <p className="eyebrow">Invite teammate</p>
         <div className="border border-border p-4 md:p-5 space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-[1fr_180px_auto] gap-3">
-            <input
+            <Input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="teammate@company.co.ke"
-              className="h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
+              className="h-9"
               onKeyDown={(e) => e.key === "Enter" && invite()}
             />
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as OrgRole)}
-              className="h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
-            >
-              <option value="member">Member — full access</option>
-              <option value="admin">Admin — invite + billing</option>
-            </select>
-            <button
+            <Select value={role} onValueChange={(v) => v && setRole(v as OrgRole)}>
+              <SelectTrigger size="sm" className="h-9 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="member">Member — full access</SelectItem>
+                <SelectItem value="admin">Admin — invite + billing</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
               onClick={invite}
               disabled={busy || email.trim().length === 0}
-              className="inline-flex items-center gap-1.5 h-9 px-4 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] disabled:opacity-50"
+              className="h-9 text-xs font-mono uppercase tracking-[0.12em]"
             >
               {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Mail className="size-3.5" />}
               Invite
-            </button>
+            </Button>
           </div>
           <p className="text-xs text-muted-foreground">
             An invitation email will be sent from{" "}
@@ -132,13 +138,14 @@ export default function MembersPage() {
             <p className="text-xs text-muted-foreground flex-1 truncate font-mono">
               {lastCreatedUrl}
             </p>
-            <button
+            <Button
+              variant="link"
               onClick={copyUrl}
-              className="inline-flex items-center gap-1 text-xs font-mono uppercase tracking-[0.12em] text-primary hover:underline"
+              className="h-auto px-0 text-xs font-mono uppercase tracking-[0.12em]"
             >
               {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
               {copied ? "Copied" : "Copy"}
-            </button>
+            </Button>
           </div>
         )}
       </section>
@@ -155,13 +162,15 @@ export default function MembersPage() {
                     {inv.role} · expires {new Date(inv.expiresAt).toLocaleDateString()}
                   </p>
                 </div>
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => revoke(inv._id)}
-                  className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-[var(--destructive)]"
+                  className="h-auto px-1.5 text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-[var(--destructive)]"
                 >
-                  <X className="size-3.5 inline mr-1" />
+                  <X className="size-3.5" />
                   Revoke
-                </button>
+                </Button>
               </div>
             ))}
           </div>

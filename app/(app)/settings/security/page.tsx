@@ -11,6 +11,8 @@ import {
 import { toast } from "sonner";
 import { formatDistanceToNowStrict } from "date-fns";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export default function SecurityPage() {
   const bootstrap = useQuery(api.organizations.currentBootstrap);
@@ -39,12 +41,14 @@ export default function SecurityPage() {
           <div className="flex items-center justify-between">
             <p className="eyebrow">Active sessions</p>
             {sessions && sessions.length > 1 && (
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={handleRevokeOthers}
-                className="text-xs font-mono uppercase tracking-[0.12em] px-3 h-8 border border-[var(--border-strong)] hover:border-[var(--destructive)] hover:text-[var(--destructive)] transition-colors"
+                className="text-xs font-mono uppercase tracking-[0.12em] h-8 hover:border-[var(--destructive)] hover:text-[var(--destructive)]"
               >
-                <LogOut className="size-3 inline mr-1" /> Sign out others
-              </button>
+                <LogOut className="size-3" /> Sign out others
+              </Button>
             )}
           </div>
           {sessions === undefined ? (
@@ -106,12 +110,13 @@ export default function SecurityPage() {
                 <p className="text-xs text-muted-foreground">
                   Use any authenticator (Google Authenticator, 1Password, Bitwarden, Authy).
                 </p>
-                <button
+                <Button
                   onClick={() => setShowEnroll(true)}
-                  className="inline-flex items-center gap-1.5 h-8 px-4 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em]"
+                  size="sm"
+                  className="h-8 text-xs font-mono uppercase tracking-[0.12em]"
                 >
                   <KeyRound className="size-3.5" /> Enable 2FA
-                </button>
+                </Button>
               </>
             )}
           </div>
@@ -210,12 +215,14 @@ function SessionRow({
           Signed in {formatDistanceToNowStrict(new Date(s._creationTime), { addSuffix: true })}
         </p>
       </div>
-      <button
+      <Button
+        variant="outline"
+        size="sm"
         onClick={onRevoke}
-        className="text-xs font-mono uppercase tracking-[0.12em] h-8 px-3 border border-border hover:border-[var(--destructive)] hover:text-[var(--destructive)] transition-colors"
+        className="text-xs font-mono uppercase tracking-[0.12em] h-8 hover:border-[var(--destructive)] hover:text-[var(--destructive)]"
       >
         {s.current ? "Sign out" : "Revoke"}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -303,21 +310,23 @@ function EnrollTwoFactorDialog({ onClose }: { onClose: () => void }) {
                 <code className="flex-1 text-[10px] font-mono bg-muted p-2 truncate">
                   {payload.secret}
                 </code>
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
                   onClick={() => {
                     navigator.clipboard.writeText(payload.secret);
                     setCopied(true);
                     setTimeout(() => setCopied(false), 1500);
                   }}
-                  className="size-8 grid place-items-center text-muted-foreground hover:text-foreground"
                 >
                   {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
-                </button>
+                </Button>
               </div>
             </div>
             <div>
               <p className="eyebrow mb-2">2. Enter the 6-digit code</p>
-              <input
+              <Input
                 autoFocus
                 inputMode="numeric"
                 pattern="[0-9]{6}"
@@ -325,27 +334,28 @@ function EnrollTwoFactorDialog({ onClose }: { onClose: () => void }) {
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 onKeyDown={(e) => e.key === "Enter" && verify()}
                 placeholder="000000"
-                className="w-full h-12 px-3 text-center text-2xl tracking-widest font-mono bg-transparent border border-border focus:border-foreground focus:outline-none"
+                className="h-12 text-center text-2xl tracking-widest font-mono"
               />
             </div>
           </div>
         )}
         <footer className="px-6 py-3 border-t border-border flex items-center gap-2">
-          <button
+          <Button
+            variant="ghost"
             onClick={onClose}
             disabled={busy}
-            className="ml-auto text-xs font-mono uppercase tracking-[0.12em] h-8 px-4 text-muted-foreground"
+            className="ml-auto h-8 text-xs font-mono uppercase tracking-[0.12em]"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={verify}
             disabled={busy || code.length !== 6}
-            className="inline-flex items-center gap-1.5 h-8 px-5 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] disabled:opacity-50"
+            className="h-8 px-5 text-xs font-mono uppercase tracking-[0.12em]"
           >
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
             Confirm
-          </button>
+          </Button>
         </footer>
       </div>
     </div>
@@ -376,20 +386,22 @@ function DisableTwoFactorForm() {
 
   return (
     <div className="flex items-center gap-2 pt-2">
-      <input
+      <Input
         inputMode="numeric"
         placeholder="Current code"
         value={code}
         onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-        className="h-8 px-3 text-sm font-mono w-32 bg-transparent border border-border focus:border-foreground focus:outline-none"
+        className="h-8 text-sm font-mono w-32"
       />
-      <button
+      <Button
+        variant="outline"
+        size="sm"
         onClick={go}
         disabled={busy}
-        className="text-xs font-mono uppercase tracking-[0.12em] h-8 px-3 border border-border hover:border-[var(--destructive)] hover:text-[var(--destructive)] disabled:opacity-50"
+        className="text-xs font-mono uppercase tracking-[0.12em] h-8 hover:border-[var(--destructive)] hover:text-[var(--destructive)]"
       >
         Disable
-      </button>
+      </Button>
     </div>
   );
 }

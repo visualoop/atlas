@@ -7,6 +7,9 @@ import Link from "next/link";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { ArrowLeft, Loader2, Mail, Trash2, Plus, CheckCircle2, AlertTriangle } from "lucide-react";
 
 interface Zone {
@@ -221,18 +224,22 @@ export default function EmailRoutingPage() {
         <div className="space-y-6">
           <div className="rounded-lg border border-border p-4">
             <label className="eyebrow">Zone</label>
-            <select
-              value={activeZoneId}
-              onChange={(e) => selectZone(e.target.value)}
-              className="mt-2 w-full h-10 px-3 bg-background border border-border font-mono text-sm"
+            <Select
+              value={activeZoneId || "__none__"}
+              onValueChange={(v) => selectZone(v && v !== "__none__" ? v : "")}
             >
-              <option value="">Choose a zone…</option>
-              {zones.map((z) => (
-                <option key={z.id} value={z.id}>
-                  {z.name} · {z.status}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="mt-2 w-full font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Choose a zone…</SelectItem>
+                {zones.map((z) => (
+                  <SelectItem key={z.id} value={z.id}>
+                    {z.name} · {z.status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {activeZoneId && status && (
@@ -338,13 +345,15 @@ export default function EmailRoutingPage() {
                             → {forward || "(no forwards)"}
                           </p>
                         </div>
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
                           onClick={() => handleDeleteRule(r.tag)}
-                          className="text-muted-foreground hover:text-destructive"
+                          className="hover:text-destructive"
                           disabled={loading}
                         >
                           <Trash2 className="size-4" />
-                        </button>
+                        </Button>
                       </li>
                     );
                   })}
