@@ -11,6 +11,16 @@ import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNowStrict } from "date-fns";
 import { LandingPageEditSheet } from "./landing-edit-sheet";
@@ -61,10 +71,11 @@ function TabButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
+    <Button
+      variant="ghost"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-2 px-4 h-10 text-sm border-b-2 transition-colors whitespace-nowrap",
+        "px-4 h-10 rounded-none border-b-2 hover:bg-transparent",
         active
           ? "border-foreground text-foreground"
           : "border-transparent text-muted-foreground hover:text-foreground",
@@ -72,7 +83,7 @@ function TabButton({
     >
       {icon}
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -94,12 +105,13 @@ function NewsletterTab() {
       <aside className="space-y-2">
         <div className="flex items-center justify-between">
           <p className="eyebrow">Audiences</p>
-          <button
+          <Button
+            variant="link"
             onClick={() => setNewAudienceOpen(true)}
-            className="text-xs font-mono uppercase tracking-[0.12em] text-primary hover:underline inline-flex items-center gap-1"
+            className="h-auto px-0 text-xs font-mono uppercase tracking-[0.12em]"
           >
             <Plus className="size-3.5" /> New
-          </button>
+          </Button>
         </div>
         {audiences === undefined ? (
           <Skeleton className="h-32 w-full" />
@@ -120,13 +132,13 @@ function NewsletterTab() {
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <p className="eyebrow">Broadcasts</p>
-          <button
+          <Button
             onClick={() => setNewBroadcastOpen(true)}
             disabled={!audiences || audiences.length === 0}
-            className="inline-flex items-center gap-1.5 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform disabled:opacity-50"
+            className="text-xs font-mono uppercase tracking-[0.12em]"
           >
             <Plus className="size-3.5" /> New broadcast
-          </button>
+          </Button>
         </div>
         {broadcasts === undefined ? (
           <div className="space-y-2">
@@ -238,27 +250,28 @@ function NewBroadcastDialog({
     <ModalShell title="New broadcast" onClose={onClose} disabled={saving}>
       <div className="px-6 py-4 space-y-3">
         <Field label="Internal name">
-          <input autoFocus value={name} onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Weekly digest — Jan 30"
-            className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none" />
+          <Input autoFocus value={name} onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Weekly digest — Jan 30" />
         </Field>
         <Field label="Audience">
-          <select value={audienceId} onChange={(e) => setAudienceId(e.target.value as Id<"audiences">)}
-            className="w-full h-9 px-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none">
-            {audiences.map((a) => (
-              <option key={a._id} value={a._id}>{a.name} ({a.memberCount})</option>
-            ))}
-          </select>
+          <Select value={audienceId} onValueChange={(v) => v && setAudienceId(v as Id<"audiences">)}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {audiences.map((a) => (
+                <SelectItem key={a._id} value={a._id}>{a.name} ({a.memberCount})</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
         <Field label="Subject">
-          <input value={subject} onChange={(e) => setSubject(e.target.value)}
-            placeholder="What's in the inbox?"
-            className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none" />
+          <Input value={subject} onChange={(e) => setSubject(e.target.value)}
+            placeholder="What's in the inbox?" />
         </Field>
         <Field label="Preheader" optional>
-          <input value={preheader} onChange={(e) => setPreheader(e.target.value)}
-            placeholder="Preview text that shows next to the subject"
-            className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none" />
+          <Input value={preheader} onChange={(e) => setPreheader(e.target.value)}
+            placeholder="Preview text that shows next to the subject" />
         </Field>
       </div>
       <ModalFooter onClose={onClose} onSubmit={submit} saving={saving} label="Create draft" />
@@ -282,12 +295,12 @@ function LandingTab() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="eyebrow">Landing pages</p>
-        <button
+        <Button
           onClick={() => setNewOpen(true)}
-          className="inline-flex items-center gap-1.5 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+          className="text-xs font-mono uppercase tracking-[0.12em]"
         >
           <Plus className="size-3.5" /> New page
-        </button>
+        </Button>
       </div>
       {pages === undefined ? (
         <div className="space-y-2">
@@ -363,16 +376,19 @@ function LandingPageRow({
         </div>
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        <button
+        <Button
+          variant="ghost"
+          size="icon-sm"
           onClick={() => setEditOpen(true)}
           title="Edit body"
-          className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
           <Edit className="size-3.5" />
-        </button>
+        </Button>
         {p.status === "published" && wsSlug && (
           <>
-            <button
+            <Button
+              variant="ghost"
+              size="icon-sm"
               onClick={() => {
                 navigator.clipboard.writeText(publicUrl);
                 setCopied(true);
@@ -380,15 +396,14 @@ function LandingPageRow({
                 toast.success("Link copied.");
               }}
               title="Copy public URL"
-              className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
               {copied ? <Check className="size-3.5 text-[var(--success)]" /> : <Copy className="size-3.5" />}
-            </button>
+            </Button>
             <a
               href={publicUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors rounded-md"
               title="Open"
             >
               <ExternalLink className="size-3.5" />
@@ -396,12 +411,13 @@ function LandingPageRow({
           </>
         )}
         {p.status === "draft" && (
-          <button
+          <Button
+            size="sm"
             onClick={onPublish}
-            className="text-xs font-mono uppercase tracking-[0.12em] px-3 h-8 bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+            className="text-xs font-mono uppercase tracking-[0.12em] h-8"
           >
             Publish
-          </button>
+          </Button>
         )}
       </div>
     </li>
@@ -462,38 +478,33 @@ function NewLandingPageDialog({
         <Field label="Kind">
           <div className="flex flex-wrap gap-1">
             {KINDS.map((k) => (
-              <button
+              <Button
                 key={k.value}
+                type="button"
+                variant={kind === k.value ? "default" : "outline"}
+                size="sm"
                 onClick={() => setKind(k.value)}
-                className={cn(
-                  "h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] transition-colors",
-                  kind === k.value
-                    ? "bg-foreground text-background"
-                    : "border border-border text-muted-foreground hover:text-foreground",
-                )}
+                className="h-8 text-xs font-mono uppercase tracking-[0.12em]"
               >
                 {k.label}
-              </button>
+              </Button>
             ))}
           </div>
         </Field>
         <Field label="Title">
-          <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)}
-            placeholder="Omnix launches"
-            className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none" />
+          <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)}
+            placeholder="Omnix launches" />
         </Field>
         <Field label="Slug">
-          <input value={slug} onChange={(e) => setSlug(e.target.value)}
-            placeholder="omnix-launch"
-            className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono" />
+          <Input value={slug} onChange={(e) => setSlug(e.target.value)}
+            placeholder="omnix-launch" className="font-mono" />
           <p className="text-[11px] text-muted-foreground mt-1">
             URL will be /p/&lt;workspace&gt;/<code className="font-mono">{slug || "your-slug"}</code>
           </p>
         </Field>
         <Field label="Subtitle" optional>
-          <input value={subtitle} onChange={(e) => setSubtitle(e.target.value)}
-            placeholder="A one-line pitch"
-            className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none" />
+          <Input value={subtitle} onChange={(e) => setSubtitle(e.target.value)}
+            placeholder="A one-line pitch" />
         </Field>
       </div>
       <ModalFooter onClose={onClose} onSubmit={submit} saving={saving} label="Create" />
@@ -543,33 +554,34 @@ function SeoTab() {
     <div className="space-y-3">
       <div className="flex items-center gap-1 flex-wrap">
         {STATUSES.map((s) => (
-          <button
+          <Button
             key={s}
+            type="button"
+            variant={status === s ? "default" : "outline"}
+            size="sm"
             onClick={() => setStatus(s)}
-            className={cn(
-              "h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] transition-colors",
-              status === s
-                ? "bg-foreground text-background"
-                : "border border-border text-muted-foreground hover:text-foreground",
-            )}
+            className="h-8 text-xs font-mono uppercase tracking-[0.12em]"
           >
             {s}
-          </button>
+          </Button>
         ))}
-        <button
+        <Button
           onClick={() => setNewOpen(true)}
-          className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+          size="sm"
+          className="ml-auto h-8 text-xs font-mono uppercase tracking-[0.12em]"
         >
           <Plus className="size-3.5" /> New idea
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={handleBrainstorm}
           disabled={brainstorming}
-          className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-mono uppercase tracking-[0.12em] border border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 disabled:opacity-50"
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs font-mono uppercase tracking-[0.12em] border-primary/40 bg-primary/5 text-primary hover:bg-primary/10"
         >
           {brainstorming ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
           Brainstorm with AI
-        </button>
+        </Button>
       </div>
       {ideas === undefined ? (
         <Skeleton className="h-64 w-full" />
@@ -605,21 +617,25 @@ function SeoTab() {
                   {typeof i.priority === "number" ? `P${i.priority}` : ""}
                 </span>
                 {status !== "shortlisted" && i.status !== "shortlisted" && (
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => updateStatus({ id: i._id, status: "shortlisted" })}
-                    className="text-xs font-mono uppercase tracking-[0.12em] px-2 h-7 border border-border hover:border-foreground hover:bg-muted transition-colors"
+                    className="h-7 text-xs font-mono uppercase tracking-[0.12em]"
                   >
                     Shortlist
-                  </button>
+                  </Button>
                 )}
                 {i.status !== "dismissed" && (
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="size-7 hover:text-[var(--danger)]"
                     onClick={() => updateStatus({ id: i._id, status: "dismissed" })}
-                    className="size-7 grid place-items-center text-muted-foreground hover:text-[var(--danger)]"
                     title="Dismiss"
                   >
                     <X className="size-3.5" />
-                  </button>
+                  </Button>
                 )}
               </div>
             </li>
@@ -695,24 +711,22 @@ function ModalFooter({
 }: { onClose: () => void; onSubmit: () => void; saving: boolean; label: string }) {
   return (
     <footer className="border-t border-border px-6 py-3 flex items-center gap-2 justify-end">
-      <button
+      <Button
+        variant="ghost"
         onClick={onClose}
         disabled={saving}
-        className="inline-flex items-center h-8 px-4 text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground transition-colors"
+        className="h-8 text-xs font-mono uppercase tracking-[0.12em]"
       >
         Cancel
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={onSubmit}
         disabled={saving}
-        className={cn(
-          "inline-flex items-center gap-1.5 h-8 px-5 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-          "disabled:opacity-50 disabled:cursor-not-allowed",
-        )}
+        className="h-8 px-5 text-xs font-mono uppercase tracking-[0.12em]"
       >
         {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
         {label}
-      </button>
+      </Button>
     </footer>
   );
 }
@@ -760,12 +774,11 @@ function SimpleDialog({
       <div className="px-6 py-4 space-y-3">
         {fields.map((f) => (
           <Field key={f.key} label={f.label} optional={f.optional}>
-            <input
+            <Input
               autoFocus={f === fields[0]}
               value={values[f.key]}
               onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
               placeholder={f.placeholder}
-              className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none"
               onKeyDown={(e) => e.key === "Enter" && submit()}
             />
           </Field>
