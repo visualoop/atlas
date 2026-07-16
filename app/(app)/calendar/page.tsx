@@ -12,6 +12,16 @@ import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNowStrict } from "date-fns";
 
@@ -56,16 +66,19 @@ function TabButton({
   active, onClick, icon, children,
 }: { active: boolean; onClick: () => void; icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <button
+    <Button
+      variant="ghost"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-2 px-4 h-10 text-sm border-b-2 transition-colors whitespace-nowrap",
-        active ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+        "px-4 h-10 rounded-none border-b-2 hover:bg-transparent",
+        active
+          ? "border-foreground text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground",
       )}
     >
       {icon}
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -101,36 +114,39 @@ function AgendaTab() {
   return (
     <>
       <div className="flex items-center gap-2 mb-4">
-        <button
+        <Button
+          variant="outline"
+          size="icon"
           onClick={() => setAnchor(anchor - 7 * 24 * 60 * 60 * 1000)}
-          className="size-9 grid place-items-center border border-border hover:bg-muted"
           title="Previous week"
         >
           <ChevronLeft className="size-4" />
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="outline"
           onClick={() => setAnchor(startOfDay(Date.now()))}
-          className="h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] border border-border hover:bg-muted transition-colors"
+          className="text-xs font-mono uppercase tracking-[0.12em]"
         >
           This week
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
           onClick={() => setAnchor(anchor + 7 * 24 * 60 * 60 * 1000)}
-          className="size-9 grid place-items-center border border-border hover:bg-muted"
           title="Next week"
         >
           <ChevronRight className="size-4" />
-        </button>
+        </Button>
         <span className="ml-2 text-sm text-muted-foreground font-mono">
           {new Date(rangeStart).toLocaleDateString("en-KE", { day: "numeric", month: "short" })} —{" "}
           {new Date(rangeEnd - 1).toLocaleDateString("en-KE", { day: "numeric", month: "short" })}
         </span>
-        <button
+        <Button
           onClick={() => setNewOpen(true)}
-          className="ml-auto inline-flex items-center gap-1.5 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+          className="ml-auto text-xs font-mono uppercase tracking-[0.12em]"
         >
           <Plus className="size-3.5" /> New event
-        </button>
+        </Button>
       </div>
 
       {events === undefined ? (
@@ -269,32 +285,30 @@ function NewEventDialog({ onClose }: { onClose: () => void }) {
     <ModalShell title="New event" onClose={onClose} saving={saving} onSubmit={submit} submitLabel="Create">
       <label className="block space-y-1.5">
         <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Title</span>
-        <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)}
-          placeholder="Meeting with Java House"
-          className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none" />
+        <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)}
+          placeholder="Meeting with Java House" />
       </label>
       <div className="grid grid-cols-2 gap-2">
         <label className="block space-y-1.5">
           <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Start</span>
-          <input type="datetime-local" value={startAt} onChange={(e) => setStartAt(e.target.value)}
-            className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono" />
+          <Input type="datetime-local" value={startAt} onChange={(e) => setStartAt(e.target.value)}
+            className="font-mono" />
         </label>
         <label className="block space-y-1.5">
           <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">End</span>
-          <input type="datetime-local" value={endAt} onChange={(e) => setEndAt(e.target.value)}
-            className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono" />
+          <Input type="datetime-local" value={endAt} onChange={(e) => setEndAt(e.target.value)}
+            className="font-mono" />
         </label>
       </div>
       <label className="block space-y-1.5">
         <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Location</span>
-        <input value={location} onChange={(e) => setLocation(e.target.value)}
-          placeholder="Zoom URL or physical location"
-          className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none" />
+        <Input value={location} onChange={(e) => setLocation(e.target.value)}
+          placeholder="Zoom URL or physical location" />
       </label>
       <label className="block space-y-1.5">
         <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Description</span>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3}
-          className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none" />
+        <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3}
+          className="resize-none" />
       </label>
     </ModalShell>
   );
@@ -314,12 +328,12 @@ function LinksTab() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="eyebrow">Booking links</p>
-        <button
+        <Button
           onClick={() => setNewOpen(true)}
-          className="inline-flex items-center gap-1.5 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+          className="text-xs font-mono uppercase tracking-[0.12em]"
         >
           <Plus className="size-3.5" /> New link
-        </button>
+        </Button>
       </div>
       {links === undefined ? (
         <Skeleton className="h-48 w-full" />
@@ -367,32 +381,34 @@ function MeetingLinkRow({
         </div>
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        <button
+        <Button
+          variant="ghost"
+          size="icon-sm"
           onClick={() => setEditOpen(true)}
           title="Edit availability"
-          className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
           <Settings className="size-3.5" />
-        </button>
+        </Button>
       {wsSlug && (
         <>
-          <button
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={() => {
               navigator.clipboard.writeText(publicUrl);
               setCopied(true);
               setTimeout(() => setCopied(false), 1500);
               toast.success("Copied.");
             }}
-            className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             title="Copy link"
           >
             {copied ? <Check className="size-3.5 text-[var(--success)]" /> : <Copy className="size-3.5" />}
-          </button>
+          </Button>
           <a
             href={publicUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors rounded-md"
             title="Open"
           >
             <ExternalLink className="size-3.5" />
@@ -450,15 +466,13 @@ function NewMeetingLinkDialog({ onClose }: { onClose: () => void }) {
     <ModalShell title="New booking link" onClose={onClose} saving={saving} onSubmit={submit} submitLabel="Create">
       <label className="block space-y-1.5">
         <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Title</span>
-        <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)}
-          placeholder="Omnix demo — 30min"
-          className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none" />
+        <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)}
+          placeholder="Omnix demo — 30min" />
       </label>
       <label className="block space-y-1.5">
         <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Slug</span>
-        <input value={slug} onChange={(e) => setSlug(e.target.value)}
-          placeholder="omnix-demo"
-          className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono" />
+        <Input value={slug} onChange={(e) => setSlug(e.target.value)}
+          placeholder="omnix-demo" className="font-mono" />
         <p className="text-[11px] text-muted-foreground mt-1">
           URL: /book/&lt;workspace&gt;/<code className="font-mono">{slug || "your-slug"}</code>
         </p>
@@ -466,26 +480,28 @@ function NewMeetingLinkDialog({ onClose }: { onClose: () => void }) {
       <div className="grid grid-cols-2 gap-2">
         <label className="block space-y-1.5">
           <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Duration</span>
-          <select value={duration} onChange={(e) => setDuration(Number(e.target.value))}
-            className="w-full h-9 px-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none">
-            <option value={15}>15 minutes</option>
-            <option value={30}>30 minutes</option>
-            <option value={45}>45 minutes</option>
-            <option value={60}>60 minutes</option>
-          </select>
+          <Select value={String(duration)} onValueChange={(v) => setDuration(Number(v))}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="15">15 minutes</SelectItem>
+              <SelectItem value="30">30 minutes</SelectItem>
+              <SelectItem value="45">45 minutes</SelectItem>
+              <SelectItem value="60">60 minutes</SelectItem>
+            </SelectContent>
+          </Select>
         </label>
         <label className="block space-y-1.5">
           <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Conference URL</span>
-          <input value={conferenceUrl} onChange={(e) => setConferenceUrl(e.target.value)}
-            placeholder="https://meet.google.com/..."
-            className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono" />
+          <Input value={conferenceUrl} onChange={(e) => setConferenceUrl(e.target.value)}
+            placeholder="https://meet.google.com/..." className="font-mono" />
         </label>
       </div>
       <label className="block space-y-1.5">
         <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Description</span>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
-          placeholder="What'll we cover?"
-          className="w-full px-3 py-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none resize-none" />
+        <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
+          placeholder="What'll we cover?" className="resize-none" />
       </label>
       <p className="text-xs text-muted-foreground">
         Availability defaults to Mon-Fri 09:00-17:00 (Africa/Nairobi). After
@@ -508,12 +524,12 @@ function TrialsTab() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="eyebrow">Trial licenses</p>
-        <button
+        <Button
           onClick={() => setNewOpen(true)}
-          className="inline-flex items-center gap-1.5 h-9 px-4 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform"
+          className="text-xs font-mono uppercase tracking-[0.12em]"
         >
           <Plus className="size-3.5" /> New trial
-        </button>
+        </Button>
       </div>
       {trials === undefined ? (
         <Skeleton className="h-48 w-full" />
@@ -553,17 +569,19 @@ function TrialRow({ trial: t }: { trial: Doc<"trialLicenses"> }) {
         </div>
         <div className="flex items-center gap-2">
           <code className="font-mono text-sm bg-muted px-2 py-1">{t.licenseKey}</code>
-          <button
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="size-6"
             onClick={() => {
               navigator.clipboard.writeText(t.licenseKey);
               setCopied(true);
               setTimeout(() => setCopied(false), 1500);
               toast.success("Copied.");
             }}
-            className="size-6 grid place-items-center text-muted-foreground hover:text-foreground"
           >
             {copied ? <Check className="size-3 text-[var(--success)]" /> : <Copy className="size-3" />}
-          </button>
+          </Button>
         </div>
         <p className="text-[11px] text-muted-foreground font-mono num">
           {t.status === "active"
@@ -598,23 +616,31 @@ function NewTrialDialog({ onClose }: { onClose: () => void }) {
     <ModalShell title="New trial license" onClose={onClose} saving={saving} onSubmit={submit} submitLabel="Issue">
       <label className="block space-y-1.5">
         <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Product</span>
-        <select value={productSlug} onChange={(e) => setProductSlug(e.target.value)}
-          className="w-full h-9 px-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none">
-          <option value="omnix">Omnix</option>
-          <option value="blyss_studio">Blyss Studio</option>
-          <option value="marketplace">Marketplace</option>
-        </select>
+        <Select value={productSlug} onValueChange={(v) => v && setProductSlug(v)}>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="omnix">Omnix</SelectItem>
+            <SelectItem value="blyss_studio">Blyss Studio</SelectItem>
+            <SelectItem value="marketplace">Marketplace</SelectItem>
+          </SelectContent>
+        </Select>
       </label>
       <label className="block space-y-1.5">
         <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">Duration</span>
-        <select value={days} onChange={(e) => setDays(Number(e.target.value))}
-          className="w-full h-9 px-2 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none">
-          <option value={7}>7 days</option>
-          <option value={14}>14 days</option>
-          <option value={30}>30 days</option>
-          <option value={60}>60 days</option>
-          <option value={90}>90 days</option>
-        </select>
+        <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="7">7 days</SelectItem>
+            <SelectItem value="14">14 days</SelectItem>
+            <SelectItem value="30">30 days</SelectItem>
+            <SelectItem value="60">60 days</SelectItem>
+            <SelectItem value="90">90 days</SelectItem>
+          </SelectContent>
+        </Select>
       </label>
     </ModalShell>
   );
@@ -646,24 +672,22 @@ function ModalShell({
         </header>
         <div className="px-6 py-4 space-y-3">{children}</div>
         <footer className="border-t border-border px-6 py-3 flex items-center gap-2 justify-end">
-          <button
+          <Button
+            variant="ghost"
             onClick={onClose}
             disabled={saving}
-            className="inline-flex items-center h-8 px-4 text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground transition-colors"
+            className="h-8 text-xs font-mono uppercase tracking-[0.12em]"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onSubmit}
             disabled={saving}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-8 px-5 text-xs font-mono uppercase tracking-[0.12em] bg-primary text-primary-foreground active:scale-[0.97] transition-transform",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
-            )}
+            className="h-8 px-5 text-xs font-mono uppercase tracking-[0.12em]"
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
             {submitLabel}
-          </button>
+          </Button>
         </footer>
       </div>
     </div>
@@ -803,14 +827,15 @@ function AvailabilityEditSheet({
             <p className="eyebrow font-mono">Meeting link</p>
             <p className="text-sm font-medium truncate">/{link.slug}</p>
           </div>
-          <button
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={onClose}
             disabled={saving}
-            className="size-8 grid place-items-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             aria-label="Close"
           >
             <X className="size-4" />
-          </button>
+          </Button>
         </header>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
@@ -818,44 +843,44 @@ function AvailabilityEditSheet({
           <div className="grid grid-cols-2 gap-3">
             <label className="space-y-1">
               <span className="eyebrow">Duration (min)</span>
-              <input
+              <Input
                 type="number"
                 min={5}
                 step={5}
                 value={duration}
                 onChange={(e) => setDuration(Math.max(5, Number(e.target.value)))}
-                className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+                className="font-mono"
               />
             </label>
             <label className="space-y-1">
               <span className="eyebrow">Buffer after (min)</span>
-              <input
+              <Input
                 type="number"
                 min={0}
                 step={5}
                 value={bufferAfter}
                 onChange={(e) => setBufferAfter(Math.max(0, Number(e.target.value)))}
-                className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+                className="font-mono"
               />
             </label>
             <label className="space-y-1">
               <span className="eyebrow">Min lead (hours)</span>
-              <input
+              <Input
                 type="number"
                 min={0}
                 value={minLeadHours}
                 onChange={(e) => setMinLeadHours(Math.max(0, Number(e.target.value)))}
-                className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+                className="font-mono"
               />
             </label>
             <label className="space-y-1">
               <span className="eyebrow">Max lead (days)</span>
-              <input
+              <Input
                 type="number"
                 min={1}
                 value={maxLeadDays}
                 onChange={(e) => setMaxLeadDays(Math.max(1, Number(e.target.value)))}
-                className="w-full h-9 px-3 text-sm bg-transparent border border-border focus:border-foreground focus:outline-none font-mono"
+                className="font-mono"
               />
             </label>
           </div>
@@ -891,24 +916,28 @@ function AvailabilityEditSheet({
                               value={rule.endMin}
                               onChange={(v) => updateRule(index, { endMin: v })}
                             />
-                            <button
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="size-7 hover:text-[var(--destructive)]"
                               onClick={() => removeRule(index)}
-                              className="size-7 grid place-items-center text-muted-foreground hover:text-[var(--destructive)] hover:bg-muted transition-colors"
                               aria-label="Remove"
                             >
                               <X className="size-3.5" />
-                            </button>
+                            </Button>
                           </div>
                         ))
                       )}
                     </div>
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="size-7 mt-1"
                       onClick={() => addRule(day.n)}
-                      className="size-7 grid place-items-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors mt-1"
                       title="Add hours"
                     >
                       <Plus className="size-3.5" />
-                    </button>
+                    </Button>
                   </div>
                 );
               })}
@@ -917,21 +946,22 @@ function AvailabilityEditSheet({
         </div>
 
         <footer className="border-t border-border h-14 px-4 flex items-center gap-2 shrink-0">
-          <button
+          <Button
+            variant="ghost"
             onClick={onClose}
             disabled={saving}
-            className="ml-auto text-xs font-mono uppercase tracking-[0.12em] h-9 px-4 text-muted-foreground hover:text-foreground transition-colors"
+            className="ml-auto text-xs font-mono uppercase tracking-[0.12em] h-9"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={save}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 h-9 px-5 bg-primary text-primary-foreground text-xs font-mono uppercase tracking-[0.12em] disabled:opacity-50 active:scale-[0.97] transition-transform"
+            className="h-9 px-5 text-xs font-mono uppercase tracking-[0.12em]"
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
             Save
-          </button>
+          </Button>
         </footer>
       </aside>
     </div>
@@ -945,14 +975,14 @@ function TimeInput({
   const m = value % 60;
   const str = `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
   return (
-    <input
+    <Input
       type="time"
       value={str}
       onChange={(e) => {
         const [hh, mm] = e.target.value.split(":");
         onChange(Number(hh) * 60 + Number(mm));
       }}
-      className="h-8 px-2 text-xs bg-transparent border border-border focus:border-foreground focus:outline-none font-mono num"
+      className="h-8 w-auto px-2 text-xs font-mono num"
     />
   );
 }
