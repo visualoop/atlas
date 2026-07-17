@@ -411,12 +411,12 @@ export function MapBrowse() {
       <div className="relative bg-muted min-h-[50vh]">
         <div ref={mapRef} className="absolute inset-0" />
         {/* Overlay controls */}
-        <div className="absolute top-3 left-3 right-3 flex items-center gap-2 z-10 flex-wrap">
+        <div className="absolute top-3 left-3 right-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 z-10">
           <Select
             value={category || "__all__"}
             onValueChange={(v) => setCategory(v && v !== "__all__" ? v : "")}
           >
-            <SelectTrigger size="sm" className="h-9 bg-background shadow">
+            <SelectTrigger size="sm" className="h-9 w-full sm:w-auto bg-background shadow">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -449,7 +449,7 @@ export function MapBrowse() {
           {mapsUsage && (
             <span
               className={cn(
-                "text-[10px] font-mono uppercase tracking-[0.12em] bg-background border border-border px-2 h-9 grid place-items-center shadow",
+                "text-[10px] font-mono uppercase tracking-[0.12em] bg-background border border-border px-2 h-9 grid place-items-center shadow whitespace-nowrap sm:ml-auto",
                 mapsUsage.remaining <= 10 && "text-[var(--warning)]",
                 mapsUsage.remaining === 0 && "text-[var(--destructive)] border-[var(--destructive)]",
               )}

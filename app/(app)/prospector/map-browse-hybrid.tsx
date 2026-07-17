@@ -332,7 +332,7 @@ export function MapBrowseHybrid() {
         {/* Controls — mobile-first stacked with backdrop */}
         <div className="absolute top-2 left-2 right-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 z-[400]">
           <Select value={category} onValueChange={(v) => v && setCategory(v)}>
-            <SelectTrigger size="sm" className="h-9 bg-background shadow">
+            <SelectTrigger size="sm" className="h-9 w-full sm:w-auto bg-background shadow">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
