@@ -672,7 +672,6 @@ export const importMapPlace = internalMutation({
         latitude: args.latitude,
         longitude: args.longitude,
       },
-      enrichedAt: Date.now(),
       ownerId: wsCtx.user._id,
     });
 
@@ -943,7 +942,6 @@ export const bulkImportMapPlaces = mutation({
           latitude: p.latitude,
           longitude: p.longitude,
         },
-        enrichedAt: Date.now(),
         ownerId: wsCtx.user._id,
       });
 

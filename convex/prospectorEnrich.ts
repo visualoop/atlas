@@ -76,17 +76,43 @@ export const enrichCompany = internalAction({
         result = await fetchGeoapifyDetails(rawId, setup.geoapifyKey);
       }
     } else if (args.googlePlaceId.startsWith("osm-")) {
-      // OSM-native ids can't be enriched (no Overpass details endpoint
-      // for phone/hours beyond what we already got). Skip.
-      return { enriched: false, reason: "osm_not_enrichable" };
+      // OSM-native ids have no details endpoint — skip Place Details,
+      // but we can still scrape the website below for an email.
     } else if (setup.googlePlacesKey) {
       // Google Places
       result = await fetchGooglePlaceDetails(
         args.googlePlaceId,
         setup.googlePlacesKey,
       );
-    } else {
-      return { enriched: false, reason: "no_api_key" };
+    }
+
+    // Website scrape for EMAIL (+ fallback phone) — Place Details never
+    // returns an email, so we fetch the company's site and extract
+    // contacts via the same AI path text-search uses. Runs for every
+    // source that has a website (Google New API + OSM both provide one).
+    const siteUrl = result.website ?? setup.currentWebsite;
+    if (siteUrl && !result.email && !setup.currentEmail) {
+      try {
+        const scraped = await ctx.runAction(
+          internal.aiWorkflows.extractContactsFromUrl,
+          {
+            url: siteUrl,
+            workspaceId: setup.workspaceId,
+            organizationId: setup.organizationId,
+            actorId: setup.ownerId,
+            resourceType: "company",
+            resourceId: args.companyId,
+          },
+        );
+        if (scraped.email) result.email = scraped.email.toLowerCase();
+        if (scraped.phone && !result.phone) {
+          const norm = normalizePhoneKe(scraped.phone);
+          result.phone = norm;
+          result.whatsapp = result.whatsapp ?? norm;
+        }
+      } catch {
+        // scrape failed — keep whatever Place Details gave us
+      }
     }
 
     // Only patch if we got at least one useful field

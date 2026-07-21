@@ -449,6 +449,92 @@ function tryParseJSON(text: string): Record<string, unknown> | null {
   }
 }
 
+/**
+ * Shared website-contact extractor. Fetches a URL, strips it down, and
+ * asks the AI to pull email/phone/description/socials. Used by both
+ * enrichWebsite (prospector text-search results) and enrichCompany
+ * (imported companies from the map) so email extraction is identical
+ * everywhere. Returns { error } on fetch/AI failure; never throws.
+ */
+export const extractContactsFromUrl = internalAction({
+  args: {
+    url: v.string(),
+    workspaceId: v.id("workspaces"),
+    organizationId: v.id("organizations"),
+    actorId: v.optional(v.id("users")),
+    resourceType: v.optional(v.string()),
+    resourceId: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{
+    email?: string;
+    phone?: string;
+    description?: string;
+    socials?: Record<string, string>;
+    error?: string;
+  }> => {
+    let html = "";
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(args.url, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Atlas Prospector (contact: hello@blyss.co.ke)",
+          Accept: "text/html,application/xhtml+xml",
+        },
+        redirect: "follow",
+      });
+      clearTimeout(timeout);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      html = await res.text();
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "fetch failed" };
+    }
+
+    const stripped = html
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<!--[\s\S]*?-->/g, "")
+      .replace(/\s+/g, " ")
+      .slice(0, 12000);
+
+    let aiText = "";
+    try {
+      const aiResult = await ctx.runAction(internal.ai.runFeature, {
+        workspaceId: args.workspaceId,
+        organizationId: args.organizationId,
+        actorId: args.actorId,
+        featureId: "enrich_website",
+        messages: [
+          { role: "system", content: ENRICH_SYSTEM },
+          { role: "user", content: stripped },
+        ],
+        resourceType: args.resourceType,
+        resourceId: args.resourceId,
+      });
+      aiText = aiResult.text;
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "ai failed" };
+    }
+
+    const parsed = tryParseJSON(aiText) ?? {};
+    const socials: Record<string, string> = {};
+    for (const k of ["linkedin", "twitter", "instagram", "facebook"] as const) {
+      const val = parsed[k];
+      if (typeof val === "string" && val) socials[k] = val;
+    }
+    const email = typeof parsed.email === "string" ? parsed.email : undefined;
+    const phone = typeof parsed.phone === "string" ? parsed.phone : undefined;
+    const description = typeof parsed.description === "string" ? parsed.description : undefined;
+    return {
+      email,
+      phone,
+      description,
+      socials: Object.keys(socials).length ? socials : undefined,
+    };
+  },
+});
+
 function clampScore(v: unknown): number {
   const n = typeof v === "number" ? v : Number(v);
   if (!Number.isFinite(n)) return 50;
