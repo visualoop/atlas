@@ -209,36 +209,48 @@ function buildRankingPrompt(args: {
     return `${i + 1}. [${p.googlePlaceId}] ${bits.join(" ")}`;
   });
 
-  return `Score each candidate 0-100 for fit as a cold-outreach target for this founder.
+  return `Score each candidate 0-100 for how well it fits THIS workspace's ideal
+customer as a cold-outreach target. The WORKSPACE block is the source of
+truth — score on fit to it, not on generic assumptions.
 
 WORKSPACE:
-${brandLines.join("\n") || "(no brand context — score neutrally)"}
+${brandLines.join("\n") || "(no brand context — score on general reachability)"}
 
-RULES:
-- 90-100: perfect fit AND reachable (phone/website present)
-- 60-89: likely fit, reachable via at least one channel
-- 30-59: relevant but no contact info — needs walk-in visit
-- 0-29: bad fit — chain, franchise, govt body, or wrong industry
+HOW TO SCORE:
+1. FIT to the workspace's ideal customer above is the PRIMARY driver.
+   Read it carefully and honour its intent literally. If the ideal
+   customer describes a GAP the founder fills — e.g. "businesses with
+   NO website", "not online yet", "still on paper" — then candidates
+   that HAVE that gap are the BEST fits (score them higher), and ones
+   that already have the thing are worse fits. Never assume "has a
+   website" is inherently good; follow the workspace's stated need.
+2. REACHABILITY is secondary — can the founder start a conversation?
+   - [📞 🌐] phone + website → easy to reach
+   - [📞] phone only         → reachable via WhatsApp / call
+   - [🌐] website only       → reachable by email (scraped from the site)
+   - [no contact]            → hard to reach; cap at 45 unless it's a
+                               strong ICP match worth a walk-in
+3. A high ★rating with many reviews signals a real, active business — a
+   small positive.
 
-CONTACTABILITY (weight this heavily):
-- [📞 🌐] = phone + website both — easy WhatsApp + email cold outreach
-- [📞] = phone only — WhatsApp works, no email path
-- [🌐] = website only — email scrape possible, no direct phone
-- [no contact] = neither — score at most 40 unless walk-in target
+BANDS (after weighing fit × reachability):
+- 85-100: strong ICP match AND reachable
+- 60-84 : good ICP match, reachable on at least one channel
+- 35-59 : partial match, or great match but hard to reach
+- 0-29 : wrong fit for this workspace
 
-AUTOMATIC 0-9 only for:
-- National chains (10+ branches, e.g. Naivas, KFC, KCB, Safaricom)
+AUTOMATIC 0-14 (regardless of fit):
+- National chains / franchises (10+ branches: Naivas, KFC, KCB, Safaricom…)
 - Government bodies (ministry, county, agency, board)
-- Names with "Group Holdings", "Corporation", "PLC", "Inc."
-- Multinational subsidiaries
+- "Group Holdings", "Corporation", "PLC", "Inc." / multinational subsidiaries
 
 Small independent shops with 2-5 branches are FINE — still owner-run,
-still perfect for cold outreach if reachable.
+still great cold-outreach targets if they match the ICP.
 
 CANDIDATES:
 ${candidateLines.join("\n")}
 
-Return JSON: {"scores": [{"id": "<the [placeId]>", "score": 0-100, "reason": "one crisp diagnostic sentence noting contact channel or lack thereof"}]}. One entry per candidate. No prose outside JSON.`;
+Return JSON: {"scores": [{"id": "<the [placeId]>", "score": 0-100, "reason": "one crisp sentence tying the score to this workspace's ideal customer AND how reachable they are"}]}. One entry per candidate. No prose outside JSON.`;
 }
 
 async function callLlm(args: {

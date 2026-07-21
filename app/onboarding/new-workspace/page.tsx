@@ -10,6 +10,7 @@ import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -37,6 +38,9 @@ export default function NewWorkspacePage() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
+  const [oneLiner, setOneLiner] = useState("");
+  const [offerings, setOfferings] = useState("");
+  const [targetMarket, setTargetMarket] = useState("");
   const [currency, setCurrency] = useState("KES");
   const [timezone, setTimezone] = useState("Africa/Nairobi");
   const [orgId, setOrgId] = useState<Id<"organizations"> | "">("");
@@ -77,6 +81,9 @@ export default function NewWorkspacePage() {
         description: description.trim() || undefined,
         currency,
         timezone,
+        oneLiner: oneLiner.trim() || undefined,
+        offerings: offerings.trim() || undefined,
+        targetMarket: targetMarket.trim() || undefined,
       });
       await setActive({ workspaceId: newId });
       toast.success("Workspace created.");
@@ -169,6 +176,37 @@ export default function NewWorkspacePage() {
               placeholder="POS + inventory for Kenyan retail"
             />
           </Field>
+
+          <div className="pt-2 border-t border-border/60 space-y-4">
+            <p className="text-xs text-muted-foreground">
+              Tell Atlas what this workspace is for. This tunes prospecting,
+              lead scoring, and outreach to <em>this</em> business — every
+              workspace can be about something completely different.
+            </p>
+
+            <Field label="What do you sell / offer?" hint="Feeds AI ranking + cold-outreach drafts.">
+              <Textarea
+                value={offerings}
+                onChange={(e) => setOfferings(e.target.value)}
+                rows={2}
+                className="resize-none"
+                placeholder="e.g. Custom websites + Google Business setup for Kenyan SMBs (webdesignkenya)"
+              />
+            </Field>
+
+            <Field
+              label="Who's an ideal lead? What makes a great prospect?"
+              hint="Be specific — the AI scores every prospect against this."
+            >
+              <Textarea
+                value={targetMarket}
+                onChange={(e) => setTargetMarket(e.target.value)}
+                rows={3}
+                className="resize-none"
+                placeholder="e.g. Small Kenyan businesses with good Google ratings but NO website — they need one built. Prioritise well-reviewed shops that are missing a site. A phone number is enough to reach them."
+              />
+            </Field>
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Currency" required>

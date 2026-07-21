@@ -202,6 +202,11 @@ export const createWorkspace = mutation({
     description: v.optional(v.string()),
     currency: v.optional(v.string()),
     timezone: v.optional(v.string()),
+    // Purpose / brand context — captured at onboarding so the AI works
+    // for THIS workspace from day one (ranking, outreach, copilot).
+    oneLiner: v.optional(v.string()),
+    offerings: v.optional(v.string()),
+    targetMarket: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireOrgRole(ctx, args.organizationId, "admin");
@@ -228,6 +233,9 @@ export const createWorkspace = mutation({
       description: args.description,
       currency: args.currency ?? "KES",
       timezone: args.timezone ?? "Africa/Nairobi",
+      oneLiner: args.oneLiner?.trim() || undefined,
+      offerings: args.offerings?.trim() || undefined,
+      targetMarket: args.targetMarket?.trim() || undefined,
     });
 
     await ctx.db.insert("workspaceMembers", {
